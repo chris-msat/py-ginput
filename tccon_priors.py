@@ -105,9 +105,11 @@ class TraceGasTropicsRecord(object):
 
     No arguments required for initialization.
     """
-    # this should be overridden in subclasses to specify the name of the gas, must be recognized by the seasonal cycle
-    # function
+
+    # these should be overridden in subclasses to specify the name and unit of the gas. The name must be recognized by
+    # the seasonal cycle function
     gas_name = ''
+    gas_unit = ''
 
     months_avg_for_trend = 12
     age_spec_regions = ('tropics', 'midlat', 'vortex')
@@ -219,13 +221,11 @@ class TraceGasTropicsRecord(object):
             hlines = f.readline().rstrip().split(': ')[1]
 
         df = pd.read_csv(full_file_path, skiprows=int(hlines), skipinitialspace=True,
-                         delimiter=' ', header=None, names=['site', 'year', 'month', 'co2'])
+                         delimiter=' ', header=None, names=['site', 'year', 'month', cls.gas_name])
 
         # set datetime index in df (requires 'day' column)
         df['day'] = 1
         df.set_index(pd.to_datetime(df[['year', 'month', 'day']]), inplace=True)
-
-        # TODO: return the unit of the gas concentration and have __init__ store it as an instance attribute "gas_unit"
 
         return df
 
@@ -241,11 +241,11 @@ class TraceGasTropicsRecord(object):
          to 1 for any months that had to be interpolated. Index by timestamp.
         :rtype: :class:`pandas.DataFrame`
         """
-        df_mlo = cls.read_insitu_gas(_data_dir, 'ML_monthly_obs.txt')
-        df_smo = cls.read_insitu_gas(_data_dir, 'SMO_monthly_obs.txt')
+        df_mlo = cls.read_insitu_gas(_data_dir, 'ML_monthly_obs_%s.txt'%cls.gas_name)
+        df_smo = cls.read_insitu_gas(_data_dir, 'SMO_monthly_obs_%s.txt'%cls.gas_name)
         df_combined = pd.concat([df_mlo, df_smo], axis=1).dropna()
-        df_combined['dmf_mean'] = df_combined['co2'].mean(axis=1)
-        df_combined.drop(['site', 'co2', 'year', 'month', 'day'], axis=1, inplace=True)
+        df_combined['dmf_mean'] = df_combined[cls.gas_name].mean(axis=1)
+        df_combined.drop(['site', cls.gas_name, 'year', 'month', 'day'], axis=1, inplace=True)
 
         # Fill in any missing months. Add a flag so we can keep track of whether they've had to be interpolated or
         # not. Having a consistent monthly frequency makes the rest of the code easier - we can just always assume that
@@ -725,10 +725,12 @@ class TraceGasTropicsRecord(object):
 
 class CO2TropicsRecord(TraceGasTropicsRecord):
     gas_name = 'co2'
+    gas_unit = 'ppm'
 
 
 class N2OTropicsRecord(TraceGasTropicsRecord):
     gas_name = 'n2o'
+    gas_unit = 'ppb'
 
     @classmethod
     def _get_frac_remaining_by_age(cls, ages):
@@ -754,9 +756,14 @@ class N2OTropicsRecord(TraceGasTropicsRecord):
         # boundary condition, and so the fraction of N2O remaining is the concentration divided by 313.
         return n2o_at_age / 313.0
 
+    
+class CH4TropicsRecord(TraceGasTropicsRecord):
+    gas_name = 'ch4'
+    gas_unit = 'ppb'
+
 
 # Make the list of available gases' records
-_gas_records = {r.gas_name: r for r in [CO2TropicsRecord, N2OTropicsRecord]}
+_gas_records = {r.gas_name: r for r in [CO2TropicsRecord, N2OTropicsRecord, CH4TropicsRecord]}
 
 
 def get_clams_age(theta, eq_lat, day_of_year, as_timedelta=False, clams_dat=dict()):
