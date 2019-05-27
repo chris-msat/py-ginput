@@ -8,6 +8,8 @@ Compatibility notes:
 from __future__ import print_function, division
 
 import datetime as dt
+
+import numpy
 from dateutil.relativedelta import relativedelta
 import netCDF4 as ncdf
 import numpy as np
@@ -15,11 +17,14 @@ from numpy import ma
 import os
 import pandas as pd
 import re
+
+from numpy.core._multiarray_umath import arctan, tan, sin, cos
 from scipy.interpolate import interp1d, interp2d
 import subprocess
 import sys
 
 import mod_constants as const
+from ggg_logging import logger
 
 _std_model_pres_levels = np.array([1000.0, 975.0, 950.0, 925.0, 900.0, 875.0, 850.0, 825.0, 800.0, 775.0, 750.0, 725.0,
                                    700.0, 650.0, 600.0, 550.0, 500.0, 450.0, 400.0, 350.0, 300.0, 250.0, 200.0, 150.0,
@@ -32,6 +37,13 @@ _std_model_pres_levels = np.array([1000.0, 975.0, 950.0, 925.0, 900.0, 875.0, 85
 merra_pres_levels = _std_model_pres_levels
 geosfp_pres_levels = _std_model_pres_levels
 earth_radius = 6371  # kilometers
+
+
+class TropopauseError(Exception):
+    """
+    Error if could not find the tropopause
+    """
+    pass
 
 
 class ProgressBar(object):
@@ -116,6 +128,24 @@ class ProgressBar(object):
         sys.stdout.flush()
 
 
+def check_depedencies_newer(out_file, *dependency_files):
+    """
+    Check if
+    :param out_file:
+    :param dependency_files:
+    :return:
+    """
+    if len(dependency_files) == 0:
+        raise ValueError('Give at least one dependency file')
+
+    out_last_modified = os.path.getmtime(out_file)
+    for dep in dependency_files:
+        if os.path.getmtime(dep) > out_last_modified:
+            return True
+
+    return False
+
+
 def _get_num_header_lines(filename):
     """
     Get the number of header lines in a standard GGG file
@@ -133,6 +163,13 @@ def _get_num_header_lines(filename):
         header_info = fobj.readline()
 
     return int(header_info.split()[0])
+
+
+def _write_header(fobj, header_lines, n_data_columns, file_mode='w'):
+    line1 = ' {} {}\n'.format(len(header_lines)+1, n_data_columns)
+    fobj.write(line1)
+    header_lines = [l if l.endswith('\n') else l + '\n' for l in header_lines]
+    fobj.writelines(header_lines)
 
 
 def read_mod_file(mod_file, as_dataframes=False):
@@ -175,6 +212,11 @@ def read_mod_file(mod_file, as_dataframes=False):
         out_dict['profile'] = {k: v.values for k, v in profile_vars.items()}
 
     return out_dict
+
+
+def datetime_from_mod_filename(mod_file):
+    dstr = re.search(r'\d{8}_\d{4}Z', os.path.basename(mod_file)).group()
+    return dt.datetime.strptime(dstr, '%Y%m%d_%H%MZ')
 
 
 def read_map_file(map_file, as_dataframes=False, skip_header=False):
@@ -229,6 +271,73 @@ def read_map_file(map_file, as_dataframes=False, skip_header=False):
     out_dict['constants'] = constants
     out_dict['profile'] = data
     return out_dict
+
+
+def read_isotopes(isotopes_file, gases_only=False):
+    """
+    Read the isotopes defined in an isotopologs.dat file
+
+    :param isotopes_file: the path to the isotopologs.dat file
+    :type isotopes_file: str
+
+    :param gases_only: set to ``True`` to return a tuple of only the distinct gases, not the individual isotopes.
+     Default is ``False``, which includes the different isotope numbers.
+    :type gases_only: bool
+
+    :return: tuple of isotope or gas names
+    :rtype: tuple(str)
+    """
+    nheader = _get_num_header_lines(isotopes_file)
+    with open(isotopes_file, 'r') as fobj:
+        for i in range(nheader):
+            fobj.readline()
+
+        isotopes = []
+        for line in fobj:
+            iso_number = line[3:5].strip()
+            iso_name = line[6:14].strip()
+            if not gases_only:
+                iso_name = iso_number + iso_name
+            if iso_name not in isotopes:
+                isotopes.append(iso_name)
+
+        return tuple(isotopes)
+
+
+def get_isotopes_file(isotopes_file=None, use_gggpath=False):
+    """
+    Get the path to the isotopologs.dat file
+
+    :param isotopes_file: user input path. If this is not None, it is returned after checking that it exists.
+    :type isotopes_file: str or None
+
+    :param use_gggpath: set to ``True`` to find the isotopologs.dat file at the location defined by the GGGPATH
+     environmental variable. If ``False`` and ``isotopes_file`` is ``None`` then the isotopologs.date file included in
+     this repo is used.
+    :type use_gggpath: bool
+
+    :return: the path to the isotopologs.dat file
+    :rtype: str
+    """
+    if isotopes_file is not None:
+        if not os.path.isfile(isotopes_file):
+            raise IOError('The isotopes path {} is not a file'.format(isotopes_file))
+        return isotopes_file
+    elif use_gggpath:
+        gggpath = os.getenv('GGGPATH')
+        if gggpath is None:
+            raise EnvironmentError('use_gggpath=True requires the GGGPATH environmental variable to be set')
+        isotopes_file = os.path.join(gggpath, 'isotopologs', 'isotopologs.dat')
+        if not os.path.isfile(isotopes_file):
+            raise IOError('Failed to find isotopologs.dat at {}. Either update your GGGPATH environmental variable or '
+                          'set use_gggpath to False.'.format(isotopes_file))
+        return isotopes_file
+    else:
+        return os.path.join(const.data_dir, 'isotopologs.dat')
+
+
+def map_file_name(site_abbrev, obs_lat, obs_date):
+    return '{}{}_{}.map'.format(site_abbrev, format_lat(obs_lat, prec=0), obs_date.strftime('%Y%m%d_%H%M'))
 
 
 def write_map_file(map_file, site_lat, trop_eqlat, prof_ref_lat, surface_alt, tropopause_alt, strat_used_eqlat,
@@ -334,9 +443,146 @@ def write_map_file(map_file, site_lat, trop_eqlat, prof_ref_lat, surface_alt, tr
                 mapf.write('\n')
 
 
-def hg_commit_info(hg_dir=None):
+def vmr_file_name(site_abbrev, obs_date):
+    return '{site}_{date}.vmr'.format(site=site_abbrev, date=obs_date.strftime('%Y%m%d_%H%M'))
+
+
+def write_vmr_file(vmr_file, tropopause_alt, profile_date, profile_lat, profile_alt, profile_gases, isotope_opts=None):
+    """
+    Write a .vmr file
+    :param vmr_file:
+    :param tropopause_alt:
+    :param profile_date:
+    :param profile_lat:
+    :param profile_alt:
+    :param profile_gases:
+    :return:
+    """
+    isotope_opts = dict() if isotope_opts is None else isotope_opts
+    gas_name_order = read_isotopes(get_isotopes_file(**isotope_opts), gases_only=True)
+    gas_name_order_lower = [name.lower() for name in gas_name_order]
+    gas_name_mapping = {k: None for k in gas_name_order}
+
+    if np.ndim(profile_alt) != 1:
+        raise ValueError('profile_alt must be 1D')
+
+    # Check that all the gases in the profile_gases dict are expected to be written.
+    for gas_name, gas_data in profile_gases.items():
+        if gas_name.lower() not in gas_name_order_lower:
+            logger.warning('Gas "{}" was not listed in the isotopologs.dat file and will not be written to the .vmr '
+                           'file'.format(gas_name))
+        elif np.shape(gas_data) != np.shape(profile_alt):
+            raise ValueError('Gas "{}" has a different shape ({}) than the altitude data ({})'.format(
+                gas_name, np.shape(gas_data), np.shape(profile_alt)
+            ))
+        elif np.ndim(gas_data) != 1:
+            raise ValueError('Gas "{}" is not 1D'.format(gas_name))
+        else:
+            idx = gas_name_order_lower.index(gas_name.lower())
+            gas_name_mapping[gas_name_order[idx]] = gas_name
+
+    # Write the header, which starts with the number of header lines and data columns, then has the tropopause altitude,
+    # profile date as a decimal year, and profile latitude. I'm going to skip the secular trends, seasonal cycle, and
+    # latitude gradient because those are not necessary.
+    alt_fmt = '   {:.3f} '
+    gas_fmt = '{:.3E}  '
+    table_header = ['Altitude'] + ['{:10}'.format(name) for name in gas_name_order]
+    header_lines = [' ZTROP_VMR: {:.1f}'.format(tropopause_alt),
+                    ' DATE_VMR: {:.3f}'.format(date_to_decimal_year(profile_date)),
+                    ' LAT_VMR: {:.2f}'.format(profile_lat),
+                    ' '.join(table_header)]
+
+    with open(vmr_file, 'w') as fobj:
+        _write_header(fobj, header_lines, len(gas_name_order) + 1)
+        for i in range(np.size(profile_alt)):
+            fobj.write(alt_fmt.format(profile_alt[i]))
+            for gas_name in gas_name_order:
+                if gas_name_mapping[gas_name] is not None:
+                    gas_conc = profile_gases[gas_name_mapping[gas_name]][i]
+                else:
+                    gas_conc = 0.0
+                fobj.write(gas_fmt.format(gas_conc))
+            fobj.write('\n')
+
+
+def read_vmr_file(vmr_file, as_dataframs=False, lowercase_names=True):
+    nheader = _get_num_header_lines(vmr_file)
+    header_data = dict()
+    with open(vmr_file, 'r') as fobj:
+        # Skip the line with the number of header lines and columns
+        fobj.readline()
+        for i in range(1, nheader-1):
+            line = fobj.readline()
+            const_name, const_val = [v.strip() for v in line.split(':')]
+            if lowercase_names:
+                const_name = const_name.lower()
+            header_data[const_name] = float(const_val)
+
+    data_table = pd.read_csv(vmr_file, sep='\s+', header=nheader-1)
+
+    if lowercase_names:
+        data_table.columns = [v.lower() for v in data_table]
+
+    if as_dataframs:
+        header_data = pd.DataFrame(header_data, index=[0])
+    else:
+        data_table = {k: v.to_numpy() for k, v in data_table.items()}
+
+    return {'scalar': header_data, 'profile': data_table}
+
+
+def format_lon(lon, prec=2):
+    def to_str(lon):
+        ew = 'E' if lon > 0 else 'W'
+        fmt_str = '{{:.{}f}}{{}}'.format(prec)
+        return fmt_str.format(abs(lon), ew)
+
+    def to_float(lon):
+        if lon[-1] == 'E':
+            sign = 1
+        elif lon[-1] == 'W':
+            sign = -1
+        else:
+            raise ValueError('A longitude string must end in "E" or "W"')
+
+        return float(lon[:-1]) * sign
+
+    if isinstance(lon, str):
+        return to_float(lon)
+    else:
+        return to_str(lon)
+
+
+def format_lat(lat, prec=2):
+    def to_str(lat):
+        ns = 'N' if lat > 0 else 'S'
+        fmt_str = '{{:.{}f}}{{}}'.format(prec)
+        return fmt_str.format(abs(lat), ns)
+
+    def to_float(lat):
+        if lat[-1] == 'N':
+            sign = 1
+        elif lat[-1] == 'S':
+            sign = -1
+        else:
+            raise ValueError('A latitude string must end in "N" or "S"')
+
+        return float(lat[:-1]) * sign
+
+    if isinstance(lat, str):
+        return to_float(lat)
+    else:
+        return to_str(lat)
+
+
+def _hg_dir_helper(hg_dir):
     if hg_dir is None:
         hg_dir = os.path.dirname(__file__)
+    return os.path.abspath(hg_dir)
+
+
+def hg_commit_info(hg_dir=None):
+    hg_dir = _hg_dir_helper(hg_dir)
     if len(hg_dir) == 0:
         # If in the current directory, then dirname(__file__) gives an empty string, which isn't allowed as the argument
         # to cwd in check_output
@@ -357,18 +603,53 @@ def hg_commit_info(hg_dir=None):
     return parent, branch, parent_date
 
 
+def hg_is_commit_clean(hg_dir=None, ignore_untracked=True, ignore_files=tuple()):
+    """
+    Checks if a mercurial directory is clean.
+
+    By default, a directory is considered clean if all tracked files have no uncommitted changes. Untracked files are
+    not considered. Setting ``ignore_untracked`` to ``False`` means that there must be no untracked files for the
+    directory to be clean.
+
+    :param hg_dir: optional, the mercurial directory to check. If not given, defaults to the one containing this repo.
+    :type hg_dir: str
+
+    :param ignore_untracked: optional, set to ``False`` to require that there be no untracked files in the directory for
+     it to be considered clean.
+    :type ignore_untracked: bool
+
+    :return: ``True`` if the directory is clean, ``False`` otherwise.
+    :rtype: bool
+    """
+    hg_dir = _hg_dir_helper(hg_dir)
+    hg_root = subprocess.check_output(['hg', 'root'], cwd=hg_dir).strip()
+    summary = subprocess.check_output(['hg', 'status'], cwd=hg_dir).splitlines()
+
+    def in_ignore(f):
+        f = os.path.join(hg_root, f)
+        for ignore in ignore_files:
+            if os.path.exists(ignore) and os.path.samefile(f, ignore):
+                return True
+        return False
+
+    for line in summary:
+        status, hg_file = [p.strip() for p in line.split(' ', 1)]
+        if ignore_untracked and status == '?':
+            pass
+        elif in_ignore(hg_file):
+            pass
+        else:
+            return False
+
+    return True
+
+
 def _lrange(*args):
     # Ensure Python 3 compatibility for adding range() calls together
     r = range(*args)
     if not isinstance(r, list):
         r = list(r)
     return r
-
-
-def format_lat(lat, prec=0):
-    fmt = '{{:.{}f}}{{}}'.format(prec)
-    direction = 'N' if lat >= 0 else 'S'
-    return fmt.format(abs(lat), direction)
 
 
 def round_to_zero(val):
@@ -807,6 +1088,12 @@ def geosfp_file_names_by_day(product, file_type, utc_dates, utc_hours=None):
     return geos_file_names, geos_file_dates
 
 
+def datetime_from_geos_filename(geos_filename):
+    geos_filename = os.path.basename(geos_filename)
+    date_str = re.search(r'\d{8}_\d{4}', geos_filename).group()
+    return dt.datetime.strptime(date_str, '%Y%m%d_%H%M')
+
+
 def mod_interpolation_legacy(z_grid, z_met, t_met, val_met, interp_mode=1, met_alt_geopotential=True):
     """
     Legacy interpolation for .mod file profiles onto the TCCON grid
@@ -975,6 +1262,64 @@ def interp_to_tropopause_height(theta, altitude, theta_trop):
     return mod_interpolation_new(theta_trop, theta[last_decr:], altitude[last_decr:], interp_mode='linear').item()
 
 
+def calc_wmo_tropopause(temperature, altitude, limit_to=(5., 18.), raise_error=True):
+    """
+    Find the tropopause altitude using the WMO definition
+
+    The WMO thermal definition of the tropopause is: "the level at which the lapse rate drops to < 2 K/km and the
+    average lapse rate between this and all higher levels within 2 km does not exceed 2 K/km".
+    (quoted in https://www.atmos-chem-phys.net/8/1483/2008/acp-8-1483-2008.pdf, sect. 2.4).
+
+    :param temperature: the temperature profile, in K
+    :type temperature: :class:`numpy.ndarray` (1D)
+
+    :param altitude: the altitude for each level in the temperature profile, in kilometers
+    :type altitude: :class:`numpy.ndarray` (1D)
+
+    :param limit_to: the range of altitudes to limit the search for the tropopause to. This both helps avoid erroneous
+     results and potentially speed up the analysis.
+    :type limit_to: tuple(float, float)
+
+    :param raise_error: If ``True``, this function raises an error if it cannot find the tropopause. If ``False``, it
+     returns a NaN in that case.
+    :type raise_error: bool
+
+    :return: the tropopause altitude in kilometers
+    :rtype: float
+    :raises TropopauseError: if ``raise_error`` is ``True`` and this cannot find the tropopause.
+    """
+
+    # Calculate the lapse rate on the half levels. By definition, a positive lapse rate is a decrease with altitude, so
+    # we need the minus sign.
+    lapse = -np.diff(temperature) / np.diff(altitude)
+    alt_half = altitude[:-1] + np.diff(altitude)/2.0
+
+    # Cut down the data to just the relevant range of altitudes recommended by
+    # https://agupubs.onlinelibrary.wiley.com/doi/pdf/10.1029/2003GL018240 (end of sect. 2)
+    zz = (alt_half >= np.min(limit_to)) & (alt_half <= np.max(limit_to))
+    lapse = lapse[zz]
+    alt_half = alt_half[zz]
+
+    # Iterate over the levels. If the lapse rate is < 2 K/km, check that it remains there over the next 2 kilometers
+    import pdb; pdb.set_trace()
+    for k, (gamma, alt) in enumerate(zip(lapse, alt_half)):
+        if gamma < 2.0:
+            step = 0.1
+            test_alt = np.arange(alt, alt+2.0+step, step)
+            test_lapse = np.interp(test_alt, alt_half, lapse)
+            if np.all(test_lapse < 2.0):
+                # Interpolate to the exact tropopause altitude where the lapse rate first crosses the 2 K/km
+                # np.interp requires the x-coordinates to be sorted, hence the complicated formula to get k_inds
+                k_inds = np.argsort(lapse[[k-1, k]]) + k - 1
+                return np.interp(2.0, lapse[k_inds], alt_half[k_inds])
+
+    # If we get here, we failed to find the tropopause, so return a NaN or raise an error
+    if raise_error:
+        raise TropopauseError('Could not find a level meeting the WMO tropopause condition in the given profile')
+    else:
+        return np.nan
+
+
 def age_of_air(lat, z, ztrop, ref_lat=45.0):
     """
     Calculate age of air using a function form from GGG 2014.
@@ -1012,7 +1357,7 @@ def age_of_air(lat, z, ztrop, ref_lat=45.0):
     return aoa
 
 
-def seasonal_cycle_factor(lat, z, ztrop, fyr, species='co2', ref_lat=45.0):
+def seasonal_cycle_factor(lat, z, ztrop, fyr, species, ref_lat=45.0):
     """
     Calculate a factor to multiply a concentration by to account for the seasonal cycle.
 
@@ -1030,8 +1375,10 @@ def seasonal_cycle_factor(lat, z, ztrop, fyr, species='co2', ref_lat=45.0):
      :func:`date_to_frac_year`.
     :type fyr: float
 
-    :param species: which species seasonal cycle to calculate; affects the amplitude. Options are: 'co2'.
-    :type species: str
+    :param species: a child class of :class:`~tccon_priors.TraceGasTropicsRecord` that defines a gas name and seasonal
+     cycle coefficient. May be an instance of the class or the class itself. If the gas name is "co2", then a
+     CO2-specific parameterization is used.
+    :type species: :class:`~tccon_priors.TraceGasTropicsRecord`
 
     :param ref_lat: reference latitude for the age of air. Set to 45N as an approximation of where the NH emissions are.
     :type ref_lat: float
@@ -1039,13 +1386,59 @@ def seasonal_cycle_factor(lat, z, ztrop, fyr, species='co2', ref_lat=45.0):
     :return: the seasonal cycle factor as a numpy array. Multiply this by a deseasonalized concentration at (lat, z) to
      get the concentration including the seasonal cycle
     """
-    season_cycle_coeffs = {'co2': 0.007}
+    if species.gas_seas_cyc_coeff is None:
+        raise TypeError('The species record ({}) does not define a seasonal cycle coefficient')
 
     aoa = age_of_air(lat, z, ztrop, ref_lat=ref_lat)
-    sv = np.sin(2*np.pi *(fyr - 0.834 - aoa))
-    svnl = sv + 1.80 * np.exp(-((lat - 74)/41)**2)*(0.5 - sv**2)
-    sca = svnl * np.exp(-aoa/0.20)*(1 + 1.33*np.exp(-((lat-76)/48)**2) * (z+6)/(z+1.4))
-    return 1 + sca * season_cycle_coeffs[species]
+    if species.gas_name.lower() == 'co2':
+        sv = np.sin(2*np.pi *(fyr - 0.834 - aoa))
+        svnl = sv + 1.80 * np.exp(-((lat - 74)/41)**2)*(0.5 - sv**2)
+        sca = svnl * np.exp(-aoa/0.20)*(1 + 1.33*np.exp(-((lat-76)/48)**2) * (z+6)/(z+1.4))
+    else:
+        sv = np.sin(2*np.pi * (fyr - 0.78))  # basic seasonal variation
+        svl = sv * (lat / 15.0) / np.sqrt(1 + (lat / 15.0)**2.0)  # latitude dependence
+        sca = svl * np.exp(-aoa / 0.85)  # altitude dependence
+
+    return 1 + sca * species.gas_seas_cyc_coeff
+
+
+def hf_ch4_slope_fit(yrs, a, b, c, t0):
+    """
+    A fitting function appropriate to fit the trend of CH4 vs. HF slopes
+
+    This function has the form:
+
+    ..math::
+        a * exp(b*(t - t0)) + c
+
+    where t is given in years.
+
+    :param yrs: t in the above equation.
+    :type yrs: :class:`numpy.ndarray`
+
+    :param a, b, c, t0: the fitting parameters in the above equation
+    :type a, b, c, t0: float
+
+    :return: the predicted slopes at ``yrs``
+    """
+    return a * np.exp(b*(yrs - t0)) + c
+
+
+def is_tropics(lat, doy, ages):
+    return np.abs(lat) < 20.0
+
+
+def is_vortex(lat, doy, ages):
+    if not isinstance(doy, np.ndarray):
+        doy = np.full_like(lat, doy)
+    xx_vortex = np.zeros_like(lat, dtype=np.bool_)
+    xx_vortex[(doy > 140) & (doy < 245) & (lat < -55.0) & (ages > 3.25)] = True
+    xx_vortex[(doy > 275) & (doy < 60) & (lat > 55.0) & (ages > 3.25)] = True
+    return xx_vortex
+
+
+def is_midlat(lat, doy, ages):
+    return ~is_tropics(lat, doy, ages) & ~is_vortex(lat, doy, ages)
 
 
 def date_to_decimal_year(date_in):
@@ -1184,3 +1577,79 @@ def start_of_month(date_in, out_type=dt.date):
     :return: an instance of ``out_type`` set to day 1, 00:00:00 of the month of ``date_in``.
     """
     return out_type(year=date_in.year, month=date_in.month, day=1)
+
+
+def gravity(gdlat,altit):
+    """
+    copy/pasted from fortran routine comments
+    This is used to convert
+
+    Input Parameters:
+        gdlat       GeoDetric Latitude (degrees)
+        altit       Geometric Altitude (km)
+
+    Output Parameter:
+        gravity     Effective Gravitational Acceleration (m/s2)
+        radius 		Radius of earth at gdlat
+
+    Computes the effective Earth gravity at a given latitude and altitude.
+    This is the sum of the gravitational and centripital accelerations.
+    These are based on equation I.2.4-(17) in US Standard Atmosphere 1962
+    The Earth is assumed to be an oblate ellipsoid, with a ratio of the
+    major to minor axes = sqrt(1+con) where con=.006738
+    This eccentricity makes the Earth's gravititational field smaller at
+    the poles and larger at the equator than if the Earth were a sphere
+    of the same mass. [At the equator, more of the mass is directly
+    below, whereas at the poles more is off to the sides). This effect
+    also makes the local mid-latitude gravity field not point towards
+    the center of mass.
+
+    The equation used in this subroutine agrees with the International
+    Gravitational Formula of 1967 (Helmert's equation) within 0.005%.
+
+    Interestingly, since the centripital effect of the Earth's rotation
+    (-ve at equator, 0 at poles) has almost the opposite shape to the
+    second order gravitational field (+ve at equator, -ve at poles),
+    their sum is almost constant so that the surface gravity could be
+    approximated (.07%) by the simple expression g=0.99746*GM/radius^2,
+    the latitude variation coming entirely from the variation of surface
+    r with latitude. This simple equation is not used in this subroutine.
+    """
+
+    d2r=3.14159265/180.0	# Conversion from degrees to radians
+    gm=3.9862216e+14  		# Gravitational constant times Earth's Mass (m3/s2)
+    omega=7.292116E-05		# Earth's angular rotational velocity (radians/s)
+    con=0.006738       		# (a/b)**2-1 where a & b are equatorial & polar radii
+    shc=1.6235e-03  		# 2nd harmonic coefficient of Earth's gravity field
+    eqrad=6378178.0   		# Equatorial Radius (meters)
+
+    gclat=arctan(tan(d2r*gdlat)/(1.0+con))  # radians
+
+    radius=1000.0*altit+eqrad/np.sqrt(1.0+con*sin(gclat)**2)
+    ff=(radius/eqrad)**2
+    hh=radius*omega**2
+    ge=gm/eqrad**2                      # = gravity at Re
+
+    gravity=(ge*(1-shc*(3.0*sin(gclat)**2-1)/ff)/ff-hh*cos(gclat)**2)*(1+0.5*(sin(gclat)*cos(gclat)*(hh/ge+2.0*shc/ff**2))**2)
+
+    return gravity, radius
+
+
+def geopotential_height_to_altitude(gph, lat, alt):
+    """
+    Convert a geopotential height in m^2 s^-2 to meters
+
+    :param gph: geopotential height in m^2 s^-2.
+    :type gph: float
+
+    :param lat: geographic latitude (in degrees, south is negative)
+    :type lat: float
+
+    :param alt: altitude of the TCCON site in kilometers. If set to 0, will use gravity at the surface for the given
+     latitude.
+    :type alt: float
+
+    :return: the geopotential height converted to meters
+    """
+    gravity_at_site, _ = gravity(lat, alt)
+    return gph / gravity_at_site

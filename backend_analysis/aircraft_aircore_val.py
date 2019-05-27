@@ -89,7 +89,7 @@ _ggg14_label = 'GGG2014'
 _gggdev_label = 'GGG-develop'
 _gggpy_label = 'Python'
 _label_mapping = {'2014': _ggg14_label, 'devel': _gggdev_label, 'py': _gggpy_label}
-_color_mapping = {'2014': 'blue', 'devel': 'orange', 'py': 'green'}
+_color_mapping = {'2014': 'green', 'devel': 'orange', 'py': 'blue'}
 _marker_mapping = {'2014': 'o', 'devel': '^', 'py': 'd'}
 _yaxis_labels = {'pres': ('Pressure [hPa]', True), 'alt': ('Altitude [km]', False),
                  'alt-trop': ('Altitude rel. to tropopause [km]', False)}
@@ -359,7 +359,7 @@ def interp_profile_to_obs(obsdat, mapdat, ztype='pres', obs_file=None, data_type
 
     if limit_by_zsurf:
         z_surf = full_py_mapdate['constants']['Surface altitude']
-        z_alt = full_py_mapdate['profile']['Height']
+        z_alt = mapdat['Height'].values
         zz = z_alt >= z_surf
         this_prof_co2 = this_prof_co2[zz]
         this_prof_z = this_prof_z[zz]
@@ -454,7 +454,11 @@ def calc_binned_rmses(data_root, bin_edges):
 
 
 def plot_binned_rmse(data_root, bin_edges, bin_centers, ztype='pres', years=None, months=None, title_extra='',
-                     prof_types=('2014', 'devel', 'py')):
+                     prof_types=('2014', 'devel', 'py'), plot_labels=None):
+    if plot_labels is not None:
+        plot_labels = {k: v for k, v in zip(prof_types, plot_labels)}
+    else:
+        plot_labels = _label_mapping
     binned_rmses = dict()
     for prof_type in prof_types:
         binned_rmses[prof_type] = dict()
@@ -471,13 +475,17 @@ def plot_binned_rmse(data_root, bin_edges, bin_centers, ztype='pres', years=None
         ax = fig.add_subplot(1, 2, idx + 1)
         for prof_type in prof_types:
             ax.plot(binned_rmses[prof_type][dtype]['rmse'], bin_centers, color=_color_mapping[prof_type],
-                    label=_label_mapping[prof_type])
+                    label=plot_labels[prof_type])
 
         ax.set_xlabel('RMSE (ppm)')
         format_y_axis(ax, ztype)
         ax.legend()
         all_ax.append(ax)
         ax.set_title(dtype)
+        ax.grid()
+        if ztype == 'alt-trop':
+            ax.set_xlim(ax.get_xlim())
+            ax.plot(ax.get_xlim(), [0, 0], color='k', linestyle='--', linewidth=2)
 
     return fig, all_ax
 
