@@ -160,7 +160,7 @@ mod_var_fmt_info = {'lev':     {'total_width': 13, 'format': '9.3e',  'scale': 1
                     'RH':      {'total_width': 8,  'format': '>6.1f', 'scale': 100, 'name': 'RH', 'units': '%'},
                     'EPV':     {'total_width': 15, 'format': '10.3e', 'scale': 1,   'name': 'EPV', 'units': 'K.m+2/kg/s'},
                     'PT':      {'total_width': 11, 'format': '8.3f',  'scale': 1,   'name': 'PT', 'units': 'Kelvin'},
-                    'EL':      {'total_width': 11, 'format': '7.3f',  'scale': 1,   'name': 'EL', 'units': 'degrees'},
+                    'EL':      {'total_width': 11, 'format': '7.3f',  'scale': 1,   'name': 'EqL', 'units': 'degrees'},
                     'O3':      {'total_width': 11, 'format': '9.3e',  'scale': 1,   'name': 'O3', 'units': 'kg/kg'},
                     'CO':      {'total_width': 11, 'format': '7.3f',  'scale': 1e9, 'name': 'CO', 'units': 'ppb'}}
 
@@ -245,10 +245,10 @@ def write_mod(mod_path, version, site_lat, data=0, surf_data=0, func=None, muted
         for k,elem in enumerate(data['H2O_DMF']):
             svp = svp_wv_over_ice(data['T'][k])
             h2o_wmf = compute_h2o_wmf(data['H2O_DMF'][k]) # wet mole fraction of h2o
-            frh = h2o_wmf*data['T'][k]/svp # Fractional relative humidity
+            frh = h2o_wmf*data['lev'][k]/svp # Fractional relative humidity
 
             # Relace H2O mole fractions that are too small
-            if (frh < 30./data['T'][k]):
+            if (frh < 30./data['lev'][k]):
                 if not muted:
                     print('Replacing too small H2O ',mod_path, data['lev'][k],h2o_wmf,svp*30./data['lev'][k]/data['lev'][k],frh,30./data['lev'][k])
                 frh = 30./data['lev'][k]
@@ -322,6 +322,7 @@ def write_mod(mod_path, version, site_lat, data=0, surf_data=0, func=None, muted
         header_names, header_units, final_data_keys, fmt = build_mod_fmt_strings(prof_var_order)
 
         mod_content = []
+
         # number of header rows, number of data columns
         mod_content.append('7  {}\n'.format(len(prof_var_order)))
         # constants
@@ -356,8 +357,8 @@ def write_mod(mod_path, version, site_lat, data=0, surf_data=0, func=None, muted
             h2o_wmf = compute_h2o_wmf(data['H2O_DMF'][k]) # wet mole fraction of h2o
 
             if 300 <= data['lev'][k] <= 1000:
-                # Relace H2O mole fractions that are too small
-                if data['RH'][k] < 30. / data['T'][k]:
+                # Replace H2O mole fractions that are too small
+                if data['RH'][k] < 30./data['lev'][k]:
                     if not muted:
                         print('Replacing too small H2O at {:.2f} hPa; H2O_WMF={:.3e}; {:.3e}; RH={:.3f}'.format(data['lev'][k],h2o_wmf,svp/data['T'][k],data['RH'][k],1.0))
                     data['RH'][k] = 30./data['lev'][k]
@@ -592,40 +593,18 @@ def read_data(dataset, varlist, lat_lon_box=0):
 
     return DATA
 
+def nearest(array,value):
+    """
+    return index of element in array that is closest to value
+    """
+    array = np.asarray(array)
+    idx = (np.abs(array - value)).argmin()
+    return idx
+
 def querry_indices(dataset,site_lat,site_lon_180,box_lat_half_width,box_lon_half_width):
     """
-    Set up a lat-lon box for the data querry
-
-    Unlike with ncep, this will only use 3-hourly files for interpolation, so no time box is defined
-
-    NOTE: merra lat -90 -> +90 ;  merra lon -180 -> +179.375
-
-    To be certain to get two points on both side of the site lat and lon, use the grid resolution
+    Get the lat/lon IDs of the grid cell that contain the site lat/lon
     """
-    # define 2xbox_lat_half_width°x2xbox_lon_half_width° lat-lon box centered on the site lat-lon
-    min_lat, max_lat = site_lat-box_lat_half_width, site_lat+box_lat_half_width
-    min_lon, max_lon = site_lon_180-box_lon_half_width, site_lon_180+box_lon_half_width
-
-    # handle edge cases
-    if min_lat < -90:
-        min_lat = -(90-abs(90-min_lat))
-    if max_lat > 90:
-        max_lat = 90-abs(90-max_lat)
-
-    if max_lat < min_lat:
-        swap = max_lat
-        max_lat = min_lat
-        min_lat = swap
-
-    if min_lon < -180:
-        min_lon = 180 - abs(180-min_lon)
-    if max_lon > 180:
-        max_lon = - (180 - abs(180-max_lon))
-
-    if max_lon < min_lon:
-        swap = max_lon
-        max_lon = min_lon
-        min_lon = swap
 
     # read the latitudes and longitudes from the merra file
     if type(dataset)==netCDF4._netCDF4.Dataset:
@@ -638,20 +617,35 @@ def querry_indices(dataset,site_lat,site_lon_180,box_lat_half_width,box_lon_half
         merra_lon = dataset['lon'][:].data
         merra_lat = dataset['lat'][:].data
 
-    # get the indices of merra longitudes and latitudes that fit in the lat-lon box
-    merra_lon_in_box_IDs = np.where((merra_lon>=min_lon) & (merra_lon<=max_lon))[0]
-    merra_lat_in_box_IDs = np.where((merra_lat>=min_lat) & (merra_lat<=max_lat))[0]
 
-    nlon = np.size(merra_lon)
-    nlat = np.size(merra_lat)
-    min_lat_ID, max_lat_ID = merra_lat_in_box_IDs[0], (merra_lat_in_box_IDs[-1]+1) % nlat
-    min_lon_ID, max_lon_ID = merra_lon_in_box_IDs[0], (merra_lon_in_box_IDs[-1]+1) % nlon
-    # +1 because ARRAY[i:j] in python will return elements i to j-1
-    # take the modulus of the second index because if you have a lat/lon near the end of a MERRA grid we need to
-    # wrap around in the interpolation and interpolate between points on either end of the grid (periodic bdy condition)
+    nearest_lat_ID = nearest(merra_lat,site_lat)
+    if (site_lat-merra_lat[nearest_lat_ID])>0: # if exact same latitude, the second latitude for the grid square will be south
+        min_lat_ID = nearest_lat_ID
+        max_lat_ID = nearest_lat_ID+1
+    else:
+        min_lat_ID = nearest_lat_ID-1
+        max_lat_ID = nearest_lat_ID
 
-    return [min_lat_ID, max_lat_ID, min_lon_ID, max_lon_ID]
+    nearest_lon_ID = nearest(merra_lon,site_lon_180)
+    if (site_lon_180-merra_lon[nearest_lon_ID])>0: # if exact same longitude, the second longitude for the grid square will be west
+        min_lon_ID = nearest_lon_ID
+        if nearest_lon_ID == len(merra_lon)-1: # positive longitude edge case
+            max_lon_ID = 0
+        else:
+            max_lon_ID = nearest_lon_ID+1
+    else:
+        # no need for a negative longitude edge case because negative indices go in reverse from the end of the list e.g. for a list with N elements: list[-1] = list[N-1]
+        min_lon_ID = nearest_lon_ID-1
+        max_lon_ID = nearest_lon_ID
 
+    if not merra_lat[min_lat_ID]<site_lat<merra_lat[max_lat_ID]:
+        print('min_lat','site_lat','max_lat',merra_lat[min_lat_ID],site_lat,merra_lat[max_lat_ID])
+    if not merra_lon[min_lon_ID]<site_lon_180<merra_lon[max_lon_ID]:
+        print('min_lon','site_lon','max_lon',merra_lon[min_lon_ID],site_lon_180,merra_lon[max_lon_ID])
+
+    IDs = [min_lat_ID, max_lat_ID, min_lon_ID, max_lon_ID]
+
+    return IDs
 # ncep has geopotential height profiles, not merra(?, only surface), so I need to convert geometric heights to geopotential heights
 # the idl code uses a fixed radius for the radius of earth (6378.137 km), below the gravity routine of gsetup is used
 # also the surface geopotential height of merra is in units of m2 s-2, so it must be divided by surface gravity
@@ -1046,6 +1040,7 @@ def parse_args(parser=None):
     parser.add_argument('--site', dest='site_abbrv', choices=valid_site_ids, help='Two-letter site abbreviation. '
                                                                                   'Providing this will produce .mod '
                                                                                   'files only for that site.')
+    parser.add_argument('--mode',help="if specified uses the old code with time interpolation",choices=['ncep','merradap42','merradap72','merraglob','fpglob','fpitglob'])
 
     if am_i_main:
         arg_dict = vars(parser.parse_args())
@@ -1062,7 +1057,7 @@ def parse_args(parser=None):
         parser.set_defaults(driver_fxn=driver)
 
 
-def mod_file_name(date,time_step,site_lat,site_lon_180,ew,ns,mod_path,round_latlon=True,in_utc=True):
+def mod_file_name(prefix,date,time_step,site_lat,site_lon_180,ew,ns,mod_path,round_latlon=True,in_utc=True):
 
     YYYYMMDD = date.strftime('%Y%m%d')
     HHMM = date.strftime('%H%M')
@@ -1077,11 +1072,11 @@ def mod_file_name(date,time_step,site_lat,site_lon_180,ew,ns,mod_path,round_latl
         site_lon = abs(site_lon_180)
         latlon_precision = 2
     if time_step < timedelta(days=1):
-        mod_fmt = '{{ymd}}_{{hm}}_{{lat:0>2.{prec}f}}{{ns:>1}}_{{lon:0>3.{prec}f}}{{ew:>1}}.mod'.format(prec=latlon_precision)
+        mod_fmt = '{{prefix}}_{{ymd}}_{{hm}}_{{lat:0>2.{prec}f}}{{ns:>1}}_{{lon:0>3.{prec}f}}{{ew:>1}}.mod'.format(prec=latlon_precision)
     else:
-        mod_fmt = '{{ymd}}_{{lat:0>2.{prec}f}}{{ns:>1}}_{{lon:0>3.{prec}f}}{{ew:>1}}.mod'.format(prec=latlon_precision)
+        mod_fmt = '{{prefix}}_{{ymd}}_{{lat:0>2.{prec}f}}{{ns:>1}}_{{lon:0>3.{prec}f}}{{ew:>1}}.mod'.format(prec=latlon_precision)
 
-    mod_name = mod_fmt.format(ymd=YYYYMMDD, hm=HHMM, lat=site_lat, ns=ns, lon=site_lon, ew=ew)
+    mod_name = mod_fmt.format(prefix=prefix, ymd=YYYYMMDD, hm=HHMM, lat=site_lat, ns=ns, lon=site_lon, ew=ew)
     return mod_name
 
 def GEOS_files(GEOS_path, start_date, end_date):
@@ -1264,7 +1259,7 @@ def lat_lon_interp(data_old,lat_old,lon_old,lat_new,lon_new,IDs_list):
 
     return data_new
 
-def show_interp(data,x,y,interp_data,ilev):
+def show_interp(data,x,y,interp_data,ilev,pres):
 
     max = data[ilev].max()
     min = data[ilev].min()
@@ -1277,7 +1272,7 @@ def show_interp(data,x,y,interp_data,ilev):
     pl.gca().invert_yaxis()
     pl.xlabel('Longitude')
     pl.ylabel('Latitude')
-    pl.title('Level {}'.format(ilev+1))
+    pl.title('Level {}: {} hPa'.format(ilev+1,pres[ilev]))
     pl.colorbar()
     pl.show()
 
@@ -1813,7 +1808,7 @@ def mod_maker_new(start_date=None, end_date=None, func_dict=None, GEOS_path=None
             print('\t-Write mod files ...')
 
         # write the .mod files
-        version = 'mod_maker_10.6   2017-04-11   GCT'
+        version = 'mod_maker.py   2019-06-20   SR/JL'
 
         for site in INTERP_DATA:
             mod_dicts[UTC_date][site] = dict()
@@ -1843,7 +1838,7 @@ def mod_maker_new(start_date=None, end_date=None, func_dict=None, GEOS_path=None
             else:
                 ew = 'W'
 
-            mod_name = mod_file_name(local_date,timedelta(hours=3),site_lat,site_lon_180,ew,ns,mod_path,round_latlon=not keep_latlon_prec,in_utc=save_in_utc)
+            mod_name = mod_file_name('FPIT', local_date, timedelta(hours=3), site_lat, site_lon_180, ew, ns, mod_path, round_latlon=not keep_latlon_prec, in_utc=save_in_utc)
             if not muted:
                 print('\t\t\t{:<20s} : {}'.format(site_dict[site]['name'], mod_name))
 
@@ -1890,6 +1885,13 @@ def mod_maker(site_abbrv=None,start_date=None,end_date=None,mode=None,locations=
 
     If any of alt/lat/lon is given, the other two must be given too
     """
+    if 'merra' in mode:
+        prefix = 'MERRA2'
+    elif 'ncep' in mode:
+        prefix = 'NCEP'
+    else:
+        prefix = 'FPIT'
+
     if 'merradap' in mode: # get the earthdata credentials
         try:
             username,account,password = netrc.netrc().authenticators('urs.earthdata.nasa.gov')
@@ -1946,7 +1948,7 @@ def mod_maker(site_abbrv=None,start_date=None,end_date=None,mode=None,locations=
 
     total_time = end_date-start_date
     n_step = int(total_time.total_seconds()/time_step.total_seconds())
-    local_date_list = np.array([start_date+i*time_step for i in range(n_step)])
+    local_date_list = np.array([start_date+timedelta(hours=HH,minutes=MM)+i*time_step for i in range(n_step)])
 
     site_moved = False
     if 'time_spans' in site_dict[site_abbrv].keys(): # instruments with different locations for different time periods
@@ -2063,12 +2065,12 @@ def mod_maker(site_abbrv=None,start_date=None,end_date=None,mode=None,locations=
             ew = 'W'
 
         # use the local date for the name of the .mod file
-        mod_name = mod_file_name(local_date,time_step,site_lat,site_lon_180,ew,ns,mod_path,round_latlon=not keep_latlon_prec)
+        mod_name = mod_file_name(prefix,local_date,time_step,site_lat,site_lon_180,ew,ns,mod_path,round_latlon=not keep_latlon_prec)
         mod_file_path = os.path.join(mod_path,mod_name)
         if not muted:
             print('\n',mod_name)
 
-        version = 'mod_maker_10.6   2017-04-11   GCT'
+        version = 'mod_maker.py   2019-06-20   SR/JL'
         if 'ncep' in mode:
             write_mod(mod_file_path,version,site_lat,data=INTERP_DATA,muted=muted)
         else:
@@ -2082,21 +2084,28 @@ def mod_maker(site_abbrv=None,start_date=None,end_date=None,mode=None,locations=
 
 
 def driver(date_range, GEOS_path, save_path=None, keep_latlon_prec=False, save_in_utc=True, muted=False,
-           slant=False, alt=None, lon=None, lat=None, site_abbrv=None, **kwargs):
+           slant=False, alt=None, lon=None, lat=None, site_abbrv=None, mode=None, **kwargs):
 
     start_date, end_date = date_range
-    func_dict = equivalent_latitude_functions_geos(GEOS_path=GEOS_path, start_date=start_date, end_date=end_date,
-                                                   muted=muted)
 
-    mod_maker_new(start_date=start_date, end_date=end_date, func_dict=func_dict, GEOS_path=GEOS_path, slant=slant,
-                  locations=site_dict, muted=muted, lat=lat, lon=lon, alt=alt, site_abbrv=site_abbrv,
-                  save_path=save_path, keep_latlon_prec=keep_latlon_prec, save_in_utc=save_in_utc)
+    if mode is not None:
+        mod_maker(site_abbrv=site_abbrv, start_date=start_date, end_date=end_date, locations=site_dict,
+                  HH=12, MM=0, time_step=24, muted=muted, lat=lat, lon=lon, alt=alt, save_path=save_path,
+                  ncdf_path=GEOS_path, keep_latlon_prec=keep_latlon_prec, mode=mode)
+    else:
+        func_dict = equivalent_latitude_functions_geos(GEOS_path=GEOS_path, start_date=start_date, end_date=end_date,
+                                                       muted=muted)
+
+        mod_maker_new(start_date=start_date, end_date=end_date, func_dict=func_dict, GEOS_path=GEOS_path, slant=slant,
+                      locations=site_dict, muted=muted, lat=lat, lon=lon, alt=alt, site_abbrv=site_abbrv,
+                      save_path=save_path, keep_latlon_prec=keep_latlon_prec, save_in_utc=save_in_utc)
 
 
 if __name__ == "__main__": # this is only executed when the code is used directly (e.g. not executed when imported from another python code)
 
     arguments = parse_args()
-    if 'mode' in arguments.keys(): # the fp / fpit mode works with concatenated files
+    
+    if arguments['mode']: # the fp / fpit mode works with concatenated files
 
         mod_maker(**arguments)
 

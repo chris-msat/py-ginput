@@ -150,7 +150,7 @@ def make_mod_files(acdates, aclons, aclats, geos_dir, out_dir, nprocs=0):
         files_complete = []
         for hr in range(0, 24, 3):
             date = start_date.replace(hour=hr)
-            mod_file = mod_maker.mod_file_name(date, tdel(hours=3), lat, lon, 'E' if lon > 0 else 'W',
+            mod_file = mod_maker.mod_file_name('FPIT', date, tdel(hours=3), lat, lon, 'E' if lon > 0 else 'W',
                                                'N' if lat > 0 else 'S', out_dir, round_latlon=False, in_utc=True)
             files_complete.append(os.path.isfile(os.path.join(mod_dir, mod_file)))
         if all(files_complete) and len(files_complete) == 8:
