@@ -110,6 +110,13 @@ def format_y_axis(ax, ztype):
         ax.invert_yaxis()
 
 
+def _lon_ew(lon):
+    return 'W' if lon < 0 else 'E'
+
+
+def _lat_ns(lat):
+    return 'S' if lat < 0 else 'N'
+
 def bin_data(data, data_z, bin_edges, bin_op=np.nanmean):
     """
     Bin aircraft/aircore data into vertical bins
@@ -242,6 +249,10 @@ def _idl_maps_file(lon, ew, lat, ns, date_time):
     return os.path.join(subdir, filename)
 
 
+def py_map_file_subpath(lon, lat, date_time):
+    return _py_maps_file(np.abs(lon), _lon_ew(lon), np.abs(lat), _lat_ns(lat), date_time)
+
+
 def _py_maps_file(lon, ew, lat, ns, date_time):
     # we need the extra round calls b/c in the list of dates/lats/lons, the lat/lons are rounded to 3 decimal places
     # which means that in rare cases the rounding to 2 decimal places in the map directory names is different
@@ -270,15 +281,17 @@ def _choose_map_file_function(example_dirname):
         raise RuntimeError('Do not know what format the maps directory "{}" is'.format(example_dirname))
 
 
-def _get_id_info_from_atm_file(atmf):
+def _get_id_info_from_atm_file(atmf, as_abs=True):
     _, header_info = read_atm_file(atmf)
     lat = header_info['TCCON_site_latitude_N']
-    ns = 'S' if lat < 0 else 'N'
-    lat = np.abs(lat)
+    ns = _lat_ns(lat)
 
     lon = header_info['TCCON_site_longitude_E']
-    ew = 'W' if lon < 0 else 'E'
-    lon = np.abs(lon)
+    ew = _lon_ew(lon)
+
+    if as_abs:
+        lat = np.abs(lat)
+        lon = np.abs(lon)
 
     date_time = header_info['flight_date']
 
@@ -508,7 +521,8 @@ def load_as_array(atm_dir, map_dir, ztype='pres', years=None, months=None):
     return z, obs_co2, prof_co2
 
 
-def load_binned_array(atm_dir, map_dir, specie, ztype='pres', bin_edges=None, bin_op=np.nanmean):
+def load_binned_array(atm_dir, map_dir, specie, ztype='pres', bin_edges=None, bin_op=np.nanmean, prof_var=None,
+                      interp_mode=None):
     """
     Load the observed and prior profiles as a 2D array.
 
@@ -530,27 +544,41 @@ def load_binned_array(atm_dir, map_dir, specie, ztype='pres', bin_edges=None, bi
 
     :param specie: see :func:`iter_matched_data`
 
+    :param prof_var: profile variable from the prior's files to read in. If not given, the default will be the lowercase
+     version of the ``specie``.
+
+    :param interp_mode: interpolation mode passed to :func:`mod_utils.mod_interpolation_new`. Used to interpolate the
+      prior profiles to the observation z-coordinates. If not given it will use "log-log" if the ztype is "pres" and
+      "linear" otherwise.
+    :type interp_mode: str or None
+
     :return: observed profiles and prior profiles as 2D arrays with dimensions (n_profiles) x (n_bins)
     :rtype: :class:`numpy.ndarray`, :class:`numpy.ndarray`
     """
     if bin_edges is None:
         bin_edges, bin_centers, = _get_std_bins(ztype)
 
+    if prof_var is None:
+        prof_var = specie.lower()
+
     n_profs = num_atm_files(atm_dir)
     n_levels = np.size(bin_edges) - 1
     obs_profiles = np.full([n_profs, n_levels], np.nan)
     prior_profiles = np.full([n_profs, n_levels], np.nan)
+    prof_info = {'lon': np.full([n_profs], np.nan), 'lat': np.full([n_profs], np.nan), 'date': np.full([n_profs], None)}
 
     pbar = mod_utils.ProgressBar(n_profs, prefix='Loading profile', style='counter', suffix=' ')
     for i, ((obsdat, obsfile), (mapdat, mapfile)) in enumerate(iter_matched_data(atm_dir, map_dir, specie=specie.upper(),
                                                                                  include_filenames=True)):
         pbar.print_bar(i)
-        this_obs_conc, this_prof_conc, this_z = interp_profile_to_obs(obsdat, mapdat, specie.lower(), ztype=ztype,
-                                                                      obs_file=obsfile, map_dir=map_dir)
+        prof_info['lon'][i], _, prof_info['lat'][i], _, prof_info['date'][i] = _get_id_info_from_atm_file(obsfile, as_abs=False)
+        this_obs_conc, this_prof_conc, this_z = interp_profile_to_obs(obsdat, mapdat, prof_var, ztype=ztype,
+                                                                      obs_file=obsfile, map_dir=map_dir,
+                                                                      interp_mode=interp_mode)
         obs_profiles[i, :] = bin_data(this_obs_conc, this_z, bin_edges=bin_edges, bin_op=bin_op)
         prior_profiles[i, :] = bin_data(this_prof_conc, this_z, bin_edges=bin_edges, bin_op=bin_op)
 
-    return obs_profiles, prior_profiles, bin_centers
+    return obs_profiles, prior_profiles, bin_centers, prof_info
 
 
 def interp_profile_to_obs_by_type(obsdat, mapdat, data_type=None, data_root=None, **kwargs):
@@ -578,7 +606,8 @@ def interp_profile_to_obs_by_type(obsdat, mapdat, data_type=None, data_root=None
     return interp_profile_to_obs(obsdat, mapdat, **kwargs)
 
 
-def interp_profile_to_obs(obsdat, mapdat, specie, ztype='pres', obs_file=None, map_dir=None, limit_by_zsurf=True):
+def interp_profile_to_obs(obsdat, mapdat, specie, ztype='pres', obs_file=None, map_dir=None, limit_by_zsurf=True,
+                          interp_mode=None):
     """
     Interpolate prior profile data to the observation's altitude
 
@@ -600,6 +629,9 @@ def interp_profile_to_obs(obsdat, mapdat, specie, ztype='pres', obs_file=None, m
     :param limit_by_zsurf: if ``True``, only data above the surface altitude for this prior will be used.
     :type limit_by_zsurf: bool
 
+    :param interp_mode: interpolation mode passed to :func:`mod_utils.mod_interpolation_new`. If not given it will use
+     "log-log" if the ztype is "pres" and "linear" otherwise.
+
     :return: observed concentration, prior concentration, z-coordinates
     :rtype: three :class:`numpy.ndarray` instances
     """
@@ -618,7 +650,8 @@ def interp_profile_to_obs(obsdat, mapdat, specie, ztype='pres', obs_file=None, m
 
         return var_name
 
-    interp_mode = 'log-log' if ztype == 'pres' else 'linear'
+    if interp_mode is None:
+        interp_mode = 'log-log' if ztype == 'pres' else 'linear'
     obs_z_var = find_obs_z_var(obsdat)
     obs_zscale = 1.0 if ztype == 'pres' else 0.001  # must convert meters to kilometers
     prof_z_var = 'Pressure' if ztype == 'pres' else 'Height'
@@ -850,6 +883,7 @@ def plot_bias_spaghetti(obs_profiles, prior_profiles, z, ax=None, color=None, me
     diff = (obs_profiles - prior_profiles).T
     ax.plot(diff, z, color=color, linewidth=0.5)
     ax.plot(np.nanmean(diff, axis=1), z, color=mean_color, linewidth=2)
+    ax.set_xlabel('Observations - priors')
     ax.grid()
 
     return fig, ax

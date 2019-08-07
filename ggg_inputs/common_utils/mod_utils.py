@@ -8,7 +8,7 @@ Compatibility notes:
 from __future__ import print_function, division
 
 import datetime as dt
-
+from collections import OrderedDict
 import numpy
 from dateutil.relativedelta import relativedelta
 import netCDF4 as ncdf
@@ -43,6 +43,13 @@ earth_radius = 6371  # kilometers
 class TropopauseError(Exception):
     """
     Error if could not find the tropopause
+    """
+    pass
+
+
+class ModelError(Exception):
+    """
+    Error if a model file is nonsensical.
     """
     pass
 
@@ -147,7 +154,7 @@ def check_depedencies_newer(out_file, *dependency_files):
     return False
 
 
-def _get_num_header_lines(filename):
+def get_num_header_lines(filename):
     """
     Get the number of header lines in a standard GGG file
 
@@ -180,15 +187,17 @@ def read_mod_file(mod_file, as_dataframes=False):
     :param mod_file: the path to the mod file.
     :type mod_file: str
 
-    :param as_dataframes: if ``True``, then the scalar and profile variables will be kept as dataframes. If ``False``
-     (default), they are converted to dictionaries of floats and numpy arrays, respectively.
+    :param as_dataframes: if ``True``, then the collection of variables will be kept as dataframes. If ``False``
+     (default), they are converted to dictionaries of floats or numpy arrays.
     :type as_dataframes: bool
 
-    :return: a dictionary with keys 'scalar' and 'profile' containing the respective variables. These values will be
-     dictionaries or data frames, depending on ``as_dataframes``.
+    :return: a dictionary with keys 'file' (values derived from file name), 'constants' (constant values stored in the
+     .mod file header), 'scalar' (values like surface height and tropopause pressure that are only defined once per
+     profile) and 'profile' (profile variables) containing the respective variables. These values will be dictionaries
+     or data frames, depending on ``as_dataframes``.
     :rtype: dict
     """
-    n_header_lines = _get_num_header_lines(mod_file)
+    n_header_lines = get_num_header_lines(mod_file)
     # Read the constants from the second line of the file. There's no header for these, we just have to rely on the
     # same constants being in the same position.
     constant_vars = pd.read_csv(mod_file, sep='\s+', header=None, nrows=1, skiprows=1,
@@ -202,12 +211,31 @@ def read_mod_file(mod_file, as_dataframes=False):
     # Now read the profile vars.
     profile_vars = pd.read_csv(mod_file, sep='\s+', header=n_header_lines-1)
 
+    # Also get the information that's only in the file name (namely date and longitude, we'll also read the latitude
+    # because it's there).
+    file_vars = dict()
+    base_name = os.path.basename(mod_file)
+    file_vars['datetime'] = find_datetime_substring(base_name, out_type=dt.datetime)
+    file_vars['lon'] = find_lon_substring(base_name, to_float=True)
+    file_vars['lat'] = find_lat_substring(base_name, to_float=True)
+
+    # Check that the header latitude and the file name latitude don't differ by more than 0.5 degree. Even if rounded
+    # to an integer for the file name, the difference should not exceed 0.5 degree.
+    lat_diff_threshold = 0.5
+    if np.abs(file_vars['lat'] - constant_vars['obs_lat'].item()) > lat_diff_threshold:
+        raise ModelError('The latitude in the file name and .mod file header differ by more than {lim} deg ({name} vs. '
+                         '{head}). This indicates a possibly malformed .mod file.'
+                         .format(lim=lat_diff_threshold, name=file_vars['lat'], head=constant_vars['obs_lat'].item())
+                         )
+
     out_dict = dict()
     if as_dataframes:
+        out_dict['file'] = pd.DataFrame(file_vars)
         out_dict['constants'] = constant_vars
         out_dict['scalar'] = scalar_vars
         out_dict['profile'] = profile_vars
     else:
+        out_dict['file'] = file_vars
         out_dict['constants'] = {k: v.item() for k, v in constant_vars.items()}
         out_dict['scalar'] = {k: v.item() for k, v in scalar_vars.items()}
         out_dict['profile'] = {k: v.values for k, v in profile_vars.items()}
@@ -239,7 +267,7 @@ def read_map_file(map_file, as_dataframes=False, skip_header=False):
      respectively. The form of these values depends on ``as_dataframes``.
     :rtype: dict
     """
-    n_header_lines = _get_num_header_lines(map_file)
+    n_header_lines = get_num_header_lines(map_file)
     constants = dict()
     if not skip_header:
         with open(map_file, 'r') as mapf:
@@ -274,6 +302,27 @@ def read_map_file(map_file, as_dataframes=False, skip_header=False):
     return out_dict
 
 
+def read_integral_file(integral_file, as_dataframes=False):
+    """
+    Read an integral file that defines an altitude grid for GGG
+
+    :param integral_file: the path to the integral file
+    :type integral_file: str
+
+    :param as_dataframes: if ``True``, the information in the file is returned as a single dataframe. If ``False``, it
+     is returned as a dict of numpy arrays.
+    :type as_dataframes: bool
+
+    :return: the table of altitudes and mean molecular weights.
+    :rtype: :class:`pandas.DataFrame` or dict
+    """
+    df = pd.read_csv(integral_file, sep=r'\s+', header=None, names=['Height', 'mmw'])
+    if as_dataframes:
+        return df
+    else:
+        return {k: v.to_numpy() for k, v in df.items()}
+
+
 def read_isotopes(isotopes_file, gases_only=False):
     """
     Read the isotopes defined in an isotopologs.dat file
@@ -288,7 +337,7 @@ def read_isotopes(isotopes_file, gases_only=False):
     :return: tuple of isotope or gas names
     :rtype: tuple(str)
     """
-    nheader = _get_num_header_lines(isotopes_file)
+    nheader = get_num_header_lines(isotopes_file)
     with open(isotopes_file, 'r') as fobj:
         for i in range(nheader):
             fobj.readline()
@@ -462,33 +511,79 @@ def write_map_file(map_file, site_lat, trop_eqlat, prof_ref_lat, surface_alt, tr
                 mapf.write('\n')
 
 
-def vmr_file_name(site_abbrev, obs_date):
-    return '{site}_{date}.vmr'.format(site=site_abbrev, date=obs_date.strftime('%Y%m%d_%H%M'))
+def vmr_file_name(obs_date, lon, lat, keep_latlon_prec=False):
+    """
+    Construct the standard filename for a .vmr file produced by this code
+
+    :param obs_date: the datetime of the profiles
+    :type obs_date: datetime-like
+
+    :param lon: the longitude of the profiles.
+    :type lon: float
+
+    :param lat: the latitude of the profiles
+    :type lat: float
+
+    :param keep_latlon_prec: by default, lat and lon are rounded to the nearest whole number. Set this to ``True`` to
+     keep 2 decimal places of precision.
+    :type keep_latlon_prec: bool
+
+    :return: the .vmr file name, with format "JLv_yyyymmddhh_XX[NS]_YYY[EW].vmr" where "v" is the major version,
+     "yyyymmddhh" the date/time, XX[NS] the latitude and YYY[EW] the longitude.
+    :rtype: str
+    """
+    prec = 2 if keep_latlon_prec else 0
+    lat = format_lat(lat, prec=prec)
+    lon = format_lon(lon, prec=prec, zero_pad=True)
+    major_version = const.priors_version.split('.')[0]
+    return 'JL{ver}_{date}_{lat}_{lon}.vmr'.format(ver=major_version, date=obs_date.strftime('%Y%m%d%H'),
+                                                   lat=lat, lon=lon)
 
 
-def write_vmr_file(vmr_file, tropopause_alt, profile_date, profile_lat, profile_alt, profile_gases, isotope_opts=None):
+def write_vmr_file(vmr_file, tropopause_alt, profile_date, profile_lat, profile_alt, profile_gases, gas_name_order=None):
     """
-    Write a .vmr file
-    :param vmr_file:
-    :param tropopause_alt:
-    :param profile_date:
-    :param profile_lat:
-    :param profile_alt:
-    :param profile_gases:
-    :return:
+    Write a new-style .vmr file (without seasonal cycle, secular trends, and latitudinal gradients
+
+    :param vmr_file: the path to write the .vmr file ar
+    :type vmr_file: str
+
+    :param tropopause_alt: the altitude of the tropopause, in kilometers
+    :type tropopause_alt: float
+
+    :param profile_date: the date of the profile
+    :type profile_date: datetime-like
+
+    :param profile_lat: the latitude of the profile (south is negative)
+    :type profile_lat: float
+
+    :param profile_alt: the altitude levels that the profiles are defined on, in kilometers
+    :type profile_alt: array-like
+
+    :param profile_gases: a dictionary of the prior profiles to write to the .vmr file.
+    :type profile_gases: dict(array)
+
+    :param gas_name_order: optional, a list/tuple specifying what order the gases are to be written in. If not given,
+     they will be written in whatever order the iteration through ``profile_gases`` defaults to. If given, then an
+     error is raised if any of the gas names listed here are not present in ``profile_gases`` (comparison is case-
+     insensitive). Any gases not listed here that are in ``profile_gases`` are skipped.
+    :type gas_name_order: list(str)
+
+    :return: none, writes the .vmr file.
     """
-    isotope_opts = dict() if isotope_opts is None else isotope_opts
-    gas_name_order = read_isotopes(get_isotopes_file(**isotope_opts), gases_only=True)
-    gas_name_order_lower = [name.lower() for name in gas_name_order]
-    gas_name_mapping = {k: None for k in gas_name_order}
 
     if np.ndim(profile_alt) != 1:
         raise ValueError('profile_alt must be 1D')
 
+    if gas_name_order is None:
+        gas_name_order = [k for k in profile_gases.keys()]
+
+    gas_name_order_lower = [name.lower() for name in gas_name_order]
+    gas_name_mapping = {k: None for k in gas_name_order}
+
     # Check that all the gases in the profile_gases dict are expected to be written.
     for gas_name, gas_data in profile_gases.items():
         if gas_name.lower() not in gas_name_order_lower:
-            logger.warning('Gas "{}" was not listed in the isotopologs.dat file and will not be written to the .vmr '
+            logger.warning('Gas "{}" was not listed in the gas name order and will not be written to the .vmr '
                            'file'.format(gas_name))
         elif np.shape(gas_data) != np.shape(profile_alt):
             raise ValueError('Gas "{}" has a different shape ({}) than the altitude data ({})'.format(
@@ -524,36 +619,88 @@ def write_vmr_file(vmr_file, tropopause_alt, profile_date, profile_lat, profile_
             fobj.write('\n')
 
 
-def read_vmr_file(vmr_file, as_dataframs=False, lowercase_names=True):
-    nheader = _get_num_header_lines(vmr_file)
+def read_vmr_file(vmr_file, as_dataframes=False, lowercase_names=True, style='new'):
+    nheader = get_num_header_lines(vmr_file)
+
+    if style == 'new':
+        last_const_line = nheader - 1
+        old_style = False
+    elif style == 'old':
+        last_const_line = 4
+        old_style = True
+    else:
+        raise ValueError('style must be one of "new" or "old"')
+
     header_data = dict()
     with open(vmr_file, 'r') as fobj:
         # Skip the line with the number of header lines and columns
         fobj.readline()
-        for i in range(1, nheader-1):
+        for i in range(1, last_const_line):
             line = fobj.readline()
             const_name, const_val = [v.strip() for v in line.split(':')]
             if lowercase_names:
                 const_name = const_name.lower()
             header_data[const_name] = float(const_val)
 
+        prior_info = dict()
+        if old_style:
+            for i in range(last_const_line, nheader-1, 2):
+                category_line = fobj.readline()
+                category = re.split(r'[:\.]', category_line)[0].strip()
+                data_line = fobj.readline()
+                data_line = data_line.split(':')[1].strip()
+                split_data_line = re.split(r'\s+', data_line)
+                prior_info[category] = np.array([float(x) for x in split_data_line])
+
     data_table = pd.read_csv(vmr_file, sep='\s+', header=nheader-1)
 
     if lowercase_names:
         data_table.columns = [v.lower() for v in data_table]
 
-    if as_dataframs:
+    if as_dataframes:
         header_data = pd.DataFrame(header_data, index=[0])
+        # Rearrange the prior info dict so that the data frame has the categories as the index and the species as the
+        # columns.
+        categories = list(prior_info.keys())
+        tmp_prior_info = dict()
+        for i, k in enumerate(data_table.columns.drop('altitude')):
+            tmp_prior_info[k] = np.array([prior_info[cat][i] for cat in categories])
+        prior_info = pd.DataFrame(tmp_prior_info, index=categories)
     else:
-        data_table = {k: v.to_numpy() for k, v in data_table.items()}
+        # use an ordered dict to ensure we keep the order of the gases. This is important if we use this .vmr file as
+        # a template to write another .vmr file that gsetup.f can read.
+        data_table = OrderedDict([(k, v.to_numpy()) for k, v in data_table.items()])
 
-    return {'scalar': header_data, 'profile': data_table}
+    return {'scalar': header_data, 'profile': data_table, 'prior_info': prior_info}
 
 
-def format_lon(lon, prec=2):
+def format_lon(lon, prec=2, zero_pad=False):
+    """
+    Convert longitude between string and numeric representations.
+
+    If ``lon`` is a number, then it is converted to a string. The string will be the absolute value with "W" or "E" at
+    the end to indicate west (<= 0) or east (> 0). If given a string in that format, it converts it to a number.
+
+    :param lon: the longitude to convert
+    :type lon: float or str
+
+    :param prec: the precision after the decimal point to use. Only has an effect when converting float to string.
+    :type prec: int
+
+    :param zero_pad: set to ``True`` to zero pad the longitude string so that there are 3 digits before the decimal
+     place. Only has an effect when converting float to string.
+
+    :return: the formatted longitude string or the float representation of the longitude, with west being negative.
+    :rtype: str or float
+    """
     def to_str(lon):
         ew = 'E' if lon > 0 else 'W'
-        fmt_str = '{{:.{}f}}{{}}'.format(prec)
+        # In Python float format specification, "0X.Y" means to zero pad so that there's X total characters and Y after
+        # the decimal point. We want lon zero padded to have three numbers before the decimal point, so the total width
+        # needs to be the precision + 4 if there will be a decimal point otherwise just 3.
+        width = prec + 4 if prec > 0 else prec + 3
+        pad = '0{}'.format(width) if zero_pad else ''
+        fmt_str = '{{:{padding}.{prec}f}}{{}}'.format(padding=pad, prec=prec)
         return fmt_str.format(abs(lon), ew)
 
     def to_float(lon):
@@ -569,13 +716,63 @@ def format_lon(lon, prec=2):
     if isinstance(lon, str):
         return to_float(lon)
     else:
+        if lon > 180:
+            lon -= 360
         return to_str(lon)
 
 
-def format_lat(lat, prec=2):
+def find_lon_substring(string, to_float=False):
+    """
+    Find a longitude substring in a string.
+
+    A longitude substring will match \d+[EW] or \d+\.\d+[EW].
+
+    :param string: the string to search for the longitude substring
+    :type string: str
+
+    :param to_float: when ``True``, converts the longitude to a float value using :func:`format_lon`, else returns the
+     string itself.
+    :type to_float: bool
+
+    :return: the longitude substring or float value
+    :rtype: str or float
+    """
+    # search for one or more numbers, which may include a decimal point followed by at least one number then E or W.
+    lon_re = r'\d+(\.\d+)?[EW]'
+    lon_str = re.search(lon_re, string).group()
+    if to_float:
+        return format_lon(lon_str)
+    else:
+        return lon_str
+
+
+def format_lat(lat, prec=2, zero_pad=False):
+    """
+    Convert latitude between string and numeric representations.
+
+    If ``lat`` is a number, then it is converted to a string. The string will be the absolute value with "N" or "S" at
+    the end to indicate south (<= 0) or north (> 0). If given a string in that format, it converts it to a number.
+
+    :param lat: the latitude to convert
+    :type lat: float or str
+
+    :param prec: the precision after the decimal point to use. Only has an effect when converting float to string.
+    :type prec: int
+
+    :param zero_pad: set to ``True`` to zero pad the latitude string so that there are 2 digits before the decimal
+     place. Only has an effect when converting float to string.
+
+    :return: the formatted latitude string or the float representation of the latitude, with south being negative.
+    :rtype: str or float
+    """
     def to_str(lat):
         ns = 'N' if lat > 0 else 'S'
-        fmt_str = '{{:.{}f}}{{}}'.format(prec)
+        # In Python float format specification, "0X.Y" means to zero pad so that there's X total characters and Y after
+        # the decimal point. We want lat zero padded to have two numbers before the decimal point, so the total width
+        # needs to be the precision + 3 if there will be a decimal point otherwise just 2.
+        width = prec + 3 if prec > 0 else prec + 2
+        pad = '0{}'.format(width) if zero_pad else ''
+        fmt_str = '{{:{padding}.{prec}f}}{{}}'.format(padding=pad, prec=prec)
         return fmt_str.format(abs(lat), ns)
 
     def to_float(lat):
@@ -592,6 +789,56 @@ def format_lat(lat, prec=2):
         return to_float(lat)
     else:
         return to_str(lat)
+
+
+def find_lat_substring(string, to_float=False):
+    """
+    Find a latitude substring in a string.
+
+    A latitude substring will match \d+[NS] or \d+\.\d+[NS].
+
+    :param string: the string to search for the latitude substring
+    :type string: str
+
+    :param to_float: when ``True``, converts the latitude to a float value using :func:`format_lat`, else returns the
+     string itself.
+    :type to_float: bool
+
+    :return: the latitude substring or float value
+    :rtype: str or float
+    """
+    # search for one or more numbers, which may include a decimal point followed by at least one number then N or S.
+    lat_re = r'\d+(\.\d+)?[NS]'
+    lat_str = re.search(lat_re, string).group()
+    if to_float:
+        return format_lat(lat_str)
+    else:
+        return lat_str
+
+
+def find_datetime_substring(string, out_type=str):
+    """
+    Extract a date/time substring from a string.
+
+    This assumes that the date/time is formatted as %Y%m%d (YYYYMMDD) or %Y%m%d_%H%M (YYYYMMDD_hhmm).
+
+    :param string: the string to search for the date/time substring.
+    :type string: str
+
+    :param out_type: what type to return the date/time as. Default is to return the string. If another type is passed,
+     then it must have a ``strptime`` class method that accepts the string to parse and the format string as arguments,
+     i.e. it must behave like :func:`datetime.datetime.strptime`.
+    :type out_type: type
+
+    :return: the string or parsed datetime value
+    """
+    date_re = r'\d{8}(_\d{4})?'
+    date_str = re.search(date_re, string).group()
+    if out_type is str:
+        return date_str
+    else:
+        date_fmt = '%Y%m%d' if len(date_str) == 8 else '%Y%m%d_%H%M'
+        return out_type.strptime(date_str, date_fmt)
 
 
 def _hg_dir_helper(hg_dir):
@@ -1308,6 +1555,34 @@ def mod_interpolation_new(z_grid, z_met, vals_met, interp_mode='linear'):
     return vals_grid
 
 
+def interp_tropopause_height_from_pressure(p_trop_met, p_met, z_met):
+    """
+    Calculate the tropopause height by interpolating to the tropopause pressure
+
+    :param p_trop_met: the blended tropopause pressure from GEOS Nx files.
+    :type p_trop_met: float
+
+    :param p_met: the vector of pressure for this profile. Must be in the same units as ``p_trop_met``.
+    :type p_met: array-like
+
+    :param z_met: the vector of altitude levels for this profile.
+    :type z_met: array-like
+
+    :return: the tropopause altitude, in the same units as ``z_met``.
+    :rtype: float
+    """
+    # The age-of-air calculation used for the tropospheric trace gas profile calculation needs the tropopause altitude.
+    # Previously we'd tried finding this by interpolating to the tropopause potential temperature, in order to be
+    # consistent about defining the strat/trop separation by potential temperature. However, potential temperature
+    # does not always behave in a manner that makes interpolating to it straightforward (e.g. it crosses the tropopause
+    # theta 0 or >1 times) so we just use pressure now.
+    z_trop_met = mod_interpolation_new(p_trop_met, p_met, z_met, 'log-lin')
+    if z_trop_met < np.nanmin(z_met):
+        raise RuntimeError('Tropopause altitude calculated to be below the bottom of the profile. Something has '
+                           'gone horribly wrong.')
+    return z_trop_met
+
+
 def calc_wmo_tropopause(temperature, altitude, limit_to=(5., 18.), raise_error=True):
     """
     Find the tropopause altitude using the WMO definition
@@ -1363,6 +1638,123 @@ def calc_wmo_tropopause(temperature, altitude, limit_to=(5., 18.), raise_error=T
         raise TropopauseError('Could not find a level meeting the WMO tropopause condition in the given profile')
     else:
         return np.nan
+
+
+def number_density_air(p, t):
+    """
+    Calculate the ideal dry number density of air in molec. cm^-3
+
+    :param p: pressure in hPa
+    :type p: float or :class:`numpy.ndarray`
+
+    :param t: temperature in K
+    :type t: float or :class:`numpy.ndarray`
+
+    :return: ideal dry number density in molec. cm^-3
+    :rtype: float or :class:`numpy.ndarray`
+    """
+    R = 8.314e4 # gas constant in cm^3 * hPa / (mol * K)
+    return p / (R*t) * 6.022e23
+
+
+def effective_vertical_path(z, p=None, t=None, nair=None):
+    """
+    Calculate the effective vertical path used by GFIT for a given z/P/T grid.
+
+    :param z: altitudes of the vertical levels. May be any unit, but note that the effective paths will be returned in
+     the same unit.
+    :type z: array-like
+
+    :param p: pressures of the vertical levels. Must be in hPa.
+    :type p: array-like
+
+    :param t: temperatures of the vertical levels. Must be in K.
+    :type t: array-like
+
+    :return: effective vertical paths in the same units as ``z``
+    :rtype: array-like
+    """
+    def integral(dz_in, lrp_in, sign):
+        return dz_in * 0.5 * (1.0 + sign * lrp_in / 3 + lrp_in**2/12 + sign*lrp_in**3/60)
+
+    if nair is not None:
+        d = nair
+    elif p is not None and t is not None:
+        d = number_density_air(p, t)
+    else:
+        raise TypeError('Either nair or p & t must be given')
+    dz = np.concatenate([[0.0], np.diff(z), [0.0]])
+    log_rp = np.log(d[:-1] / d[1:])
+    log_rp = np.concatenate([[0.0], log_rp, [0.0]])
+
+    # from gfit/compute_vertical_paths.f, the calculation for level i is
+    #   v_i = 0.5 * dz_{i+1} * (1 - l_{i+1}/3 + l_{i+1}**2/12 - l_{i+1}**3/60)
+    #       + 0.5 * dz_i * (1 + l_i/3 + l_i**2/12 + l_i**3/60)
+    # where
+    #   dz_i = z_i - z_{i-1}
+    #   l_i  = ln(d_{i-1}/d_i)
+    # The top level has no i+1 term. This vector addition duplicates that calculation. The zeros padded to the beginning
+    # and end of the difference vectors ensure that when there's no i+1 or i-1 term, it is given a value of 0.
+    vpath = integral(dz[1:], log_rp[1:], sign=-1) + integral(dz[:-1], log_rp[:-1], sign=1)
+    # TODO: handle the levels around the surface
+    return vpath
+
+
+def get_ussa_for_alts(alts):
+    """
+    Get temperature and pressure from the US standard atmosphere (USSA) for given altitudes.
+
+    Temperature is interpolated to the requested altitudes linearly, assuming that the lapse rate is constant between
+    the levels defined by the USSA. Pressure is interpolated exponentially, i.e. ln(p) is interpolated linearly.
+
+    :param alts: altitudes, in kilometers, to calculate T and P for.
+    :type alts: float or :class:`numpy.ndarray`
+
+    :return: temperatures (in K) and pressures (in hPa). Arrays will be the same shape as the input altitudes.
+    :rtype: float or :class:`numpy.ndarray`, float or :class:`numpy.ndarray`
+    """
+    # Need to interpolate pressure and temperature to the given altitudes. Will assume that temperature varies linearly
+    # with altitude and pressure varies exponentially. Since p = p0 * exp(-z/H) then ln(p) = ln(p0) - z/H, therefore
+    # we will linearly interpolate ln(p) w.r.t. altitude.
+    z_coord = const.z_ussa
+    t_coord = const.t_ussa
+    p_coord = np.log(const.p_ussa)
+
+    interp_args = {'left': np.nan, 'right': np.nan}
+    t = np.interp(alts, z_coord, t_coord, **interp_args)
+    p = np.exp(np.interp(alts, z_coord, p_coord, **interp_args))
+
+    return t, p
+
+
+def get_ussa_for_pres(pres):
+    """
+    Get altitude and temperature from the US standard atmosphere (USSA) for given pressures.
+
+    Temperature is interpolated to the requested altitudes linearly, assuming that the lapse rate is constant between
+    the levels defined by the USSA. Pressure is interpolated exponentially, i.e. ln(p) is interpolated linearly.
+
+    :param pres: pressures, in hPa, to calculate z and T for.
+    :type pres: float or :class:`numpy.ndarray`
+
+    :return: temperatures (in K) and altitudes (in km). Arrays will be the same shape as the input altitudes.
+    :rtype: float or :class:`numpy.ndarray`, float or :class:`numpy.ndarray`
+    """
+
+    # Since temperature varies linearly with altitude and altitude varies linearly vs. ln(p), interpolate both by the
+    # log of pressure
+    z_coord = np.flipud(const.z_ussa)
+    t_coord = np.flipud(const.t_ussa)
+    # must flip - np.interp expects its x-coordinates to be increasing.
+    p_coord = np.flipud(np.log(const.p_ussa))
+
+    pres = np.log(pres)
+
+    interp_args = {'left': np.nan, 'right': np.nan}
+    t = np.interp(pres, p_coord, t_coord, **interp_args)
+    z = np.interp(pres, p_coord, z_coord, **interp_args)
+
+    return t, z
 
 
 def age_of_air(lat, z, ztrop, ref_lat=45.0):
@@ -1492,6 +1884,10 @@ def is_vortex(lat, doy, ages):
 
 def is_midlat(lat, doy, ages):
     return ~is_tropics(lat, doy, ages) & ~is_vortex(lat, doy, ages)
+
+
+def is_overworld(potential_temp, pressure, trop_pres):
+    return (potential_temp >= 380) & (pressure <= trop_pres)
 
 
 def date_to_decimal_year(date_in):
@@ -1738,3 +2134,34 @@ def geopotential_height_to_altitude(gph, lat, alt):
     """
     gravity_at_site, _ = gravity(lat, alt)
     return gph / gravity_at_site
+
+
+def to_unix_time(datetime):
+    """
+    Convert a datetime-like object into Unix time (seconds since midnight, 1 Jan 1970)
+
+    :param datetime: the datetime to convert. May be any type that can have a :class:`datetime.datetime` object
+     subtracted from it, and for which the subtraction has a method `total_seconds` that returns the time delta as
+     a number of seconds. Both :class:`datetime.datetime` and :class:`pandas.Timestamp` are examples.
+
+    :return: unix time
+    :rtype: float
+    """
+    return (datetime - dt.datetime(1970, 1, 1)).total_seconds()
+
+
+def from_unix_time(utime, out_type=dt.datetime):
+    """
+    Convert a unix time into a datetime object.
+
+    :param utime: the unix time (seconds since midnight, 1 Jan 1970)
+    :type utime: float
+
+    :param out_type: optional, a type that represents a datetime which has an init method such that
+     ``out_type(year, month, day)`` returns a object representing that time and can be added with a
+     :class:`datetime.timedelta``.
+    :type out_type: type
+
+    :return: a datetime object of the type specified by ``out_type``.
+    """
+    return out_type(1970, 1, 1) + dt.timedelta(seconds=utime)
