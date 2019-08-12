@@ -9,6 +9,8 @@ from __future__ import print_function, division
 
 import datetime as dt
 from collections import OrderedDict
+from datetime import timedelta
+
 import numpy
 from dateutil.relativedelta import relativedelta
 import netCDF4 as ncdf
@@ -51,6 +53,10 @@ class ModelError(Exception):
     """
     Error if a model file is nonsensical.
     """
+    pass
+
+
+class GGGPathError(Exception):
     pass
 
 
@@ -1177,24 +1183,32 @@ def get_eqlat_profile(interpolator, epv, theta):
     return el
 
 
-def _format_geosfp_name(product, file_type, date_time, chem=False):
+def _format_geosfp_name(product, file_type, levels, date_time, add_subdir=False):
     """
     Create the file name for a GEOS FP or FP-IT file.
 
     :param product: which GEOS product ('fp' or 'fpit') to use
 
-    :param file_type: which file type ('Np' for profiles, 'Nx' for surface) to use
+    :param file_type: which file type ('met' for meteorology, 'chm' for chemistry) to use
+    :type file_type: str
+
+    :param levels: which levels ('surf', 'p', or 'eta') to use
+    :type levels: str
 
     :param date_time: the date and time of the desired file. The hour should be a multiple of 3.
     :type date_time: datetime-like
+
+    :param add_subdir: if ``True``, then the correct subdirectory will be prepended.
+    :type add_subdir: bool
 
     :return: the file name
     :rtype: str
     """
     product_patterns = {'fp': 'GEOS.fp.asm.inst3_{dim}d_{vars}_{type}.{date_time}.V01.nc4',
                         'fpit': 'GEOS.fpit.asm.inst3_{dim}d_{vars}_{type}.GEOS5124.{date_time}.V01.nc4'}
-    file_type_dims = {'Np': 3, 'Nx': 2, 'Nv': 3}
-    var_type = 'chm' if chem else 'asm'
+    level_mapping = {'surf': 'Nx', 'p': 'Np', 'eta': 'Nv'}
+    level_dims = {'Np': 3, 'Nx': 2, 'Nv': 3}
+    var_types = {'met': 'asm', 'chm': 'chm'}
     try:
         pattern = product_patterns[product]
     except KeyError:
@@ -1202,13 +1216,23 @@ def _format_geosfp_name(product, file_type, date_time, chem=False):
                          .format(product, ', '.join(product_patterns.keys())))
 
     try:
-        file_dims = file_type_dims[file_type]
+        levels = level_mapping[levels]
+    except KeyError:
+        raise ValueError('levels "{}" not recognized. Allowed values are: {}'
+                         .format(levels, ', '.join(level_mapping.keys())))
+
+    try:
+        dims = level_dims[levels]
     except KeyError:
         raise ValueError('file_type "{}" is not recognized. Allowed values are: {}'
-                         .format(file_type, ', '.join(file_type_dims.keys())))
+                         .format(file_type, ', '.join(level_dims.keys())))
 
     date_time = date_time.strftime('%Y%m%d_%H%M')
-    return pattern.format(dim=file_dims, type=file_type, date_time=date_time, vars=var_type)
+    fname = pattern.format(dim=dims, type=levels, date_time=date_time, vars=var_types[file_type])
+    if add_subdir:
+        fname = os.path.join(levels, fname)
+
+    return fname
 
 
 def read_geos_files(start_date, end_date, geos_path, profile_variables, surface_variables, product='fpit',
@@ -1321,8 +1345,8 @@ def read_geos_files(start_date, end_date, geos_path, profile_variables, surface_
     else:
         concatenate = ma.concatenate
 
-    geos_prof_files, file_dates = geosfp_file_names(product, 'Np', start_date, end_date)
-    geos_surf_files, surf_file_dates = geosfp_file_names(product, 'Nx', start_date, end_date)
+    geos_prof_files, file_dates = geosfp_file_names(product, 'met', 'p', start_date, end_date)
+    geos_surf_files, surf_file_dates = geosfp_file_names(product, 'met', 'surf', start_date, end_date)
 
     # Check that the file lists have the same dates
     if len(file_dates) != len(surf_file_dates) or any(file_dates[i] != surf_file_dates[i] for i in range(len(file_dates))):
@@ -1337,15 +1361,18 @@ def read_geos_files(start_date, end_date, geos_path, profile_variables, surface_
     return prof_data, surf_data, file_dates
 
 
-def geosfp_file_names(product, file_type, start_date, end_date=None, chem=False):
+def geosfp_file_names(product, file_type, levels, start_date, end_date=None):
     """
     List all file names for GEOS FP or FP-IT files for the given date(s).
 
     :param product: which GEOS product ('fp' or 'fpit') to use
     :type product: str
 
-    :param file_type: which files ('Np' for profile, 'Nx' for surface) to list
+    :param file_type: which file type ('met' for meteorology, 'chm' for chemistry) to use
     :type file_type: str
+
+    :param levels: which levels ('surf', 'p', or 'eta') to use
+    :type levels: str
 
     :param start_date: what date to start listing files for. If ``end_date`` is omitted, only the file for this date
      will be listed. Note that the hour must be a multiple of 3, since GEOS files are produced every three hours.
@@ -1367,13 +1394,13 @@ def geosfp_file_names(product, file_type, start_date, end_date=None, chem=False)
     geos_file_dates = pd.date_range(start=start_date, end=end_date - freq, freq=freq)
     geos_file_names = []
     for date in geos_file_dates:
-        this_name = _format_geosfp_name(product, file_type, date, chem=chem)
+        this_name = _format_geosfp_name(product, file_type, levels, date)
         geos_file_names.append(this_name)
 
     return geos_file_names, geos_file_dates
 
 
-def geosfp_file_names_by_day(product, file_type, utc_dates, utc_hours=None, chem=False):
+def geosfp_file_names_by_day(product, file_type, levels, utc_dates, utc_hours=None, add_subdir=False):
     """
     Create a list of GEOS-FP file names for specified dates
 
@@ -1385,9 +1412,11 @@ def geosfp_file_names_by_day(product, file_type, utc_dates, utc_hours=None, chem
     :param product: which GEOS-FP product to make names for: "fp" or "fpit"
     :type product: str
 
-    :param file_type: which vertical coordinate type of file to use. Options are "Np" (3D by pressure) or "Nx"
-     (2D variables)
+    :param file_type: which file type ('met' for meteorology, 'chm' for chemistry) to use
     :type file_type: str
+
+    :param levels: which levels ('surf', 'p', or 'eta') to use
+    :type levels: str
 
     :param utc_dates: Dates (on UTC time) to read files for.
     :type utc_dates: collection(datetime) or collection(datetime-like objects)
@@ -1396,6 +1425,9 @@ def geosfp_file_names_by_day(product, file_type, utc_dates, utc_hours=None, chem
      used (every 3 hours). Otherwise, pass a collection of integers to specify a subset of hours to use. (e.g.
      [0, 3, 6, 9] to only use the files from the first half of each day).
     :type utc_hours: None or collection(int)
+
+    :param add_subdir: if ``True``, then the correct subdirectory will be prepended.
+    :type add_subdir: bool
 
     :return: a list of GEOS file names
     :rtype: list(str)
@@ -1409,7 +1441,7 @@ def geosfp_file_names_by_day(product, file_type, utc_dates, utc_hours=None, chem
     for date in utc_dates:
         for hr in geos_utc_hours:
             date_time = dt.datetime(date.year, date.month, date.day, hr)
-            this_name = _format_geosfp_name(product, file_type, date_time, chem=chem)
+            this_name = _format_geosfp_name(product, file_type, levels, date_time, add_subdir=add_subdir)
             geos_file_names.append(this_name)
             geos_file_dates.append(date_time)
 
@@ -1890,6 +1922,12 @@ def is_overworld(potential_temp, pressure, trop_pres):
     return (potential_temp >= 380) & (pressure <= trop_pres)
 
 
+def npdate_to_datetime(numpy_date):
+    numpy_date = numpy_date.astype('datetime64[s]')
+    ts = (numpy_date - np.datetime64('1970-01-01T00:00:00Z', 's')) / np.timedelta64(1, 's')
+    return dt.datetime.utcfromtimestamp(ts)
+
+
 def date_to_decimal_year(date_in):
     """
     Convert a datetime object to a decimal year.
@@ -2165,3 +2203,64 @@ def from_unix_time(utime, out_type=dt.datetime):
     :return: a datetime object of the type specified by ``out_type``.
     """
     return out_type(1970, 1, 1) + dt.timedelta(seconds=utime)
+
+
+def mod_file_name(prefix,date,time_step,site_lat,site_lon_180,ew,ns,mod_path,round_latlon=True,in_utc=True):
+
+    YYYYMMDD = date.strftime('%Y%m%d')
+    HHMM = date.strftime('%H%M')
+    if in_utc:
+        HHMM += 'Z'
+    if round_latlon:
+        site_lat = round(abs(site_lat))
+        site_lon = round(abs(site_lon_180))
+        latlon_precision = 0
+    else:
+        site_lat = abs(site_lat)
+        site_lon = abs(site_lon_180)
+        latlon_precision = 2
+    if time_step < timedelta(days=1):
+        mod_fmt = '{{prefix}}_{{ymd}}_{{hm}}_{{lat:0>2.{prec}f}}{{ns:>1}}_{{lon:0>3.{prec}f}}{{ew:>1}}.mod'.format(prec=latlon_precision)
+    else:
+        mod_fmt = '{{prefix}}_{{ymd}}_{{lat:0>2.{prec}f}}{{ns:>1}}_{{lon:0>3.{prec}f}}{{ew:>1}}.mod'.format(prec=latlon_precision)
+
+    mod_name = mod_fmt.format(prefix=prefix, ymd=YYYYMMDD, hm=HHMM, lat=site_lat, ns=ns, lon=site_lon, ew=ew)
+    return mod_name
+
+
+def mod_file_name_for_priors(datetime, site_lat, site_lon_180, prefix='FPIT', **kwargs):
+    if site_lon_180 > 180:
+        site_lon_180 -= 360
+    ew = format_lon(site_lon_180)[-1]
+    ns = format_lat(site_lat)[-1]
+    return mod_file_name(prefix=prefix, date=datetime, time_step=dt.timedelta(hours=3), site_lat=site_lat,
+                         site_lon_180=site_lon_180, ew=ew, ns=ns, mod_path='', **kwargs)
+
+
+def parse_date_range(datestr):
+    def parse_date(datestr):
+        try:
+            date_out = dt.datetime.strptime(datestr, '%Y%m%d')
+        except ValueError:
+            date_out = dt.datetime.strptime(datestr, '%Y%m%d_%H')
+        return date_out
+
+    dates = datestr.split('-')
+    start_date = parse_date(dates[0])
+    if len(dates) > 1:
+        end_date = parse_date(dates[1])
+    else:
+        end_date = start_date + timedelta(days=1)
+
+    return start_date, end_date
+
+
+def get_ggg_path(subdir, subdir_name):
+    gggpath = os.getenv('GGGPATH')
+    if gggpath is None:
+        raise GGGPathError('Could not find the GGGPATH environmental variable. Please specify an explicit {}.'.format(subdir_name))
+    full_subdir = os.path.join(gggpath, subdir)
+    if not os.path.isdir(full_subdir):
+        raise GGGPathError('Could not find default {} {}'.format(subdir_name, full_subdir))
+
+    return full_subdir

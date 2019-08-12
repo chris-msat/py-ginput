@@ -86,7 +86,6 @@ The slant .mod files are only generated when the SZA is above 90 degrees.
 There is dictionary of sites with their respective lat/lon in tccon_sites.py, so this works for all TCCON sites, lat/lon values were taken from the wiki page of each site.
 """
 import argparse
-from copy import deepcopy
 import glob
 import os, sys
 import numpy.ma as ma
@@ -1000,23 +999,6 @@ def parse_args(parser=None):
     """
     parse commandline arguments (see code header or README.md)
     """
-    def parse_date(datestr):
-        try:
-            date_out = datetime.strptime(datestr, '%Y%m%d')
-        except ValueError:
-            date_out = datetime.strptime(datestr, '%Y%m%d_%H')
-        return date_out
-
-    def parse_date_range(datestr):
-        dates = datestr.split('-')
-        start_date = parse_date(dates[0])
-        if len(dates) > 1:
-            end_date = parse_date(dates[1])
-        else:
-            end_date = start_date + timedelta(days=1)
-
-        return start_date, end_date
-
     # For Py3 compatibility, convert keys iterator into an explicit list.
     valid_site_ids = list(site_dict.keys())
 
@@ -1028,18 +1010,25 @@ def parse_args(parser=None):
         parser.description = description
         am_i_main = False
 
-    parser.add_argument('date_range', type=parse_date_range,
+    parser.add_argument('date_range', type=mod_utils.parse_date_range,
                         help='The range of dates to generate .mod files for. May be given as YYYYMMDD-YYYYMMDD, or '
                              'YYYYMMDD_HH-YYYYMMDD_HH, where the ending date is exclusive. A single date may be given, '
                              'in which case the ending date is assumed to be one day later.')
     parser.add_argument('met_path', help='Path to the meteorology FP(-IT) netCDF files. Must be directory with subdirectories '
                                           'Nx and Np or Nv, containing surface and profile paths respectively.')
+    parser.add_argument('--chem-path', default=None, help='Path to the chemistry FP(-IT) files. Must be a directory '
+                                                          'with subdirectory Nv containing the chm netCDF files. If '
+                                                          'not given, it is assumed that these files are stored with '
+                                                          'the regular met data.')
     parser.add_argument('-s', '--save-path', help='Location to save .mod files to. Subdirectories organized by met type, '
                                                   'site, and vertical/slant .mod files will be created. If not given, '
                                                   'will attempt to save files under $GGGPATH/models/gnd')
     parser.add_argument('--keep-latlon-prec', action='store_true', help='Retain lat/lon to 2 decimals in the .mod file names')
     parser.add_argument('--save-in-local', action='store_false', dest='save_in_utc',
                         help='Use local time in .mod file name, instead of UTC')
+    parser.add_argument('-c', '--include-chem', action='store_true', dest='include_chm',
+                        help='Include chemistry variables (CO) in the .mod files. Note that this is necessary if the '
+                             '.mod files are to be used to generate GGG2019+ .vmr files.')
     parser.add_argument('-q', '--quiet', dest='muted', action='store_true', help='Suppress log output to command line.')
     parser.add_argument('--slant', action='store_true', help='Generate slant .mod files, in addition to vertical .mod '
                                                              'files.')
@@ -1072,27 +1061,20 @@ def parse_args(parser=None):
         parser.set_defaults(driver_fxn=driver)
 
 
-def mod_file_name(prefix,date,time_step,site_lat,site_lon_180,ew,ns,mod_path,round_latlon=True,in_utc=True):
+def parse_vmr_args(parser):
+    """
 
-    YYYYMMDD = date.strftime('%Y%m%d')
-    HHMM = date.strftime('%H%M')
-    if in_utc:
-        HHMM += 'Z'
-    if round_latlon:
-        site_lat = round(abs(site_lat))
-        site_lon = round(abs(site_lon_180))
-        latlon_precision = 0
-    else:
-        site_lat = abs(site_lat)
-        site_lon = abs(site_lon_180)
-        latlon_precision = 2
-    if time_step < timedelta(days=1):
-        mod_fmt = '{{prefix}}_{{ymd}}_{{hm}}_{{lat:0>2.{prec}f}}{{ns:>1}}_{{lon:0>3.{prec}f}}{{ew:>1}}.mod'.format(prec=latlon_precision)
-    else:
-        mod_fmt = '{{prefix}}_{{ymd}}_{{lat:0>2.{prec}f}}{{ns:>1}}_{{lon:0>3.{prec}f}}{{ew:>1}}.mod'.format(prec=latlon_precision)
+    :param parser:
+    :type parser: :class:`argparse.ArgumentParser`
+    :return:
+    """
+    # configure all the options
+    parse_args(parser)
 
-    mod_name = mod_fmt.format(prefix=prefix, ymd=YYYYMMDD, hm=HHMM, lat=site_lat, ns=ns, lon=site_lon, ew=ew)
-    return mod_name
+    parser.set_defaults(mode='fpit-eta', include_chm=True)
+    parser.epilog = "Defaults have been set to produce the right format of file for TCCON GGG2019 use " \
+                    "(--mode=fpit-eta, --include-chem)."
+
 
 def GEOS_files(GEOS_path, start_date, end_date, chm=False):
 
@@ -1359,10 +1341,11 @@ def load_chem_variables(geos_file, geos_vars, target_site_dicts, pres_levels=Non
 
         geos_data = dict()
         for var in geos_vars:
-            # The native files are ordered space-to-surface, so normally we'd flip them to be surface-to-space. However,
-            # the numpy interpolation needs the coordinate to be increasing anyway, so we just leave them
-            # space-to-surface and let the interpolation flip them.
-            geos_data[var] = np.flipud(dataset[var][0])
+            geos_data[var] = dataset[var][0]
+            if geos_data[var].shape[0] == 72:
+                # The vertical dimension should be first if present. Flip native variables
+                # to be surface-to-space.
+                geos_data[var] = np.flipud(geos_data[var])
 
         geos_pres = mod_utils.convert_geos_eta_coord(dataset['DELP'][0].filled(np.nan))
         geos_data['pres'] = np.flipud(geos_pres)
@@ -1688,10 +1671,10 @@ def mod_maker_new(start_date=None, end_date=None, func_dict=None, GEOS_path=None
                 # Taking dataset[var][0] is equivalent to dataset[var][0,:,:,:], which since there's only one time per
                 # file just cuts the data from 4D to 3D
                 DATA[var] = dataset[var][0]
-                if file_is_native:
+                if file_is_native and DATA[var].shape[0] == 72:
                     # The native 72 eta level files are organized space-to-surface vertically; the 42 fixed pressure
-                    # level files are surface-to-space. We want the latter so we need to flip the vertical (first)
-                    # dimension if it is a native file.
+                    # level files are surface-to-space. We want the latter so we need to flip the vertical dimension
+                    # if it is a native file. The vertical dimension, if present, should be first and have 72 levels.
                     DATA[var] = np.flipud(DATA[var])
 
             if file_is_native:
@@ -1941,7 +1924,7 @@ def mod_maker_new(start_date=None, end_date=None, func_dict=None, GEOS_path=None
             else:
                 ew = 'W'
 
-            mod_name = mod_file_name('FPIT', local_date, timedelta(hours=3), site_lat, site_lon_180, ew, ns, mod_path, round_latlon=not keep_latlon_prec, in_utc=save_in_utc)
+            mod_name = mod_utils.mod_file_name('FPIT', local_date, timedelta(hours=3), site_lat, site_lon_180, ew, ns, mod_path, round_latlon=not keep_latlon_prec, in_utc=save_in_utc)
             if not muted:
                 print('\t\t\t{:<20s} : {}'.format(site_dict[site]['name'], mod_name))
 
@@ -2170,7 +2153,7 @@ def mod_maker(site_abbrv=None,start_date=None,end_date=None,mode=None,locations=
             ew = 'W'
 
         # use the local date for the name of the .mod file
-        mod_name = mod_file_name(prefix,local_date,time_step,site_lat,site_lon_180,ew,ns,mod_path,round_latlon=not keep_latlon_prec)
+        mod_name = mod_utils.mod_file_name(prefix, local_date, time_step, site_lat, site_lon_180, ew, ns, mod_path, round_latlon=not keep_latlon_prec)
         mod_file_path = os.path.join(mod_path,mod_name)
         if not muted:
             print('\n',mod_name)

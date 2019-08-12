@@ -53,7 +53,8 @@ pp. 32295-32314). For gases other than CO2, chemical loss or production in the s
 
 from __future__ import print_function, division
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
+import argparse
 from collections import OrderedDict
 from contextlib import closing
 from copy import deepcopy
@@ -68,10 +69,14 @@ import os
 import pandas as pd
 import re
 from scipy.interpolate import LinearNDInterpolator
+import sys
 import xarray as xr
 
+from ..mod_maker import tccon_sites
 from ..common_utils import mod_utils, ioutils, mod_constants as const
 from ..common_utils.ggg_logging import logger
+
+GGGPathError = mod_utils.GGGPathError
 
 # _code_dep_modules should list any imported modules that you want to check if they've changed when decided whether to
 # recalculate the strat LUTs. This module will be added on its own after. _code_dep_files should always be generated
@@ -129,10 +134,6 @@ class GasRecordDateError(GasRecordError):
     """
     Error to raise for any issues with dates in the gas records
     """
-    pass
-
-
-class GGGPathError(Exception):
     pass
 
 
@@ -1541,10 +1542,10 @@ class HFTropicsRecord(MloSmoTraceGasRecord):
     @classmethod
     def _load_ch4_hf_slopes(cls):
         with xr.open_dataset(cls.ch4_hf_slopes_file) as nch:
-            bin_names = ncdf.chartostring(nch.variables['bin_names'][:].T.data)
+            bin_names = [''.join(row) for row in nch.variables['bin_names'][:].T.data]
             slopes = nch['ch4_hf_slopes']
             fit_params = nch['slope_fit_params']
-        return list(bin_names), slopes, fit_params
+        return bin_names, slopes, fit_params
 
     @classmethod
     def _calc_hf_from_ch4(cls, ch4_concs, ch4_record, year, ch4_hf_slopes, ch4_hf_fit_params, lag, use_ace_specific_slopes=False):
@@ -2318,6 +2319,7 @@ def add_strat_prior_standard(prof_gas, retrieval_date, gas_record, mod_data,
     prof_theta = mod_data['profile']['PT']
     prof_eqlat = mod_data['profile']['EqL']
     prof_pres = mod_data['profile']['Pressure']
+    prof_z = mod_data['profile']['Height']
     tropopause_t = mod_data['scalar']['TROPT']  # use the blended tropopause. TODO: reference why this is best?
     tropopause_pres = mod_data['scalar']['TROPPB']
     tropopause_theta = mod_utils.calculate_potential_temperature(tropopause_pres, tropopause_t)
@@ -2356,13 +2358,14 @@ def add_strat_prior_standard(prof_gas, retrieval_date, gas_record, mod_data,
     # space between that and the first > 380 level.
     ow1 = np.argwhere(xx_overworld)[0]
 
-    # For consistency, assume that the entry level concentration that serves as the lower limit for the interpolation
-    # has the same lag as we've been using to calculate the stratospheric concentrations.
-    gas_entry_conc = gas_record.get_gas_for_dates(retrieval_date - gas_record.sbc_lag)
+    # This calculation must be consistent with that in the troposphere function or some levels may be skipped.
+    z_trop = mod_utils.interp_tropopause_height_from_pressure(mod_data['scalar']['TROPPB'], prof_pres, prof_z)
+    xx_trop = prof_z <= z_trop
+    uw1 = np.argwhere(xx_trop)[-1]
 
-    gas_endpoints = np.array([gas_entry_conc.item(), prof_gas[ow1].item()])
-    theta_endpoints = np.array([tropopause_theta, prof_theta[ow1].item()])
-    xx_middleworld = (tropopause_theta < prof_theta) & (prof_theta < 380.0)
+    gas_endpoints = np.array([prof_gas[uw1].item(), prof_gas[ow1].item()])
+    theta_endpoints = np.array([prof_theta[uw1].item(), prof_theta[ow1].item()])
+    xx_middleworld = ~xx_trop & ~xx_overworld
     prof_gas[xx_middleworld] = np.interp(prof_theta[xx_middleworld], theta_endpoints, gas_endpoints)
     prof_world_flag[xx_middleworld] = const.middleworld_flag
 
@@ -2749,14 +2752,14 @@ def _get_std_vmr_file(std_vmr_file):
                                'environmental variable may be incorrect, or the structure of the GGG directory has '
                                'changed. Either correct your GGGPATH value, explicitly pass a path to a .vmr file with '
                                'northern midlat profiles for all gases, or pass False to only write the primary gases '
-                               'to the .vmr file')
+                               'to the .vmr file'.format(std_vmr_file))
         return std_vmr_file
     else:
         return std_vmr_file
 
 
 def generate_full_tccon_vmr_file(mod_data, utc_offsets, save_dir, std_vmr_file=None, site_abbrevs='xx',
-                                 keep_latlon_prec=False):
+                                 keep_latlon_prec=False, **kwargs):
     """
     Generate a .vmr file with all the gases required by TCCON (both retrieved and secondary).
 
@@ -2791,6 +2794,7 @@ def generate_full_tccon_vmr_file(mod_data, utc_offsets, save_dir, std_vmr_file=N
     :raises GGGPathError: if ``$GGGPATH`` is not defined and it needs to find the standard file or it cannot find the
      standard file in the expected place.
     """
+
     std_vmr_file = _get_std_vmr_file(std_vmr_file)
     if std_vmr_file:
         std_vmr_gases = mod_utils.read_vmr_file(std_vmr_file, lowercase_names=False, style='old')
@@ -2800,7 +2804,8 @@ def generate_full_tccon_vmr_file(mod_data, utc_offsets, save_dir, std_vmr_file=N
         std_vmr_gases = list(gas_records.keys())
     species = [gas_records[gas.lower()]() if gas.lower() in gas_records else MidlatTraceGasRecord(gas, vmr_file=std_vmr_file) for gas in std_vmr_gases]
     generate_tccon_priors_driver(mod_data=mod_data, utc_offsets=utc_offsets, species=species, site_abbrevs=site_abbrevs,
-                                 write_vmrs=save_dir, keep_latlon_prec=keep_latlon_prec, gas_name_order=std_vmr_gases)
+                                 write_vmrs=save_dir, keep_latlon_prec=keep_latlon_prec, gas_name_order=std_vmr_gases,
+                                 **kwargs)
 
 
 def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='xx', write_maps=False,
@@ -2949,6 +2954,94 @@ def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='x
                                      profile_date=site_date, profile_lat=site_lat,
                                      profile_alt=profile_dict['Height'], profile_gases=vmr_gases,
                                      gas_name_order=gas_name_order)
+
+
+def parse_args(parser=None):
+    if parser is None:
+        parser = argparse.ArgumentParser()
+
+    valid_site_ids = list(tccon_sites.tccon_site_info().keys())
+
+    parser.description = 'Generate .vmr files for input into GGG2019 for use with TCCON retrievals.'
+    parser.add_argument('date_range', type=mod_utils.parse_date_range,
+                        help='The range of dates to generate .vmr files for. May be given as YYYYMMDD-YYYYMMDD, or '
+                             'YYYYMMDD_HH-YYYYMMDD_HH, where the ending date is exclusive. A single date may be given, '
+                             'in which case the ending date is assumed to be one day later.')
+    parser.add_argument('mod_dir', nargs='?', default=None,
+                        help='Directory to read .mod files from. Note that the .mod files must be in this directory, '
+                             'not a subdirectory. If you wish to specify a root directory for files organized by '
+                             '<product>/<site>/vertical, use --mod-root-dir. If neither this nor --mod-root-dir are '
+                             'given, it will use $GGGPATH/models/gnd as the root directory.')
+    parser.add_argument('-r', '--mod-root-dir', help='A root directory to look for .mod files. This directory must be '
+                                                     'organized into subdirectories by <product>/<site>/vertical, e.g. '
+                                                     'fpit/pa/vertical. If an explicit mod_dir is given, this argument '
+                                                     'is not used.')
+    parser.add_argument('-b', '--base-vmr-file', dest='std_vmr_file',
+                        help='The summer 35N .vmr file that has base profiles, seasonal cycles, latitude gradients, '
+                             'and secular trends for all gases. This is used to fill in the secondary gases in the .vmr '
+                             'file.')
+    parser.add_argument('-p', '--primary-gases-only', action='store_false', dest='std_vmr_file',
+                        help='Write the VMRs only for the primary gases (CO2, N2O, CH4, HF, CO, H2O, and O3). The other '
+                             'gases will not be included. This removes the need for a base .vmr file.')
+    parser.add_argument('-s', '--save-dir', help='Path to save .vmr files to. If not given, defaults to $GGGPATH/vmrs/gnd')
+    parser.add_argument('--site', default='xx', choices=valid_site_ids, dest='site_abbrev',
+                        help='Which site to generate priors for. Used to set the lat/lon looked for in the file name. '
+                             'If an explicit lat and lon are given, those override this.')
+    parser.add_argument('--lat', type=float, dest='site_lat', help='Latitude to generate prior for. If given, '
+                                                                   '--lon must be given as well.')
+    parser.add_argument('--lon', type=float, dest='site_lon', help='Longitude to generate prior for. If given, '
+                                                                   '--lat must be given as well.')
+    parser.add_argument('--keep-latlon-prec', action='store_true', help='Use if the .mod files have 2 decimals of '
+                                                                        'precision in their file names.')
+    parser.add_argument('-i', '--integral-file', dest='zgrid', help='Path to an integral file that defined the '
+                                                                    'altitude grid to place the priors on.')
+
+    parser.set_defaults(driver_fxn=cl_driver)
+
+
+def cl_driver(date_range, mod_dir=None, mod_root_dir=None, save_dir=None, product='fpit',
+              site_lat=None, site_lon=None, site_abbrev='xx', keep_latlon_prec=False, **kwargs):
+
+    if site_lat is None != site_lon is None:
+        raise TypeError('Both or neither of site_lat and site_lon must be given')
+
+    if mod_dir is None and mod_root_dir is None:
+        mod_root_dir = mod_utils.get_ggg_path(os.path.join('models', 'gnd'), 'mod file directory')
+    if mod_dir is None:
+        mod_dir = os.path.join(mod_root_dir, product, site_abbrev, 'vertical')
+
+    if save_dir is None:
+        save_dir = mod_utils.get_ggg_path(os.path.join('vmrs', 'gnd'), 'save directory')
+
+    orig_date_range = date_range
+    date_range = pd.date_range(date_range[0], date_range[1], freq='3H')
+    if date_range[-1] == orig_date_range[-1]:
+        # Make sure the end date is not included
+        date_range = date_range[:-1]
+    mod_files = []
+    missing_files = []
+    for d in date_range:
+        if site_lat is None:
+            site_info = tccon_sites.tccon_site_info_for_date(d, site_abbrv=site_abbrev)
+            lat, lon = site_info['lat'], site_info['lon_180']
+        else:
+            lat, lon = site_lat, site_lon
+        this_file = os.path.join(mod_dir, mod_utils.mod_file_name_for_priors(d, site_lat=lat, site_lon_180=lon,
+                                                                             round_latlon=not keep_latlon_prec))
+        if os.path.isfile(this_file):
+            mod_files.append(this_file)
+        else:
+            missing_files.append(this_file)
+
+    if len(missing_files) > 0:
+        print('Could not find the following .mod files required:', file=sys.stderr)
+        print('  * ' + '\n  * '.join(missing_files), file=sys.stderr)
+        print('Either correct the mod path or generate these files', file=sys.stderr)
+        sys.exit(1)
+
+    generate_full_tccon_vmr_file(mod_data=mod_files, utc_offsets=dt.timedelta(0), save_dir=save_dir,
+                                 site_abbrevs=site_abbrev, **kwargs)
+
 
 ###########################################
 # FUNCTIONS FOR GENERATING GRIDDED PRIORS #
