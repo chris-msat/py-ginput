@@ -1,4 +1,4 @@
 test: 
-	python -m ggg_inputs.testing.mod_maker_tests
+	python -m ginput.testing.mod_maker_tests
 
 .PHONY: test
