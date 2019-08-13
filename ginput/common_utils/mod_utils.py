@@ -28,6 +28,7 @@ import sys
 from . import mod_constants as const
 from .mod_constants import days_per_year
 from .ggg_logging import logger
+from ..mod_maker.tccon_sites import site_dict
 
 _std_model_pres_levels = np.array([1000.0, 975.0, 950.0, 925.0, 900.0, 875.0, 850.0, 825.0, 800.0, 775.0, 750.0, 725.0,
                                    700.0, 650.0, 600.0, 550.0, 500.0, 450.0, 400.0, 350.0, 300.0, 250.0, 200.0, 150.0,
@@ -2264,3 +2265,60 @@ def get_ggg_path(subdir, subdir_name):
         raise GGGPathError('Could not find default {} {}'.format(subdir_name, full_subdir))
 
     return full_subdir
+
+
+def check_site_lat_lon_alt(abbrev, lat=None, lon=None, alt=None):
+    """
+    Verify that the input site abbreviation, latitude, longitude, and altitude are consistent.
+
+    This checks that (1) if any of lat/lon/alt are given, all are, (2) if any inputs are > 1 long all those that are
+    are the same length, (3) if any inputs are scalar (None, int, float, or string) they are converted to tuples
+    of the proper length, and (4) all longitudes are given in [0, 360)
+
+    :param abbrev: site abbreviation(s), as string or iterable of such
+    :type abbrev: str or list(str)
+
+    :param lat: site latitude(s), as float or iterable of such, or None
+    :type lat: float or list(float)
+
+    :param lon: site longitude(s), as float or iterable of such, or None
+    :type lon: float or list(float)
+
+    :param alt: site altitude(s), as float or iterable of such, or None
+    :type alt: float or list(float)
+
+    :return: abbrev, lat, lon, and "alt" converted to tuples of the same length. Scalar values are repeated.
+    :rtype: tuples
+    """
+    def to_tuple(val):
+        if isinstance(val, (int, float, str, type(None))):
+            val = (val,)
+        return val, len(val)
+
+    are_none = [x is None for x in (lat, lon, alt)]
+    if all(are_none):
+        if abbrev not in site_dict:
+            raise ValueError('Site abbreviation not a predefined TCCON site, must give lat, lon, alt')
+    elif any(are_none):
+        raise ValueError('If any of lat, lon, or alt are given, all must be given')
+
+    vals = dict()
+    n = dict()
+    vals['abbrev'], n['abbrev'] = to_tuple(abbrev)
+    vals['lat'], n['lat'] = to_tuple(lat)
+    vals['lon'], n['lon'] = to_tuple(lon)
+    vals['alt'], n['alt'] = to_tuple(alt)
+
+    max_n = max(v for v in n.values())
+    for k in vals.keys():
+        if n[k] == 1:
+            vals[k] *= max_n
+        elif n[k] != max_n:
+            raise ValueError('{} is not a single value or the same length as the longest input'.format(k))
+
+    # Constrain longitude between 0 and 360
+    vals['lon'] = tuple([l + 360 if l is not None and l < 0 else l for l in vals['lon']])
+    if any([l < 0 or l >= 360 for l in vals['lon'] if l is not None]):
+        raise ValueError('Longitude outside of valid range (-360, +360, exclusive) found')
+
+    return vals['abbrev'], vals['lat'], vals['lon'], vals['alt']

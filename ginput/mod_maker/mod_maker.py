@@ -101,7 +101,7 @@ import xarray
 import warnings
 
 from ..common_utils import mod_utils
-from ..common_utils.mod_utils import gravity
+from ..common_utils.mod_utils import gravity, check_site_lat_lon_alt
 from ..common_utils.mod_constants import ratio_molec_mass as rmm, p_ussa, t_ussa, z_ussa, mass_dry_air
 from ..common_utils.ggg_logging import logger
 from .slantify import * # code to make slant paths
@@ -1987,8 +1987,7 @@ def mod_maker(site_abbrv=None,start_date=None,end_date=None,mode=None,locations=
             print('When using MERRA mode, you need a ~/.netrc file to connect to urs.earthdata.nasa.gov')
             sys.exit()
 
-
-    if lat: # True when lat!=None, a custom location was given
+    if lat is not None: # a custom location was given
         locations = {site_abbrv:{'name':'custom site','loc':'custom loc','lat':lat,'lon':lon,'alt':alt}}
 
     site_dict = tccon_site_info(locations)
@@ -2262,11 +2261,16 @@ def driver(date_range, met_path, chem_path=None, save_path=None, keep_latlon_pre
     :return: nothing, writes .mod files to the output directory.
     """
     start_date, end_date = date_range
+    site_abbrv, lat, lon, alt = check_site_lat_lon_alt(site_abbrv, lat=lat, lon=lon, alt=alt)
 
+    # The modmaker functions are not set up to allow multiple custom lat/lon/alts to be passed, so if there are multiple
+    # lat/lon/alts to be made, then we have to iterate over them. In the case of the new mod maker, we want to only
+    # generate the eq. lat. interpolation functions once, because those take a long time.
     if mode in _old_modmaker_modes:
-        mod_maker(site_abbrv=site_abbrv, start_date=start_date, end_date=end_date, locations=site_dict,
-                  HH=12, MM=0, time_step=24, muted=muted, lat=lat, lon=lon, alt=alt, save_path=save_path,
-                  ncdf_path=met_path, keep_latlon_prec=keep_latlon_prec, mode=mode)
+        for this_abbrv, this_lat, this_lon, this_alt in zip(site_abbrv, lat, lon, alt):
+            mod_maker(site_abbrv=this_abbrv, start_date=start_date, end_date=end_date, locations=site_dict,
+                      HH=12, MM=0, time_step=24, muted=muted, lat=this_lat, lon=this_lon, alt=this_alt,
+                      save_path=save_path, ncdf_path=met_path, keep_latlon_prec=keep_latlon_prec, mode=mode)
     elif mode in _new_modmaker_modes:
         if mode == _new_fixedp_mode:
             eqlat_fxn = equivalent_latitude_functions_geos
@@ -2281,10 +2285,11 @@ def driver(date_range, met_path, chem_path=None, save_path=None, keep_latlon_pre
 
         func_dict = eqlat_fxn(GEOS_path=met_path, start_date=start_date, end_date=end_date, muted=muted)
 
-        mod_maker_new(start_date=start_date, end_date=end_date, func_dict=func_dict, GEOS_path=met_path,
-                      chem_path=chem_path, chem_variables=chem_vars, slant=slant, locations=site_dict, muted=muted,
-                      lat=lat, lon=lon, alt=alt, site_abbrv=site_abbrv, save_path=save_path,
-                      keep_latlon_prec=keep_latlon_prec, save_in_utc=save_in_utc, native_files=native_files)
+        for this_abbrv, this_lat, this_lon, this_alt in zip(site_abbrv, lat, lon, alt):
+            mod_maker_new(start_date=start_date, end_date=end_date, func_dict=func_dict, GEOS_path=met_path,
+                          chem_path=chem_path, chem_variables=chem_vars, slant=slant, locations=site_dict, muted=muted,
+                          lat=this_lat, lon=this_lon, alt=this_alt, site_abbrv=this_abbrv, save_path=save_path,
+                          keep_latlon_prec=keep_latlon_prec, save_in_utc=save_in_utc, native_files=native_files)
     else:
         raise ValueError('mode "{}" is not one of the allowed values: {}'.format(
             mode, ', '.join(_old_modmaker_modes + _new_modmaker_modes)

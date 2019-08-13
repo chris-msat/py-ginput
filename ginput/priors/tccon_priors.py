@@ -3002,9 +3002,10 @@ def parse_args(parser=None):
 def cl_driver(date_range, mod_dir=None, mod_root_dir=None, save_dir=None, product='fpit',
               site_lat=None, site_lon=None, site_abbrev='xx', keep_latlon_prec=False, **kwargs):
 
-    if site_lat is None != site_lon is None:
-        raise TypeError('Both or neither of site_lat and site_lon must be given')
+    # Normalize scalar and collection abbreviations, lats, and lons
+    site_abbrev, site_lat, site_lon, _ = mod_utils.check_site_lat_lon_alt(abbrev=site_abbrev, lat=site_lat, lon=site_lon, alt=None if site_lat is None else 0.0)
 
+    # Find input and output directories, looking in GGGPATH if not specified.
     if mod_dir is None and mod_root_dir is None:
         mod_root_dir = mod_utils.get_ggg_path(os.path.join('models', 'gnd'), 'mod file directory')
     if mod_dir is None:
@@ -3013,32 +3014,38 @@ def cl_driver(date_range, mod_dir=None, mod_root_dir=None, save_dir=None, produc
     if save_dir is None:
         save_dir = mod_utils.get_ggg_path(os.path.join('vmrs', 'gnd'), 'save directory')
 
+    # Expand the date range to explicitly include every 3 hours
     orig_date_range = date_range
     date_range = pd.date_range(date_range[0], date_range[1], freq='3H')
     if date_range[-1] == orig_date_range[-1]:
         # Make sure the end date is not included
         date_range = date_range[:-1]
+
+    # Find all the .mod files we need to process for the given dates and locations
     mod_files = []
     missing_files = []
     for d in date_range:
-        if site_lat is None:
-            site_info = tccon_sites.tccon_site_info_for_date(d, site_abbrv=site_abbrev)
-            lat, lon = site_info['lat'], site_info['lon_180']
-        else:
-            lat, lon = site_lat, site_lon
-        this_file = os.path.join(mod_dir, mod_utils.mod_file_name_for_priors(d, site_lat=lat, site_lon_180=lon,
-                                                                             round_latlon=not keep_latlon_prec))
-        if os.path.isfile(this_file):
-            mod_files.append(this_file)
-        else:
-            missing_files.append(this_file)
+        for this_abbrev, this_lat, this_lon in zip(site_abbrev, site_lat, site_lon):
+            if this_lat is None:
+                site_info = tccon_sites.tccon_site_info_for_date(d, site_abbrv=this_abbrev)
+                lat, lon = site_info['lat'], site_info['lon_180']
+            else:
+                lat, lon = this_lat, this_lon
+            this_file = os.path.join(mod_dir, mod_utils.mod_file_name_for_priors(d, site_lat=lat, site_lon_180=lon,
+                                                                                 round_latlon=not keep_latlon_prec))
+            if os.path.isfile(this_file):
+                mod_files.append(this_file)
+            else:
+                missing_files.append(this_file)
 
+    # Ensure that we have all the .mod files we need
     if len(missing_files) > 0:
-        print('Could not find the following .mod files required:', file=sys.stderr)
-        print('  * ' + '\n  * '.join(missing_files), file=sys.stderr)
-        print('Either correct the mod path or generate these files', file=sys.stderr)
-        sys.exit(1)
+        msg = 'Could not find the following .mod files required:\n'
+        msg += '  * ' + '\n  * '.join(missing_files)
+        msg += 'Either correct the mod path or generate these files'
+        raise IOError(msg)
 
+    # GO!
     generate_full_tccon_vmr_file(mod_data=mod_files, utc_offsets=dt.timedelta(0), save_dir=save_dir,
                                  site_abbrevs=site_abbrev, **kwargs)
 
