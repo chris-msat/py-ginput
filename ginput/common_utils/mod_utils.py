@@ -868,11 +868,17 @@ def find_datetime_substring(string, out_type=str):
     :return: the string or parsed datetime value
     """
     date_re = r'\d{8}(_\d{4})?'
-    date_str = re.search(date_re, string).group()
+    try:
+        date_str = re.search(date_re, string).group()
+        date_fmt = '%Y%m%d_%H%M'
+    except AttributeError:
+        date_str = re.search(r'\d{10}', string).group()
+        date_fmt = '%Y%m%d%H'
+
     if out_type is str:
         return date_str
     else:
-        date_fmt = '%Y%m%d' if len(date_str) == 8 else '%Y%m%d_%H%M'
+        date_fmt = '%Y%m%d' if len(date_str) == 8 else date_fmt
         return out_type.strptime(date_str, date_fmt)
 
 

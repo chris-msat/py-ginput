@@ -1,9 +1,11 @@
+from collections import OrderedDict
 import datetime as dt
 from glob import glob
+import numpy as np
 import os
 import re
 
-from ...common_utils import mod_utils
+from ...common_utils import mod_utils, sat_utils
 from ...mod_maker import mod_maker, tccon_sites
 from .. import tccon_priors
 from . import backend_utils as butils
@@ -36,7 +38,6 @@ def generate_obspack_base_vmrs(obspack_dir, zgrid, std_vmr_file, save_dir, geos_
     #   need binned/interpolated to the fixed altitude grid.
     # Finally we replace the data above the aircraft ceiling with the priors from the .vmr files. Then write those
     #   combined profiles to new .vmr files.
-#    import pdb; pdb.set_trace()
     obspack_files = list_obspack_files(obspack_dir)
     obspack_locations = construct_profile_locs(obspack_files)
     make_mod_files(obspack_locations=obspack_locations, save_dir=save_dir, geos_dir=geos_dir, chm_dir=chm_dir)
@@ -67,6 +68,81 @@ def make_vmr_files(obspack_locations, save_root_dir, zgrid=None, std_vmr_file=No
                                std_vmr_file=std_vmr_file)
 
 
+def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_method='weighted_bin'):
+    """
+    Generate .vmr files with the obspack data and prior profiles stiched together
+
+    :param obspack_dir: the directory containing the .atm files
+    :type obspack_dir: str
+
+    :param vmr_dir: the directory containing the regular .vmr files, produced by :func:`make_vmr_files`.
+    :type vmr_dir: str
+
+    :param save_dir: the directory to save the stitched .vmr files to. Note: the files will have the same names as their
+     un-stitched counterparts, so ``vmr_dir`` and ``save_dir`` may not be the same directory.
+    :type save_dir: str
+
+    :param combine_method: how the higher vertical resolution observational data is to be combined with the priors. If
+     this is "interp" then the obs. data is just linearly interpolated to the prior profile altitudes. If this is
+     "weighted_bin", then each level in the prior profile (below the obs. ceiling) is made a weighted sum of the obs.
+     data, where the weights linearly decrease between the prior altitude level and the levels above and below it.
+    :type combine_method: str
+
+    :return: none, writes new .vmr files, which also contain additional header information about the .atm files.
+    """
+    if os.path.samefile(vmr_dir, save_dir):
+        raise ValueError('The vmr_dir and save_dir inputs may not point to the same directory')
+
+    obspack_files = list_obspack_files(obspack_dir)
+    vmr_files = list_vmr_files(vmr_dir)
+    for obskey, obsfiles in obspack_files.items():
+        prev_time, next_time, prof_lon, prof_lat = obskey
+        # Get the two .vmr files that bracket the observation
+        matched_vmr_files = match_atm_vmr(obskey, vmr_files)
+
+        # For each gas we need to bin the aircraft data to the same vertical grid as the .vmr files (optionally do we
+        # want to add a level right at the surface?) then replace those levels in the .vmr profiles and write new
+        # .vmr files. We should include the .atm file names in the .vmr header, also which gases have obs data and the
+        # obs ceiling.
+        extra_header_info = OrderedDict()
+        extra_header_info['observed_species'] = ''  # want first in the .vmr file, will fill in later
+        extra_header_info['atm_files'] = ','.join(os.path.basename(f) for f in obsfiles)
+        extra_header_info['combine_method'] = combine_method
+        # will add the ceilings for each gas in the loop, in case they differ
+
+        # The first step is to weight the vmr profiles to the time of the .atm file. Remember we're using the floor time
+        # because we assume that temporal variation will be most important at the surface.
+        atm_date = get_atm_date(obsfiles[0])
+        wt = sat_utils.time_weight_from_datetime(atm_date, prev_time, next_time)
+        vmrdat = weighted_avg_vmr_files(matched_vmr_files[0], matched_vmr_files[1], wt)
+
+        vmrz = vmrdat['profile'].pop('Altitude')
+
+        observed_species = []
+        for gas_file in obsfiles:
+            gas_name = re.search(r'(?<=_)\w+(?=\.atm)', os.path.basename(gas_file)).group()
+            observed_species.append(gas_name.upper())
+            vmr_prof = vmrdat['profile'][gas_name.upper()]
+
+            if combine_method == 'interp':
+                combo_prof, obs_ceiling = interp_obs_to_vmr_alts(gas_file, vmrz, vmr_prof)
+            elif combine_method == 'weighted_bin':
+                combo_prof, obs_ceiling = weighted_bin_obs_to_vmr_alts(gas_file, vmrz, vmr_prof)
+            else:
+                raise ValueError('{} is not one of the allowed combine_method values'.format(combine_method))
+
+            vmrdat['profile'][gas_name.upper()] = combo_prof
+            extra_header_info['{}_ceiling'.format(gas_name.upper())] = '{:.3f} km'.format(obs_ceiling)
+
+        extra_header_info['observed_species'] = ','.join(observed_species)
+
+        vmr_name = mod_utils.vmr_file_name(atm_date, lon=prof_lon, lat=prof_lat, keep_latlon_prec=True, in_utc=True)
+        vmr_name = os.path.join(save_dir, vmr_name)
+        mod_utils.write_vmr_file(vmr_name, tropopause_alt=vmrdat['scalar']['ztrop_vmr'], profile_date=atm_date,
+                                 profile_lat=prof_lat, profile_alt=vmrz, profile_gases=vmrdat['profile'],
+                                 extra_header_info=extra_header_info)
+
+
 def list_obspack_files(obspack_dir):
     """
     Create a dictionary of obspack files
@@ -77,12 +153,45 @@ def list_obspack_files(obspack_dir):
     :return: a dictionary with keys (start_geos_time, stop_geos_time, lon_string, lat_string) and the values are lists
      of files. This format allows there to be different gases for different date/locations.
     """
-    files = sorted(glob(os.path.join(obspack_dir, '*.atm')))
+    return _make_file_dict(obspack_dir, '.atm', _make_atm_key)
+
+
+def list_vmr_files(vmr_dir):
+    """
+    Create a dictionary of .vmr files
+
+    :param vmr_dir: the directory to find the .vmr files
+    :type vmr_dir: str
+
+    :return: a dictionary with keys (date_time, lon_string, lat_string) and the values are the corresponding .vmr file.
+    """
+    file_dict = _make_file_dict(vmr_dir, '.vmr', _make_vmr_key)
+    for k, v in file_dict:
+        if len(v) != 1:
+            raise NotImplementedError('>1 .vmr file found for a given datetime/lat/lon')
+        file_dict[k] = v[0]
+
+    return file_dict
+
+
+def _make_file_dict(file_dir, file_extension, key_fxn):
+    """
+    Create a dictionary of files with keys describing identifying information about them.
+
+    :param file_dir: directory containing the files
+    :param file_extension: extension of the files. May include or omit the .
+    :param key_fxn: a function that, given a file name, returns the key to use for it.
+    :return: the dictionary of files. Each value will be a list.
+    """
+    if not file_extension.startswith('.'):
+        file_extension = '.' + file_extension
+
+    files = sorted(glob(os.path.join(file_dir, '*{}'.format(file_extension))))
     files_dict = dict()
-    pbar = mod_utils.ProgressBar(len(files), style='counter', prefix='Parsing .atm file')
+    pbar = mod_utils.ProgressBar(len(files), style='counter', prefix='Parsing {} file'.format(file_extension))
     for i, f in enumerate(files):
         pbar.print_bar(i)
-        key = _make_atm_key(f)
+        key = key_fxn(f)
         if key in files_dict:
             files_dict[key].append(f)
         else:
@@ -91,6 +200,25 @@ def list_obspack_files(obspack_dir):
     pbar.finish()
 
     return files_dict
+
+
+def match_atm_vmr(atm_key, vmr_files):
+    """
+    Find the .vmr files that bracket a given .atm file in time
+
+    :param atm_key: the key from the dictionary of .atm files. Should contain the preceeding and following GEOS times,
+     longitude, and latitude in that order.
+    :type atm_key: tuple
+
+    :param vmr_files: the dictionary of .vmr files, keyed with (datetime, lon, lat) tuples
+    :type vmr_files: dict
+
+    :return: the two matching .vmr files, in order, the one before and the one after
+    :rtype: str, str
+    """
+    vmr_key_1 = (atm_key[0], atm_key[2], atm_key[3])
+    vmr_key_2 = (atm_key[1], atm_key[2], atm_key[3])
+    return vmr_files[vmr_key_1], vmr_files[vmr_key_2]
 
 
 def construct_profile_locs(obspack_dict):
@@ -150,7 +278,34 @@ def _make_atm_key(file_or_header):
     return start_geos_time, stop_geos_time, lon, lat
 
 
+def _make_vmr_key(filename):
+    """
+    Make a dictionary key for a .vmr file
+
+    :param filename: the path to the .vmr file to make a key for.
+    :type filename: str
+
+    :return: a key consisting of the GEOS date, the longitude string
+     and the latitude string
+    :rtype: tuple
+    """
+    filename = os.path.basename(filename)
+    file_date = mod_utils.find_datetime_substring(filename, out_type=dt.datetime)
+    file_lon = mod_utils.find_lon_substring(filename, to_float=True)
+    file_lat = mod_utils.find_lat_substring(filename, to_float=True)
+    return file_date, file_lon, file_lat
+
+
 def get_atm_date(file_or_header):
+    """
+    Get the representative datetime of an .atm file
+
+    :param file_or_header: the path to the .atm file or the dictionary of header information
+    :type file_or_header: str or dict
+
+    :return: the datetime for the observation at the bottom of the profile
+    :rtype: :class:`datetime.datetime`
+    """
     if isinstance(file_or_header, str):
         _, file_or_header = butils.read_atm_file(file_or_header)
 
@@ -201,6 +356,19 @@ def _to_3h(dtime):
 
 
 def _lookup_tccon_abbrev(file_or_header, max_dist=0.1):
+    """
+    Look up the abbreviation of the TCCON site colocated with a .atm file
+
+    :param file_or_header: the path to the .atm file or the header dictionary from it
+    :type file_or_header: str or dict
+
+    :param max_dist: the maximum distance (in degrees) away from a TCCON site the profile may be. Note that this is only
+     used if the TCCON name in the .atm file is not recognized.
+    :type max_dist: float
+
+    :return: the two-letter abbreviation of the closest site
+    :rtype: str
+    """
     if isinstance(file_or_header, str):
         _, file_or_header = butils.read_atm_file(file_or_header)
 
@@ -236,3 +404,176 @@ def _lookup_tccon_abbrev(file_or_header, max_dist=0.1):
             mod_utils.format_lon(atm_lon, prec=2), mod_utils.format_lat(atm_lat, prec=2)))
 
     return best_key
+
+
+def weighted_avg_vmr_files(vmr1, vmr2, wt):
+    """
+    Calculate the time-weighted average of the quantities in two .vmr files
+
+    :param vmr1: the path to the earlier .vmr file
+    :type vmr1: str
+
+    :param vmr2: the path to the later .vmr file
+    :type vmr2: str
+
+    :param wt: the weight to apply to each .vmr profile/scalar value. Applied as :math:`w * vmr1 + (1-w) * vmr2`
+    :type wt: float
+
+    :return: the dictionary, as if reading the .vmr file, with the time average of the two files.
+    :rtype: dict
+    """
+    vmrdat1 = mod_utils.read_vmr_file(vmr1, lowercase_names=False)
+    vmrdat2 = mod_utils.read_vmr_file(vmr2, lowercase_names=False)
+    vmravg = OrderedDict()
+
+    for k in vmrdat1:
+        group = OrderedDict()
+        for subk in vmrdat1[k]:
+            data1 = vmrdat1[k][subk]
+            data2 = vmrdat2[k][subk]
+            group[subk] = wt * data1 + (1 - wt) * data2
+        vmravg[k] = group
+
+    return vmravg
+
+
+def _load_obs_profile(obsfile, limit_below_ceil=False):
+    """
+    Load data from an .atm
+
+    :param obsfile: the path to the .atm file
+    :type obsfile: str
+
+    :param limit_below_ceil: set to ``True`` to only return altitude and profile values below the observation ceiling
+    :type limit_below_ceil: bool
+
+    :return: the altitude vector, concentration vector, floor altitude, and ceiling altitude. All altitudes are in
+     kilometers, the concentrations are in mole fraction.
+    """
+    conc_scaling = {'ppm': 1e-6, 'ppb': 1e-9}
+    obsdat, obsinfo = butils.read_atm_file(obsfile)
+
+    # If "Altitude_m" is not the key for altitude, or the concentration is not the last three char in the last column
+    # header, we'll get a key error so we should be able to catch different units.
+    obsz = obsdat['Altitude_m'].to_numpy() * 1e-3
+
+    conc_key = obsdat.keys()[-1]
+    unit = conc_key[-3:]
+    obsconc = obsdat[conc_key].to_numpy() * conc_scaling[unit]
+
+    floor_key = _find_key(obsinfo, r'floor_m$')
+    ceil_key = _find_key(obsinfo, r'ceiling_m$')
+    floor_km = obsinfo[floor_key]*1e-3
+    ceil_km = obsinfo[ceil_key] * 1e-3
+
+    if limit_below_ceil:
+        zz = obsz <= ceil_km
+        obsz = obsz[zz]
+        obsconc = obsconc[zz]
+
+    return obsz, obsconc, floor_km, ceil_km
+
+
+def interp_obs_to_vmr_alts(obsfile, vmralts, vmrprof):
+    """
+    Stitch together the observed profile and prior profile with linear interpolation
+
+    :param obsfile: the path to the .atm file to use
+    :type obsfile: str
+
+    :param vmralts: the vector of altitude levels in the .vmr priors, in kilometers
+    :type vmralts: array-like
+
+    :param vmrprof: the vector of concentrations in the .vmr priors, in mole fraction
+    :type vmrprof: array-like
+
+    :return: the combined observation + prior profile on the .vmr levels, and the observation ceiling (in kilometers)
+    """
+    obsz, obsprof, obsfloor, obsceil = _load_obs_profile(obsfile, limit_below_ceil=True)
+    interp_prof = np.interp(vmralts[vmralts <= obsceil], obsz, obsprof)
+    combined_prof = vmrprof.copy()
+    combined_prof[vmralts <= obsceil] = interp_prof
+    return combined_prof, obsceil
+
+
+def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof):
+    """
+    Stitch together the observed and prior profiles with altitude-weighted binning
+
+    For each altitude of the .vmr priors below the observation ceiling, weights are computed as:
+
+    ..math::
+
+        w(z) = \frac{z -z_{i-1}}{z_i - z_{i-1}} \text{ for } z \in [z_{i-1}, z_i)
+
+        w(z) = \frac{z_{i+1} - z}{z_{i+1} - z_i} \text{ for } z \in [z_i, z_{i+1})
+
+        w(z) = 0 \text{ otherwise }
+
+    and normalized to 1. The observed concentration at :math:`z_i` is then :math:`w^T \cdot c` where :math:`c` is the
+    observed concentration vector.
+
+    :param obsfile: the path to the .atm file to use
+    :type obsfile: str
+
+    :param vmralts: the vector of altitude levels in the .vmr priors, in kilometers
+    :type vmralts: array-like
+
+    :param vmrprof: the vector of concentrations in the .vmr priors, in mole fraction
+    :type vmrprof: array-like
+
+    :return: the combined observation + prior profile on the .vmr levels, and the observation ceiling (in kilometers)
+    """
+    if vmralts[0] > 0:
+        raise NotImplementedError('Expected the bottom level of the .vmr profiles to be at altitude 0.')
+
+    obsz, obsprof, obsfloor, obsceil = _load_obs_profile(obsfile, limit_below_ceil=False)
+    zz_vmr = vmralts <= obsceil
+    zz_obs = obsz <= obsceil
+
+    # check that the obs. profiles go past the next .vmr level above the ceiling - this is to allow us to properly
+    # handle the last .vmr level below the ceiling. If the obs. don't go that high, it's probably because we got
+    # obs files that didn't have an old stratosphere appended to the top. We can handle that case, I just haven't
+    # coded it up yet because the files I have to test with have the old stratosphere already.
+    i_ceil = np.flatnonzero(zz_vmr)[-1]
+    if np.all(obsz < vmralts[i_ceil + 1]):
+        raise NotImplementedError('Observed profiles do not go above the first .vmr level above the flight ceiling. '
+                                  'This case still needs to be implemented.')
+
+    # Replace observations above the ceiling with the .vmr profiles, we'll use this to handle the last level below
+    # the ceiling.
+    obsprof[~zz_obs] = np.interp(obsz[~zz_obs], vmralts, vmrprof)
+    binned_prof = np.full([zz_vmr.sum()], np.nan)
+
+    for i in np.flatnonzero(zz_vmr):
+        # What we want are weights that are 1 at the VMR level i and decrease linearly to 0 at levels i-1 and i+1. This
+        # way the weighted sum of observed concentrations for level i is weighted most toward the nearest altitude
+        # observations but account for the concentration between levels. This is similar to how the effective vertical
+        # path is handled in GGG.
+        weights = np.zeros_like(obsz)
+        if i > 0:
+            # The bottom level will not get these weights because it should be at zero altitude and has no level below
+            # it.
+            zdiff = vmralts[i] - vmralts[i-1]
+            in_layer = (obsz >= vmralts[i-1]) & (obsz < vmralts[i])
+            weights[in_layer] = (obsz[in_layer] - vmralts[i-1])/zdiff
+
+        # All layers have observations above them, even the last .vmr level below the ceiling. For that level, we needed
+        # to be careful that the observed profiles extend the whole way to the next .vmr level, even though the flight
+        # ceiling is below the next .vmr level. To handle that, we already appended the .vmr prior profile to the
+        # observed profile at the vertical resolution of the observed profile.
+        zdiff = vmralts[i+1] - vmralts[i]
+        in_layer = (obsz >= vmralts[i]) & (obsz < vmralts[i+1])
+        weights[in_layer] = (vmralts[i+1] - obsz[in_layer])/zdiff
+
+        # normalize the weights
+        weights /= weights.sum()
+
+        binned_prof[i] = np.sum(weights * obsprof)
+
+    if np.any(np.isnan(binned_prof)):
+        raise RuntimeError('Not all levels got a value')
+
+    combined_prof = vmrprof.copy()
+    combined_prof[zz_vmr] = binned_prof
+    return combined_prof, obsceil

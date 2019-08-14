@@ -3052,7 +3052,7 @@ def cl_driver(date_range, mod_dir=None, mod_root_dir=None, save_dir=None, produc
 
     # GO!
     generate_full_tccon_vmr_file(mod_data=mod_files, utc_offsets=dt.timedelta(0), save_dir=save_dir,
-                                 site_abbrevs=all_site_abbrevs, **kwargs)
+                                 keep_latlon_prec=keep_latlon_prec, site_abbrevs=all_site_abbrevs, **kwargs)
 
 
 ###########################################
