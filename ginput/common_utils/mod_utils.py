@@ -180,7 +180,25 @@ def get_num_header_lines(filename):
     return int(header_info.split()[0])
 
 
-def _write_header(fobj, header_lines, n_data_columns, file_mode='w'):
+def _write_header(fobj, header_lines, n_data_columns):
+    """
+    Write a standard header to a GGG file.
+
+    A typical header in a GGG file begins with a line with two numbers: the number of header lines and the number of
+    data columns. This automatically formats that line, then writes the given lines.
+
+    :param fobj: File handle (i.e. object returned by :func:`open`)
+    :type fobj: :class:`_io.TextIO`
+
+    :param header_lines: a list of header lines (after the first) to write. Should be strings, each may or may not end
+     in newlines (both cases are handled).
+    :type header_lines: list(str)
+
+    :param n_data_columns: number of data columns in the main part of the file
+    :type n_data_columns: int
+
+    :return: none, writes to the file object.
+    """
     line1 = ' {} {}\n'.format(len(header_lines)+1, n_data_columns)
     fobj.write(line1)
     header_lines = [l if l.endswith('\n') else l + '\n' for l in header_lines]
@@ -518,7 +536,7 @@ def write_map_file(map_file, site_lat, trop_eqlat, prof_ref_lat, surface_alt, tr
                 mapf.write('\n')
 
 
-def vmr_file_name(obs_date, lon, lat, keep_latlon_prec=False):
+def vmr_file_name(obs_date, lon, lat, keep_latlon_prec=False, in_utc=True):
     """
     Construct the standard filename for a .vmr file produced by this code
 
@@ -543,11 +561,12 @@ def vmr_file_name(obs_date, lon, lat, keep_latlon_prec=False):
     lat = format_lat(lat, prec=prec)
     lon = format_lon(lon, prec=prec, zero_pad=True)
     major_version = const.priors_version.split('.')[0]
-    return 'JL{ver}_{date}_{lat}_{lon}.vmr'.format(ver=major_version, date=obs_date.strftime('%Y%m%d%H'),
-                                                   lat=lat, lon=lon)
+    return 'JL{ver}_{date}{tz}_{lat}_{lon}.vmr'.format(ver=major_version, date=obs_date.strftime('%Y%m%d%H'),
+                                                       tz='Z' if in_utc else 'L', lat=lat, lon=lon)
 
 
-def write_vmr_file(vmr_file, tropopause_alt, profile_date, profile_lat, profile_alt, profile_gases, gas_name_order=None):
+def write_vmr_file(vmr_file, tropopause_alt, profile_date, profile_lat, profile_alt, profile_gases, gas_name_order=None,
+                   extra_header_info=None):
     """
     Write a new-style .vmr file (without seasonal cycle, secular trends, and latitudinal gradients
 
@@ -575,6 +594,10 @@ def write_vmr_file(vmr_file, tropopause_alt, profile_date, profile_lat, profile_
      insensitive). Any gases not listed here that are in ``profile_gases`` are skipped.
     :type gas_name_order: list(str)
 
+    :param extra_header_info: optional, if given, must be a dictionary or list of lines to include at the end of the
+     header in the .vmr. If a list, must be a list of strings. If a dict, each line will be formatted as "key: value"
+     and the keys/values may be any type.
+
     :return: none, writes the .vmr file.
     """
 
@@ -583,6 +606,11 @@ def write_vmr_file(vmr_file, tropopause_alt, profile_date, profile_lat, profile_
 
     if gas_name_order is None:
         gas_name_order = [k for k in profile_gases.keys()]
+
+    if extra_header_info is None:
+        extra_header_info = []
+    elif isinstance(extra_header_info, dict()):
+        extra_header_info = ['{}: {}'.format(k, v) for k, v in extra_header_info.items()]
 
     gas_name_order_lower = [name.lower() for name in gas_name_order]
     gas_name_mapping = {k: None for k in gas_name_order}
@@ -611,7 +639,7 @@ def write_vmr_file(vmr_file, tropopause_alt, profile_date, profile_lat, profile_
     header_lines = [' ZTROP_VMR: {:.1f}'.format(tropopause_alt),
                     ' DATE_VMR: {:.3f}'.format(date_to_decimal_year(profile_date)),
                     ' LAT_VMR: {:.2f}'.format(profile_lat),
-                    ' '.join(table_header)]
+                    ' '.join(table_header)] + extra_header_info
 
     with open(vmr_file, 'w') as fobj:
         _write_header(fobj, header_lines, len(gas_name_order) + 1)
@@ -2209,9 +2237,12 @@ def from_unix_time(utime, out_type=dt.datetime):
 def mod_file_name(prefix,date,time_step,site_lat,site_lon_180,ew,ns,mod_path,round_latlon=True,in_utc=True):
 
     YYYYMMDD = date.strftime('%Y%m%d')
-    HHMM = date.strftime('%H%M')
+    HH = date.strftime('%H')
     if in_utc:
-        HHMM += 'Z'
+        HH += 'Z'
+    else:
+        HH += 'L'
+
     if round_latlon:
         site_lat = round(abs(site_lat))
         site_lon = round(abs(site_lon_180))
@@ -2221,11 +2252,11 @@ def mod_file_name(prefix,date,time_step,site_lat,site_lon_180,ew,ns,mod_path,rou
         site_lon = abs(site_lon_180)
         latlon_precision = 2
     if time_step < timedelta(days=1):
-        mod_fmt = '{{prefix}}_{{ymd}}_{{hm}}_{{lat:0>2.{prec}f}}{{ns:>1}}_{{lon:0>3.{prec}f}}{{ew:>1}}.mod'.format(prec=latlon_precision)
+        mod_fmt = '{{prefix}}_{{ymd}}{{hh}}_{{lat:0>2.{prec}f}}{{ns:>1}}_{{lon:0>3.{prec}f}}{{ew:>1}}.mod'.format(prec=latlon_precision)
     else:
         mod_fmt = '{{prefix}}_{{ymd}}_{{lat:0>2.{prec}f}}{{ns:>1}}_{{lon:0>3.{prec}f}}{{ew:>1}}.mod'.format(prec=latlon_precision)
 
-    mod_name = mod_fmt.format(prefix=prefix, ymd=YYYYMMDD, hm=HHMM, lat=site_lat, ns=ns, lon=site_lon, ew=ew)
+    mod_name = mod_fmt.format(prefix=prefix, ymd=YYYYMMDD, hh=HH, lat=site_lat, ns=ns, lon=site_lon, ew=ew)
     return mod_name
 
 
