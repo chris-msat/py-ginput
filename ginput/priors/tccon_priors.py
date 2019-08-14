@@ -3008,8 +3008,6 @@ def cl_driver(date_range, mod_dir=None, mod_root_dir=None, save_dir=None, produc
     # Find input and output directories, looking in GGGPATH if not specified.
     if mod_dir is None and mod_root_dir is None:
         mod_root_dir = mod_utils.get_ggg_path(os.path.join('models', 'gnd'), 'mod file directory')
-    if mod_dir is None:
-        mod_dir = os.path.join(mod_root_dir, product, site_abbrev, 'vertical')
 
     if save_dir is None:
         save_dir = mod_utils.get_ggg_path(os.path.join('vmrs', 'gnd'), 'save directory')
@@ -3024,17 +3022,24 @@ def cl_driver(date_range, mod_dir=None, mod_root_dir=None, save_dir=None, produc
     # Find all the .mod files we need to process for the given dates and locations
     mod_files = []
     missing_files = []
+    all_site_abbrevs = []
     for d in date_range:
         for this_abbrev, this_lat, this_lon in zip(site_abbrev, site_lat, site_lon):
+            if mod_dir is not None:
+                this_mod_dir = mod_dir
+            else:
+                this_mod_dir = os.path.join(mod_root_dir, product, this_abbrev, 'vertical')
+
             if this_lat is None:
                 site_info = tccon_sites.tccon_site_info_for_date(d, site_abbrv=this_abbrev)
                 lat, lon = site_info['lat'], site_info['lon_180']
             else:
                 lat, lon = this_lat, this_lon
-            this_file = os.path.join(mod_dir, mod_utils.mod_file_name_for_priors(d, site_lat=lat, site_lon_180=lon,
-                                                                                 round_latlon=not keep_latlon_prec))
+            this_file = os.path.join(this_mod_dir, mod_utils.mod_file_name_for_priors(d, site_lat=lat, site_lon_180=lon,
+                                                                                      round_latlon=not keep_latlon_prec))
             if os.path.isfile(this_file):
                 mod_files.append(this_file)
+                all_site_abbrevs.append(this_abbrev)
             else:
                 missing_files.append(this_file)
 
@@ -3047,7 +3052,7 @@ def cl_driver(date_range, mod_dir=None, mod_root_dir=None, save_dir=None, produc
 
     # GO!
     generate_full_tccon_vmr_file(mod_data=mod_files, utc_offsets=dt.timedelta(0), save_dir=save_dir,
-                                 site_abbrevs=site_abbrev, **kwargs)
+                                 site_abbrevs=all_site_abbrevs, **kwargs)
 
 
 ###########################################

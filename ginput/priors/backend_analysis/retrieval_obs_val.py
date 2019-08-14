@@ -9,7 +9,7 @@ from .. import tccon_priors
 from . import backend_utils as butils
 
 
-def generate_obspack_base_vmrs(obspack_dir, zgrid, save_dir, geos_dir, chm_dir=None):
+def generate_obspack_base_vmrs(obspack_dir, zgrid, std_vmr_file, save_dir, geos_dir, chm_dir=None):
     """
     Create the prior-only .vmr files for the times and locations of the .atm files in the given obspack directory
 
@@ -36,10 +36,11 @@ def generate_obspack_base_vmrs(obspack_dir, zgrid, save_dir, geos_dir, chm_dir=N
     #   need binned/interpolated to the fixed altitude grid.
     # Finally we replace the data above the aircraft ceiling with the priors from the .vmr files. Then write those
     #   combined profiles to new .vmr files.
+#    import pdb; pdb.set_trace()
     obspack_files = list_obspack_files(obspack_dir)
     obspack_locations = construct_profile_locs(obspack_files)
     make_mod_files(obspack_locations=obspack_locations, save_dir=save_dir, geos_dir=geos_dir, chm_dir=chm_dir)
-    make_vmr_files(obspack_locations=obspack_locations, save_root_dir=save_dir, zgrid=zgrid)
+    make_vmr_files(obspack_locations=obspack_locations, save_root_dir=save_dir, zgrid=zgrid, std_vmr_file=std_vmr_file)
 
 
 def make_mod_files(obspack_locations, save_dir, geos_dir, chm_dir=None):
@@ -54,15 +55,16 @@ def make_mod_files(obspack_locations, save_dir, geos_dir, chm_dir=None):
                          mode='fpit-eta', include_chm=True)
 
 
-def make_vmr_files(obspack_locations, save_root_dir, zgrid=None):
+def make_vmr_files(obspack_locations, save_root_dir, zgrid=None, std_vmr_file=None):
     vmr_save_dir = os.path.join(save_root_dir, 'vmrs')
-    for date_range, loc_info in obspack_locations:
+    for date_range, loc_info in obspack_locations.items():
         loc_lon = loc_info['lon']
         loc_lat = loc_info['lat']
         loc_abbrev = loc_info['abbrev']
 
         tccon_priors.cl_driver(date_range=date_range, mod_root_dir=save_root_dir, save_dir=vmr_save_dir, zgrid=zgrid,
-                               site_lat=loc_lat, site_lon=loc_lon, site_abbrev=loc_abbrev, keep_latlon_prec=True)
+                               site_lat=loc_lat, site_lon=loc_lon, site_abbrev=loc_abbrev, keep_latlon_prec=True,
+                               std_vmr_file=std_vmr_file)
 
 
 def list_obspack_files(obspack_dir):
@@ -77,12 +79,16 @@ def list_obspack_files(obspack_dir):
     """
     files = sorted(glob(os.path.join(obspack_dir, '*.atm')))
     files_dict = dict()
-    for f in files:
+    pbar = mod_utils.ProgressBar(len(files), style='counter', prefix='Parsing .atm file')
+    for i, f in enumerate(files):
+        pbar.print_bar(i)
         key = _make_atm_key(f)
         if key in files_dict:
             files_dict[key].append(f)
         else:
             files_dict[key] = [f]
+
+    pbar.finish()
 
     return files_dict
 
@@ -190,7 +196,7 @@ def _to_3h(dtime):
     :return: the rounded datetime
     :rtype: :class:`datetime.datetime`
     """
-    hr = dtime.hour // 3
+    hr = (dtime.hour // 3) * 3
     return dt.datetime(dtime.year, dtime.month, dtime.day, hr)
 
 
