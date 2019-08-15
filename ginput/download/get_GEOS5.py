@@ -189,7 +189,8 @@ def check_types_levels(filetypes, levels):
     return filetypes, levels
 
 
-def driver(date_range, mode='FP', path='.', filetypes=_default_file_type, levels=_default_level_type, **kwargs):
+def driver(date_range, mode='FP', path='.', filetypes=_default_file_type, levels=_default_level_type,
+           log_file=sys.stdout, verbosity=0, **kwargs):
     """
     Run get_GEOS5 as if called from the command line.
 
@@ -224,6 +225,12 @@ def driver(date_range, mode='FP', path='.', filetypes=_default_file_type, levels
     :return: none, downloads GEOS files to ``path``.
     """
     filetypes, levels = check_types_levels(filetypes, levels)
+    verbosity_dict = {-1: '--quiet', 0: '--no-verbose', 1: '--verbose'}
+    if verbosity < -1:
+        verbosity = -1
+    elif verbosity > 1:
+        verbosity = 1
+    wget_cmd = 'wget {} -N -i getGEOS.dat'.format(verbosity_dict[verbosity])
 
     start, end = date_range
     for ftype, ltype in zip(filetypes, levels):
@@ -233,8 +240,8 @@ def driver(date_range, mode='FP', path='.', filetypes=_default_file_type, levels
             os.makedirs(outpath)
 
         _func_dict[mode](start, end, filetype=ftype, levels=ltype, outpath=os.path.join(outpath, 'getGEOS.dat'))
-        for line in execute('wget -N -i getGEOS.dat'.split(), cwd=outpath):
-            print(line, end="")
+        for line in execute(wget_cmd.split(), cwd=outpath):
+            print(line, end="", file=log_file)
 
 
 ########
