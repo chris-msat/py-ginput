@@ -11,7 +11,7 @@ from .. import tccon_priors
 from . import backend_utils as butils
 
 
-def generate_obspack_base_vmrs(obspack_dir, zgrid, std_vmr_file, save_dir, geos_dir, chm_dir=None):
+def generate_obspack_base_vmrs(obspack_dir, zgrid, std_vmr_file, save_dir, geos_dir, chm_dir=None, make_mod=True, make_vmrs=True):
     """
     Create the prior-only .vmr files for the times and locations of the .atm files in the given obspack directory
 
@@ -40,8 +40,10 @@ def generate_obspack_base_vmrs(obspack_dir, zgrid, std_vmr_file, save_dir, geos_
     #   combined profiles to new .vmr files.
     obspack_files = list_obspack_files(obspack_dir)
     obspack_locations = construct_profile_locs(obspack_files)
-    make_mod_files(obspack_locations=obspack_locations, save_dir=save_dir, geos_dir=geos_dir, chm_dir=chm_dir)
-    make_vmr_files(obspack_locations=obspack_locations, save_root_dir=save_dir, zgrid=zgrid, std_vmr_file=std_vmr_file)
+    if make_mod:
+        make_mod_files(obspack_locations=obspack_locations, save_dir=save_dir, geos_dir=geos_dir, chm_dir=chm_dir)
+    if make_vmrs:
+        make_vmr_files(obspack_locations=obspack_locations, save_root_dir=save_dir, zgrid=zgrid, std_vmr_file=std_vmr_file)
 
 
 def make_mod_files(obspack_locations, save_dir, geos_dir, chm_dir=None):
