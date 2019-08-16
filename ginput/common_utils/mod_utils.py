@@ -536,7 +536,7 @@ def write_map_file(map_file, site_lat, trop_eqlat, prof_ref_lat, surface_alt, tr
                 mapf.write('\n')
 
 
-def vmr_file_name(obs_date, lon, lat, keep_latlon_prec=False, in_utc=True):
+def vmr_file_name(obs_date, lon, lat, keep_latlon_prec=False, date_fmt='%Y%m%d%H', in_utc=True):
     """
     Construct the standard filename for a .vmr file produced by this code
 
@@ -561,7 +561,7 @@ def vmr_file_name(obs_date, lon, lat, keep_latlon_prec=False, in_utc=True):
     lat = format_lat(lat, prec=prec)
     lon = format_lon(lon, prec=prec, zero_pad=True)
     major_version = const.priors_version.split('.')[0]
-    return 'JL{ver}_{date}{tz}_{lat}_{lon}.vmr'.format(ver=major_version, date=obs_date.strftime('%Y%m%d%H'),
+    return 'JL{ver}_{date}{tz}_{lat}_{lon}.vmr'.format(ver=major_version, date=obs_date.strftime(date_fmt),
                                                        tz='Z' if in_utc else 'L', lat=lat, lon=lon)
 
 
@@ -609,7 +609,7 @@ def write_vmr_file(vmr_file, tropopause_alt, profile_date, profile_lat, profile_
 
     if extra_header_info is None:
         extra_header_info = []
-    elif isinstance(extra_header_info, dict()):
+    elif isinstance(extra_header_info, dict):
         extra_header_info = ['{}: {}'.format(k, v) for k, v in extra_header_info.items()]
 
     gas_name_order_lower = [name.lower() for name in gas_name_order]
@@ -638,8 +638,9 @@ def write_vmr_file(vmr_file, tropopause_alt, profile_date, profile_lat, profile_
     table_header = ['Altitude'] + ['{:10}'.format(name) for name in gas_name_order]
     header_lines = [' ZTROP_VMR: {:.1f}'.format(tropopause_alt),
                     ' DATE_VMR: {:.3f}'.format(date_to_decimal_year(profile_date)),
-                    ' LAT_VMR: {:.2f}'.format(profile_lat),
-                    ' '.join(table_header)] + extra_header_info
+                    ' LAT_VMR: {:.2f}'.format(profile_lat)] \
+                   + [' ' + l for l in extra_header_info] \
+                   + [ ' '.join(table_header)]
 
     with open(vmr_file, 'w') as fobj:
         _write_header(fobj, header_lines, len(gas_name_order) + 1)

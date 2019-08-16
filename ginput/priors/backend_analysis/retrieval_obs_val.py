@@ -144,9 +144,12 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
 
         extra_header_info['observed_species'] = ','.join(observed_species)
 
-        vmr_name = mod_utils.vmr_file_name(atm_date, lon=prof_lon, lat=prof_lat, keep_latlon_prec=True, in_utc=True)
+        prof_lon = mod_utils.format_lon(prof_lon)
+        prof_lat = mod_utils.format_lat(prof_lat)
+        vmr_name = mod_utils.vmr_file_name(atm_date, lon=prof_lon, lat=prof_lat, 
+                                           keep_latlon_prec=True, in_utc=True)
         vmr_name = os.path.join(save_dir, vmr_name)
-        mod_utils.write_vmr_file(vmr_name, tropopause_alt=vmrdat['scalar']['ztrop_vmr'], profile_date=atm_date,
+        mod_utils.write_vmr_file(vmr_name, tropopause_alt=vmrdat['scalar']['ZTROP_VMR'], profile_date=atm_date,
                                  profile_lat=prof_lat, profile_alt=vmrz, profile_gases=vmrdat['profile'],
                                  extra_header_info=extra_header_info)
 
@@ -249,7 +252,7 @@ def list_vmr_files(vmr_dir):
     :return: a dictionary with keys (date_time, lon_string, lat_string) and the values are the corresponding .vmr file.
     """
     file_dict = _make_file_dict(vmr_dir, '.vmr', _make_vmr_key)
-    for k, v in file_dict:
+    for k, v in file_dict.items():
         if len(v) != 1:
             raise NotImplementedError('>1 .vmr file found for a given datetime/lat/lon')
         file_dict[k] = v[0]
@@ -300,7 +303,9 @@ def match_atm_vmr(atm_key, vmr_files):
     :rtype: str, str
     """
     vmr_key_1 = (atm_key[0], atm_key[2], atm_key[3])
-    vmr_key_2 = (atm_key[1], atm_key[2], atm_key[3])
+    # the atm keys' second value is the end date of the mod_maker date range, which is exclusive
+    # so it's an extra 3 hours in the future
+    vmr_key_2 = (atm_key[1] - dt.timedelta(hours=3), atm_key[2], atm_key[3]) 
     return vmr_files[vmr_key_1], vmr_files[vmr_key_2]
 
 
@@ -374,9 +379,9 @@ def _make_vmr_key(filename):
     """
     filename = os.path.basename(filename)
     file_date = mod_utils.find_datetime_substring(filename, out_type=dt.datetime)
-    file_lon = mod_utils.find_lon_substring(filename, to_float=True)
-    file_lat = mod_utils.find_lat_substring(filename, to_float=True)
-    return file_date, file_lon, file_lat
+    file_lon = mod_utils.find_lon_substring(filename, to_float=False)
+    file_lat = mod_utils.find_lat_substring(filename, to_float=False)
+    return file_date, file_lon.lstrip('0'), file_lat.lstrip('0')
 
 
 def get_atm_date(file_or_header):

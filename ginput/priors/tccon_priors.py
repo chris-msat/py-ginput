@@ -2440,6 +2440,9 @@ def modify_strat_co(base_co_profile, pres_profile, eqlat_profile, pt_profile, tr
     eqlat_profile = xr.DataArray(eqlat_profile[xx_overworld], coords=level_coords)
     doy_grid = xr.DataArray(np.full(eqlat_profile.shape, prof_doy), coords=level_coords)
 
+    # Eq. lat. can get outside the range of the CMAM model's latitude, we clip the eqlat profile so that
+    # effectively we use the last CMAM lat bin for any out-of-range latitudes.
+    eqlat_profile = eqlat_profile.clip(co_lut.lat.min().item(), co_lut.lat.max().item())
     cmam_co_prof = co_lut.interp(doy=doy_grid, lat=eqlat_profile, plev=pres_profile).data
 
     # Rather than mess with calculating "excess" CO concentrations for the lookup table, we just averaged the CMAM model
@@ -2688,6 +2691,9 @@ def generate_single_tccon_prior(mod_file_data, utc_offset, concentration_record,
     concentration_record.add_extra_column(map_dict[gas_name], retrieval_date=obs_utc_date, mod_data=mod_file_data)
 
     # Finally prepare the output, writing a .map file if needed.
+    if np.any(np.isnan(gas_prof)):
+        raise RuntimeError('Some levels were not assigned a value in the gas profile')
+
     units_dict = {'Height': 'km',
                   'Temp': 'K',
                   'Pressure': 'hPa',
