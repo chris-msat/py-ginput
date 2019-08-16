@@ -70,7 +70,7 @@ class TestGinputUtils(unittest.TestCase):
                 t = t + 273.15
                 th_chk = mod_utils.calculate_potential_temperature(p, t)
                 self.assertLess(abs(theta - th_chk), 0.01)
-                
+
 
 if __name__ == '__main__':
     unittest.main()

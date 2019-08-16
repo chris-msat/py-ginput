@@ -1,6 +1,8 @@
 from collections import OrderedDict
 import datetime as dt
 from glob import glob
+from matplotlib import pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
 import os
 import re
@@ -88,6 +90,7 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
      this is "interp" then the obs. data is just linearly interpolated to the prior profile altitudes. If this is
      "weighted_bin", then each level in the prior profile (below the obs. ceiling) is made a weighted sum of the obs.
      data, where the weights linearly decrease between the prior altitude level and the levels above and below it.
+     "none" will not insert any obs. profile, it just saves the time-weighted .vmr prior profile.
     :type combine_method: str
 
     :return: none, writes new .vmr files, which also contain additional header information about the .atm files.
@@ -122,7 +125,7 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
 
         observed_species = []
         for gas_file in obsfiles:
-            gas_name = re.search(r'(?<=_)\w+(?=\.atm)', os.path.basename(gas_file)).group()
+            gas_name = _get_atm_gas(gas_file)
             observed_species.append(gas_name.upper())
             vmr_prof = vmrdat['profile'][gas_name.upper()]
 
@@ -130,6 +133,9 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
                 combo_prof, obs_ceiling = interp_obs_to_vmr_alts(gas_file, vmrz, vmr_prof)
             elif combine_method == 'weighted_bin':
                 combo_prof, obs_ceiling = weighted_bin_obs_to_vmr_alts(gas_file, vmrz, vmr_prof)
+            elif combine_method == 'none':
+                combo_prof = vmr_prof
+                obs_ceiling = np.nan
             else:
                 raise ValueError('{} is not one of the allowed combine_method values'.format(combine_method))
 
@@ -143,6 +149,81 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
         mod_utils.write_vmr_file(vmr_name, tropopause_alt=vmrdat['scalar']['ztrop_vmr'], profile_date=atm_date,
                                  profile_lat=prof_lat, profile_alt=vmrz, profile_gases=vmrdat['profile'],
                                  extra_header_info=extra_header_info)
+
+
+def plot_vmr_comparison(vmr_dirs, save_file, plot_if_not_measured=True):
+    """
+    Create a .pdf file comparing observed profiles with multiple .vmr directories
+
+    :param vmr_dirs: a dictionary of directories containing .vmr files. Each directory must have the same .vmr files.
+     The keys will be used as the legend names for the profiles read from those .vmr files.
+    :type vmr_dirs: dict
+
+    :param save_file: the path to save the .pdf of the profiles as.
+    :type save_file: str
+
+    :param plot_if_not_measured: set to ``False`` to omit panels for gas profile that don't have observational data.
+     Otherwise the .vmr profiles are plotted regardless.
+    :type plot_if_not_measured: bool
+
+    :return: none, writes a .pdf file. Each page will have up to four plots, one each for CO2, N2O, CH4, and CO. If
+     that profile was not measured and ``plot_if_not_measured`` is ``False``, the corresponding panel will be omitted.
+    """
+    # Loop through the modified .vmr files. For each one, read in the .atm files that correspond to it, load them.
+    # Use PdfPages (https://matplotlib.org/3.1.1/gallery/misc/multipage_pdf.html) to put one set of plots per page,
+    # always arrange:
+    #   CO2 N2O
+    #   CH4 CO
+    # On each, plot the actual observed profile plus the profiles defined by the vmr_dirs dict
+    gas_order = ('CO2', 'N2O', 'CH4', 'CO')
+    gas_scaling = {'ppm': 1e6, 'ppb': 1e9}
+    gas_units = {'CO2': 'ppm', 'N2O': 'ppb', 'CH4': 'ppb', 'CO': 'ppb'}
+    vmr_color = ('b', 'r', 'g')
+    vmr_marker = ('x', '+', '*')
+
+    first_key = list(vmr_dirs.keys())[0]
+    vmr_files = list_vmr_files(vmr_dirs[first_key])
+    with PdfPages(save_file) as pdf:
+        for fname in vmr_files.values():
+            basename = os.path.basename(fname)
+            vmr_info = mod_utils.read_vmr_file(fname)
+
+            matched_atm_files = _organize_atm_files_by_species(vmr_info['scalar']['atm_files'].split(','))
+
+            fig = plt.figure()
+            for iax, gas in enumerate(gas_order, 1):
+                if gas not in matched_atm_files and not plot_if_not_measured:
+                    continue
+
+                unit = gas_units[gas]
+                scale = gas_scaling[unit]
+
+                ax = fig.add_subplot(2, 2, iax)
+                if gas in matched_atm_files:
+                    obsz, obsprof, *_ = _load_obs_profile(matched_atm_files[gas], limit_below_ceil=True)
+                    ax.plot(obsprof*scale, obsz, color='k', marker='o', label='Observed')
+
+                for i, (label, vdir) in enumerate(vmr_dirs.items()):
+                    vmrdat = mod_utils.read_vmr_file(os.path.join(vdir, basename), lowercase_names=True)
+                    vmrz, vmrprof = vmrdat['profile']['altitude'], vmrdat['profile'][gas.lower()]
+                    ax.plot(vmrprof*scale, vmrz, color=vmr_color[i], marker=vmr_marker[i], label=label)
+
+                ax.set_xlabel(r'[{}] ({}})'.format(gas.upper(), unit))
+                ax.set_ylabel('Altitude (km)')
+                ax.legend()
+                ax.grid()
+                ax.set_title(gas.upper())
+
+            _, atm_header = butils.read_atm_file(matched_atm_files['CO2'])
+
+            fig.set_size_inches(16, 16)
+            fig.suptitle('{date} - {tccon} ({lon}, {lat})'.format(
+                date=get_atm_date(atm_header), tccon=atm_header['TCCON_site_name'],
+                lon=mod_utils.format_lon(atm_header['TCCON_site_longitude_E'], prec=2),
+                lat=mod_utils.format_lat(atm_header['TCCON_site_latitude_N'], prec=2)
+            ))
+
+            pdf.savefig(fig)
 
 
 def list_obspack_files(obspack_dir):
@@ -579,3 +660,13 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof):
     combined_prof = vmrprof.copy()
     combined_prof[zz_vmr] = binned_prof
     return combined_prof, obsceil
+
+
+def _get_atm_gas(atm_file):
+    # Assumes that the gas name will be at the end of the file name, like ..._CH4.atm or ..._CO.atm. Allow 1-5 letters,
+    # can't use \w+ or \w+? because regex matches from the first _ then.
+    return re.search(r'(?<=_)\w{1,5}(?=\.atm)', os.path.basename(atm_file)).group()
+
+
+def _organize_atm_files_by_species(atm_files):
+    return {_get_atm_gas(f): f for f in atm_files}
