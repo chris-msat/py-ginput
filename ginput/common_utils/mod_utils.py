@@ -676,7 +676,12 @@ def read_vmr_file(vmr_file, as_dataframes=False, lowercase_names=True, style='ne
             const_name, const_val = [v.strip() for v in line.split(':')]
             if lowercase_names:
                 const_name = const_name.lower()
-            header_data[const_name] = float(const_val)
+
+            try:
+                const_val = float(const_val)
+            except ValueError:
+                pass
+            header_data[const_name] = const_val
 
         prior_info = dict()
         if old_style:

@@ -98,10 +98,10 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
     if os.path.samefile(vmr_dir, save_dir):
         raise ValueError('The vmr_dir and save_dir inputs may not point to the same directory')
 
-    obspack_files = list_obspack_files(obspack_dir)
+    obspack_files = list_obspack_files(obspack_dir, include_floor_time=True)
     vmr_files = list_vmr_files(vmr_dir)
     for obskey, obsfiles in obspack_files.items():
-        prev_time, next_time, prof_lon, prof_lat = obskey
+        prev_time, next_time, atm_date, prof_lon, prof_lat = obskey
         # Get the two .vmr files that bracket the observation
         matched_vmr_files = match_atm_vmr(obskey, vmr_files)
 
@@ -117,7 +117,6 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
 
         # The first step is to weight the vmr profiles to the time of the .atm file. Remember we're using the floor time
         # because we assume that temporal variation will be most important at the surface.
-        atm_date = get_atm_date(obsfiles[0])
         wt = sat_utils.time_weight_from_datetime(atm_date, prev_time, next_time)
         vmrdat = weighted_avg_vmr_files(matched_vmr_files[0], matched_vmr_files[1], wt)
 
@@ -146,7 +145,7 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
 
         prof_lon = mod_utils.format_lon(prof_lon)
         prof_lat = mod_utils.format_lat(prof_lat)
-        vmr_name = mod_utils.vmr_file_name(atm_date, lon=prof_lon, lat=prof_lat, 
+        vmr_name = mod_utils.vmr_file_name(atm_date, lon=prof_lon, lat=prof_lat, date_fmt='%Y%m%d_%H%M',
                                            keep_latlon_prec=True, in_utc=True)
         vmr_name = os.path.join(save_dir, vmr_name)
         mod_utils.write_vmr_file(vmr_name, tropopause_alt=vmrdat['scalar']['ZTROP_VMR'], profile_date=atm_date,
@@ -154,7 +153,7 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
                                  extra_header_info=extra_header_info)
 
 
-def plot_vmr_comparison(vmr_dirs, save_file, plot_if_not_measured=True):
+def plot_vmr_comparison(obspack_dir, vmr_dirs, save_file, plot_if_not_measured=True, max_alt=100.0):
     """
     Create a .pdf file comparing observed profiles with multiple .vmr directories
 
@@ -178,16 +177,20 @@ def plot_vmr_comparison(vmr_dirs, save_file, plot_if_not_measured=True):
     #   CO2 N2O
     #   CH4 CO
     # On each, plot the actual observed profile plus the profiles defined by the vmr_dirs dict
-    gas_order = ('CO2', 'N2O', 'CH4', 'CO')
-    gas_scaling = {'ppm': 1e6, 'ppb': 1e9}
-    gas_units = {'CO2': 'ppm', 'N2O': 'ppb', 'CH4': 'ppb', 'CO': 'ppb'}
+    gas_order = ('CO2', 'N2O', 'CH4', 'CO', 'H2O')
+    gas_scaling = {'ppm': 1e6, 'ppb': 1e9, '%': 1e2}
+    gas_units = {'CO2': 'ppm', 'N2O': 'ppb', 'CH4': 'ppb', 'CO': 'ppb', 'H2O': '%'}
     vmr_color = ('b', 'r', 'g')
     vmr_marker = ('x', '+', '*')
 
     first_key = list(vmr_dirs.keys())[0]
     vmr_files = list_vmr_files(vmr_dirs[first_key])
+
+    pbar = mod_utils.ProgressBar(len(vmr_files), style='counter', suffix='profiles completed')
     with PdfPages(save_file) as pdf:
-        for fname in vmr_files.values():
+        for fidx, fname in enumerate(vmr_files.values()):
+            pbar.print_bar(fidx)
+            this_atm_file = None
             basename = os.path.basename(fname)
             vmr_info = mod_utils.read_vmr_file(fname)
 
@@ -201,23 +204,33 @@ def plot_vmr_comparison(vmr_dirs, save_file, plot_if_not_measured=True):
                 unit = gas_units[gas]
                 scale = gas_scaling[unit]
 
-                ax = fig.add_subplot(2, 2, iax)
+                ax = fig.add_subplot(3, 2, iax)
                 if gas in matched_atm_files:
-                    obsz, obsprof, *_ = _load_obs_profile(matched_atm_files[gas], limit_below_ceil=True)
-                    ax.plot(obsprof*scale, obsz, color='k', marker='o', label='Observed')
+                    this_atm_file = os.path.join(obspack_dir, matched_atm_files[gas])
+                    obsz, obsprof, *_ = _load_obs_profile(this_atm_file, limit_below_ceil=True)
+                    zz = obsz <= max_alt;
+                    ax.plot(obsprof[zz]*scale, obsz[zz], color='k', marker='o', label='Observed')
+                    ax.axhline(np.nanmax(obsz), 0.1, 0.9, color='k', linestyle=':', label='Obs. ceiling')
 
                 for i, (label, vdir) in enumerate(vmr_dirs.items()):
                     vmrdat = mod_utils.read_vmr_file(os.path.join(vdir, basename), lowercase_names=True)
                     vmrz, vmrprof = vmrdat['profile']['altitude'], vmrdat['profile'][gas.lower()]
-                    ax.plot(vmrprof*scale, vmrz, color=vmr_color[i], marker=vmr_marker[i], label=label)
+                    zz = vmrz <= max_alt
+                    ax.plot(vmrprof[zz]*scale, vmrz[zz], color=vmr_color[i], marker=vmr_marker[i], label=label)
 
-                ax.set_xlabel(r'[{}] ({}})'.format(gas.upper(), unit))
+                tropz = vmrdat['scalar']['ztrop_vmr']  # should be the same in all files
+                ax.axhline(tropz, 0.1, 0.9, color='orange', linestyle='--', label='Tropopause')
+
+                ax.set_xlabel(r'[{}] ({})'.format(gas.upper(), unit))
                 ax.set_ylabel('Altitude (km)')
                 ax.legend()
                 ax.grid()
                 ax.set_title(gas.upper())
 
-            _, atm_header = butils.read_atm_file(matched_atm_files['CO2'])
+            # We can use any of the .atm files read in for this profile. this_atm_file gets reset to None
+            # at the beginning of the loop over vmr_files so we're sure to not use an .atm file from a 
+            # previous .vmr file
+            _, atm_header = butils.read_atm_file(this_atm_file)
 
             fig.set_size_inches(16, 16)
             fig.suptitle('{date} - {tccon} ({lon}, {lat})'.format(
@@ -227,9 +240,11 @@ def plot_vmr_comparison(vmr_dirs, save_file, plot_if_not_measured=True):
             ))
 
             pdf.savefig(fig)
+            plt.close(fig)
+    pbar.finish()
 
 
-def list_obspack_files(obspack_dir):
+def list_obspack_files(obspack_dir, include_floor_time=False):
     """
     Create a dictionary of obspack files
 
@@ -239,7 +254,20 @@ def list_obspack_files(obspack_dir):
     :return: a dictionary with keys (start_geos_time, stop_geos_time, lon_string, lat_string) and the values are lists
      of files. This format allows there to be different gases for different date/locations.
     """
-    return _make_file_dict(obspack_dir, '.atm', _make_atm_key)
+    def keys_close(k, d):
+        for dk in d:
+            if abs(dk[2] - k[2]) < dt.timedelta(minutes=5):
+                return dk
+
+        return False
+
+    if include_floor_time:
+        key_fxn = lambda f: _make_atm_key(f, True)
+        key_test_fxn = keys_close
+    else:
+        key_fxn = _make_atm_key
+        key_test_fxn=None
+    return _make_file_dict(obspack_dir, '.atm', key_fxn, key_test_fxn)
 
 
 def list_vmr_files(vmr_dir):
@@ -260,7 +288,7 @@ def list_vmr_files(vmr_dir):
     return file_dict
 
 
-def _make_file_dict(file_dir, file_extension, key_fxn):
+def _make_file_dict(file_dir, file_extension, key_fxn, key_test_fxn=None):
     """
     Create a dictionary of files with keys describing identifying information about them.
 
@@ -271,6 +299,9 @@ def _make_file_dict(file_dir, file_extension, key_fxn):
     """
     if not file_extension.startswith('.'):
         file_extension = '.' + file_extension
+    if key_test_fxn is None:
+        def key_test_fxn(k, d):
+            return k if k in d else False
 
     files = sorted(glob(os.path.join(file_dir, '*{}'.format(file_extension))))
     files_dict = dict()
@@ -278,8 +309,9 @@ def _make_file_dict(file_dir, file_extension, key_fxn):
     for i, f in enumerate(files):
         pbar.print_bar(i)
         key = key_fxn(f)
-        if key in files_dict:
-            files_dict[key].append(f)
+        extant_key = key_test_fxn(key, files_dict)
+        if extant_key:
+            files_dict[extant_key].append(f)
         else:
             files_dict[key] = [f]
 
@@ -293,7 +325,7 @@ def match_atm_vmr(atm_key, vmr_files):
     Find the .vmr files that bracket a given .atm file in time
 
     :param atm_key: the key from the dictionary of .atm files. Should contain the preceeding and following GEOS times,
-     longitude, and latitude in that order.
+     floor_time, longitude, and latitude in that order.
     :type atm_key: tuple
 
     :param vmr_files: the dictionary of .vmr files, keyed with (datetime, lon, lat) tuples
@@ -302,10 +334,10 @@ def match_atm_vmr(atm_key, vmr_files):
     :return: the two matching .vmr files, in order, the one before and the one after
     :rtype: str, str
     """
-    vmr_key_1 = (atm_key[0], atm_key[2], atm_key[3])
+    vmr_key_1 = (atm_key[0], atm_key[3], atm_key[4])
     # the atm keys' second value is the end date of the mod_maker date range, which is exclusive
     # so it's an extra 3 hours in the future
-    vmr_key_2 = (atm_key[1] - dt.timedelta(hours=3), atm_key[2], atm_key[3]) 
+    vmr_key_2 = (atm_key[1] - dt.timedelta(hours=3), atm_key[3], atm_key[4]) 
     return vmr_files[vmr_key_1], vmr_files[vmr_key_2]
 
 
@@ -337,7 +369,7 @@ def construct_profile_locs(obspack_dict):
     return loc_dict
 
 
-def _make_atm_key(file_or_header):
+def _make_atm_key(file_or_header, include_floor_time=False):
     """
     Make a dictionary key for an .atm file
 
@@ -354,7 +386,9 @@ def _make_atm_key(file_or_header):
     lon = mod_utils.format_lon(file_or_header['TCCON_site_longitude_E'], prec=2)
     lat = mod_utils.format_lat(file_or_header['TCCON_site_latitude_N'], prec=2)
 
-    start_geos_time = _to_3h(get_atm_date(file_or_header))
+    floor_time = get_atm_date(file_or_header)
+    start_geos_time = _to_3h(floor_time)
+    floor_time = _to_minute(floor_time)
     # We will produce the profiles interpolated to the floor time of the profile. I chose that because we don't have
     # times for each level in the .atm file, so we can't interpolate each level separately, and we probably want to
     # get closer in time to the floor than the ceiling, as I expect the surface will be more variable.
@@ -363,7 +397,10 @@ def _make_atm_key(file_or_header):
     # two .mod files that bracket it.
     stop_geos_time = start_geos_time + dt.timedelta(hours=6)
 
-    return start_geos_time, stop_geos_time, lon, lat
+    if include_floor_time:
+        return start_geos_time, stop_geos_time, floor_time, lon, lat
+    else:
+        return start_geos_time, stop_geos_time, lon, lat
 
 
 def _make_vmr_key(filename):
@@ -441,6 +478,10 @@ def _to_3h(dtime):
     """
     hr = (dtime.hour // 3) * 3
     return dt.datetime(dtime.year, dtime.month, dtime.day, hr)
+
+
+def _to_minute(dtime):
+    return dt.datetime(dtime.year, dtime.month, dtime.day, dtime.hour, dtime.minute)
 
 
 def _lookup_tccon_abbrev(file_or_header, max_dist=0.1):
@@ -658,6 +699,12 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof):
         weights /= weights.sum()
 
         binned_prof[i] = np.sum(weights * obsprof)
+
+    # If there are any NaNs left at the beginning (bottom) of the profile, replace them with the first non-NaN value. This
+    # assumes that the .atm file already includes a surface measurement at the bottom and we just need to extrapolat to 
+    # below surface layers.
+    nn = np.flatnonzero(~np.isnan(binned_prof))[0]
+    binned_prof[:nn] = binned_prof[nn]
 
     if np.any(np.isnan(binned_prof)):
         raise RuntimeError('Not all levels got a value')
