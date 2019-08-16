@@ -662,12 +662,22 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof):
 
     # check that the obs. profiles go past the next .vmr level above the ceiling - this is to allow us to properly
     # handle the last .vmr level below the ceiling. If the obs. don't go that high, it's probably because we got
-    # obs files that didn't have an old stratosphere appended to the top. We can handle that case, I just haven't
-    # coded it up yet because the files I have to test with have the old stratosphere already.
+    # obs files that didn't have an old stratosphere appended to the top. In that case, what we'll do is add a bunch of
+    # altitude levels that we can then put the prior values into. We'll use the average level spacing of the last 10
+    # levels to decide how fine a grid to make
     i_ceil = np.flatnonzero(zz_vmr)[-1]
     if np.all(obsz < vmralts[i_ceil + 1]):
-        raise NotImplementedError('Observed profiles do not go above the first .vmr level above the flight ceiling. '
-                                  'This case still needs to be implemented.')
+        last_obsz = np.nanmax(obsz)
+        target_alt = vmralts[i_ceil + 2]
+        obs_spacing = np.diff(obsz)
+        if np.any(obs_spacing < 0):
+            raise NotImplementedError('Obs. data is not monotonically ascending')
+        # If the grid is not monotonically ascending, the this will be more difficult
+        obs_spacing = np.abs(np.nanmean(obs_spacing[-10:]))
+        extra_obsz = np.arange(last_obsz, target_alt, obs_spacing)
+        # sort_inds = np.argsort(obsz)  #  can use this if there's a case where the profile is read in upside down
+        obsz = np.concatenate([obsz, extra_obsz])
+        obsprof = np.concatenate([obsprof, np.full_like(extra_obsz, np.nan)])
 
     # Replace observations above the ceiling with the .vmr profiles, we'll use this to handle the last level below
     # the ceiling.
