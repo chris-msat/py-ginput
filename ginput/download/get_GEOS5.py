@@ -4,7 +4,7 @@ from __future__ import print_function
 import argparse
 import os
 from datetime import datetime, timedelta
-from subprocess import Popen, PIPE, CalledProcessError
+from subprocess import Popen, PIPE, STDOUT, CalledProcessError
 import sys
 
 from . import download_utils as dlutils
@@ -27,11 +27,11 @@ _level_types = tuple(_std_out_paths.keys())
 _default_level_type = 'p'
 
 
-def execute(cmd,cwd=os.getcwd()):
+def execute(cmd, cwd=os.getcwd()):
     '''
     function to execute a unix command and print the output as it is produced
     '''
-    popen = Popen(cmd, stdout=PIPE, universal_newlines=True,cwd=cwd)
+    popen = Popen(cmd, stdout=PIPE, stderr=STDOUT, universal_newlines=True, cwd=cwd)
     for stdout_line in iter(popen.stdout.readline, ""):
         yield stdout_line
     popen.stdout.close()
