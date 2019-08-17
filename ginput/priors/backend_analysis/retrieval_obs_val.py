@@ -241,10 +241,12 @@ def plot_vmr_comparison(obspack_dir, vmr_dirs, save_file, plot_if_not_measured=T
                 ax = fig.add_subplot(3, 2, iax)
                 if gas in matched_atm_files:
                     this_atm_file = os.path.join(obspack_dir, matched_atm_files[gas])
-                    obsz, obsprof, *_ = _load_obs_profile(this_atm_file, limit_below_ceil=True)
-                    zz = obsz <= max_alt;
-                    ax.plot(obsprof[zz]*scale, obsz[zz], color='k', marker='o', label='Observed')
-                    ax.axhline(np.nanmax(obsz), 0.1, 0.9, color='k', linestyle=':', label='Obs. ceiling')
+                    obsz, obsprof, obsfloor, obsceil = _load_obs_profile(this_atm_file, limit_below_ceil=False)
+                    zzobs = (obsz <= max_alt) & (obsz <= obsceil)
+                    ax.plot(obsprof[zzobs]*scale, obsz[zzobs], color='k', marker='o', label='Observed')
+                    zzold = (obsz <= max_alt) & (obsz > obsceil)
+                    ax.plot(obsprof[zzold]*scale, obsz[zzobs], color='gray', marker='o', label='GGG2014 prior')
+                    ax.axhline(obsceil, 0.1, 0.9, color='k', linestyle=':', label='Obs. ceiling')
 
                 for i, (label, vdir) in enumerate(vmr_dirs.items()):
                     vmrdat = mod_utils.read_vmr_file(os.path.join(vdir, basename), lowercase_names=True)
