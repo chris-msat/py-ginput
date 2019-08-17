@@ -13,6 +13,9 @@ from .. import tccon_priors
 from . import backend_utils as butils
 
 
+_default_min_req_top_alt = 8.0
+
+
 def generate_obspack_base_vmrs(obspack_dir, zgrid, std_vmr_file, save_dir, geos_dir, chm_dir=None, make_mod=True, make_vmrs=True):
     """
     Create the prior-only .vmr files for the times and locations of the .atm files in the given obspack directory
@@ -72,7 +75,9 @@ def make_vmr_files(obspack_locations, save_root_dir, zgrid=None, std_vmr_file=No
                                std_vmr_file=std_vmr_file)
 
 
-def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_method='weighted_bin'):
+def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_method='weighted_bin',
+                                   adjust_to_overworld=False, min_req_prof_alt=_default_min_req_top_alt,
+                                   mod_dir=None):
     """
     Generate .vmr files with the obspack data and prior profiles stiched together
 
@@ -93,6 +98,17 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
      "none" will not insert any obs. profile, it just saves the time-weighted .vmr prior profile.
     :type combine_method: str
 
+    :param adjust_to_overworld: if True, the profile will be extended to the overworld as follows: if the obs. ceiling
+     is above ``min_req_prof_alt``, then the top obs. bin will be extended to the tropopause. The concentration will
+     then do a linear interpolation in theta between the tropopause and 380 K. If the top obs. bin is above 380 K, then
+     nothing is changed. If the top obs. bin is below ``min_req_prof_alt``, then the prior is inserted above that level,
+     no special treatment is used.
+    :type adjust_to_overworld: bool
+
+    :param min_req_prof_alt: the minimum altitude that the top alt. bin of the observations must be above for the
+     special logic triggered by ``adjust_to_overworld`` to be used.
+    :type min_req_prof_alt: float
+
     :return: none, writes new .vmr files, which also contain additional header information about the .atm files.
     """
     if os.path.samefile(vmr_dir, save_dir):
@@ -100,10 +116,13 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
 
     obspack_files = list_obspack_files(obspack_dir, include_floor_time=True)
     vmr_files = list_vmr_files(vmr_dir)
+    if adjust_to_overworld:
+        mod_files = list_mod_files(mod_dir)
+    else:
+        mod_files = None
+
     for obskey, obsfiles in obspack_files.items():
         prev_time, next_time, atm_date, prof_lon, prof_lat = obskey
-        # Get the two .vmr files that bracket the observation
-        matched_vmr_files = match_atm_vmr(obskey, vmr_files)
 
         # For each gas we need to bin the aircraft data to the same vertical grid as the .vmr files (optionally do we
         # want to add a level right at the surface?) then replace those levels in the .vmr profiles and write new
@@ -118,7 +137,16 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
         # The first step is to weight the vmr profiles to the time of the .atm file. Remember we're using the floor time
         # because we assume that temporal variation will be most important at the surface.
         wt = sat_utils.time_weight_from_datetime(atm_date, prev_time, next_time)
+        # Get the two .vmr files that bracket the observation
+        matched_vmr_files = match_atm_vmr(obskey, vmr_files)
         vmrdat = weighted_avg_vmr_files(matched_vmr_files[0], matched_vmr_files[1], wt)
+        vmr_trop_alt = vmrdat['scalar']['ZTROP_VMR']
+        if adjust_to_overworld:
+            matched_mod_files = match_atm_vmr(obskey, mod_files)
+            moddat = weighted_avg_mod_files(matched_mod_files[0], matched_mod_files[1], wt)
+            prof_theta = moddat['profile']['theta']
+        else:
+            prof_theta = None
 
         vmrz = vmrdat['profile'].pop('Altitude')
 
@@ -129,9 +157,15 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
             vmr_prof = vmrdat['profile'][gas_name.upper()]
 
             if combine_method == 'interp':
-                combo_prof, obs_ceiling = interp_obs_to_vmr_alts(gas_file, vmrz, vmr_prof)
+                combo_prof, obs_ceiling = interp_obs_to_vmr_alts(gas_file, vmrz, vmr_prof, vmr_theta=prof_theta,
+                                                                 vmr_trop_alt=vmr_trop_alt,
+                                                                 adjust_to_overworld=adjust_to_overworld,
+                                                                 min_req_top_alt=min_req_prof_alt)
             elif combine_method == 'weighted_bin':
-                combo_prof, obs_ceiling = weighted_bin_obs_to_vmr_alts(gas_file, vmrz, vmr_prof)
+                combo_prof, obs_ceiling = weighted_bin_obs_to_vmr_alts(gas_file, vmrz, vmr_prof, vmr_theta=prof_theta,
+                                                                       vmr_trop_alt=vmr_trop_alt,
+                                                                       adjust_to_overworld=adjust_to_overworld,
+                                                                       min_req_top_alt=min_req_prof_alt)
             elif combine_method == 'none':
                 combo_prof = vmr_prof
                 obs_ceiling = np.nan
@@ -148,7 +182,7 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
         vmr_name = mod_utils.vmr_file_name(atm_date, lon=prof_lon, lat=prof_lat, date_fmt='%Y%m%d_%H%M',
                                            keep_latlon_prec=True, in_utc=True)
         vmr_name = os.path.join(save_dir, vmr_name)
-        mod_utils.write_vmr_file(vmr_name, tropopause_alt=vmrdat['scalar']['ZTROP_VMR'], profile_date=atm_date,
+        mod_utils.write_vmr_file(vmr_name, tropopause_alt=vmr_trop_alt, profile_date=atm_date,
                                  profile_lat=prof_lat, profile_alt=vmrz, profile_gases=vmrdat['profile'],
                                  extra_header_info=extra_header_info)
 
@@ -283,6 +317,28 @@ def list_vmr_files(vmr_dir):
     for k, v in file_dict.items():
         if len(v) != 1:
             raise NotImplementedError('>1 .vmr file found for a given datetime/lat/lon')
+        file_dict[k] = v[0]
+
+    return file_dict
+
+
+def list_mod_files(mod_dir):
+    """
+    Create a dictionary of .mod files
+
+    :param mod_dir: the directory containing the individual site directories.
+    :type mod_dir: str
+
+    :return: a dictionary with keys (date_time, lon_string, lat_string) and the values are the corresponding .mod file.
+    """
+    file_dict = dict()
+    for site_dir in mod_utils.iter_mod_dirs(mod_dir, path='vertical'):
+        site_file_dict = _make_file_dict(site_dir, '.mod', _make_vmr_key)
+        for k, v in site_file_dict:
+            if k in file_dict:
+                raise KeyError('Multiple .mod files have the same key')
+            elif len(v) != 1:
+                raise NotImplementedError('>1 .mod file found for a given datetime/lat/lon')
         file_dict[k] = v[0]
 
     return file_dict
@@ -553,17 +609,34 @@ def weighted_avg_vmr_files(vmr1, vmr2, wt):
     """
     vmrdat1 = mod_utils.read_vmr_file(vmr1, lowercase_names=False)
     vmrdat2 = mod_utils.read_vmr_file(vmr2, lowercase_names=False)
-    vmravg = OrderedDict()
+    return weighted_avg_dicts(vmrdat1, vmrdat2, wt)
 
-    for k in vmrdat1:
+
+def weighted_avg_mod_files(mod1, mod2, wt):
+    def load_mod_file(fname):
+        dat = mod_utils.read_mod_file(fname)
+        # In case of emergency: break glass. If there's an issue where the .mod files have extra data in the other
+        # groups that isn't a number (so can't be weighted), use this line to cut down the dicts to just the important
+        # subgroups
+        # dat = {k: dat[k] for k in ('scalar', 'profile')}
+        return dat
+
+    moddat1 = load_mod_file(mod1)
+    moddat2 = load_mod_file(mod2)
+    return weighted_avg_dicts(moddat1, moddat2, wt)
+
+
+def weighted_avg_dicts(dict1, dict2, wt):
+    avg = OrderedDict()
+    for k in dict1:
         group = OrderedDict()
-        for subk in vmrdat1[k]:
-            data1 = vmrdat1[k][subk]
-            data2 = vmrdat2[k][subk]
+        for subk in dict1[k]:
+            data1 = dict1[k][subk]
+            data2 = dict2[k][subk]
             group[subk] = wt * data1 + (1 - wt) * data2
-        vmravg[k] = group
+        avg[k] = group
 
-    return vmravg
+    return avg
 
 
 def _load_obs_profile(obsfile, limit_below_ceil=False):
@@ -603,7 +676,8 @@ def _load_obs_profile(obsfile, limit_below_ceil=False):
     return obsz, obsconc, floor_km, ceil_km
 
 
-def interp_obs_to_vmr_alts(obsfile, vmralts, vmrprof):
+def interp_obs_to_vmr_alts(obsfile, vmralts, vmrprof, adjust_to_overworld=False,
+                           min_req_top_alt=_default_min_req_top_alt, vmr_trop_alt=None, vmr_theta=None):
     """
     Stitch together the observed profile and prior profile with linear interpolation
 
@@ -616,16 +690,39 @@ def interp_obs_to_vmr_alts(obsfile, vmralts, vmrprof):
     :param vmrprof: the vector of concentrations in the .vmr priors, in mole fraction
     :type vmrprof: array-like
 
+    :param adjust_to_overworld: if True, the profile will be extended to the overworld as follows: if the obs. ceiling
+     is above ``min_req_prof_alt``, then the top obs. bin will be extended to the tropopause. The concentration will
+     then do a linear interpolation in theta between the tropopause and 380 K. If the top obs. bin is above 380 K, then
+     nothing is changed. If the top obs. bin is below ``min_req_prof_alt``, then the prior is inserted above that level,
+     no special treatment is used.
+    :type adjust_to_overworld: bool
+
+    :param min_req_top_alt: the minimum altitude that the top alt. bin of the observations must be above for the
+     special logic triggered by ``adjust_to_overworld`` to be used.
+    :type min_req_top_alt: float
+
+    :param vmr_trop_alt: the altitude (in the same units as ``vmralts``) of the tropopause as read from the .vmr file.
+     Not needed if ``adjust_to_overworld == False``.
+    :type vmr_trop_alt: float
+
+    :param vmr_theta: the profile of potential temperature (in K) on the vertical levels defined by ``vmralts``.
+     Not needed if ``adjust_to_overworld == False``.
+    :type vmr_theta: array-like
+
     :return: the combined observation + prior profile on the .vmr levels, and the observation ceiling (in kilometers)
     """
     obsz, obsprof, obsfloor, obsceil = _load_obs_profile(obsfile, limit_below_ceil=True)
     interp_prof = np.interp(vmralts[vmralts <= obsceil], obsz, obsprof)
     combined_prof = vmrprof.copy()
     combined_prof[vmralts <= obsceil] = interp_prof
+    if adjust_to_overworld and obsceil > min_req_top_alt:
+        combined_prof = _adjust_prof_to_overworld(prof_alts=vmralts, prof=vmrprof, prof_theta=vmr_theta,
+                                                  tropopause_alt=vmr_trop_alt, obs_ceiling=obsceil)
     return combined_prof, obsceil
 
 
-def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof):
+def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, adjust_to_overworld=False,
+                                 min_req_top_alt=_default_min_req_top_alt, vmr_trop_alt=None, vmr_theta=None):
     """
     Stitch together the observed and prior profiles with altitude-weighted binning
 
@@ -650,6 +747,25 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof):
 
     :param vmrprof: the vector of concentrations in the .vmr priors, in mole fraction
     :type vmrprof: array-like
+
+    :param adjust_to_overworld: if True, the profile will be extended to the overworld as follows: if the obs. ceiling
+     is above ``min_req_prof_alt``, then the top obs. bin will be extended to the tropopause. The concentration will
+     then do a linear interpolation in theta between the tropopause and 380 K. If the top obs. bin is above 380 K, then
+     nothing is changed. If the top obs. bin is below ``min_req_prof_alt``, then the prior is inserted above that level,
+     no special treatment is used.
+    :type adjust_to_overworld: bool
+
+    :param min_req_top_alt: the minimum altitude that the top alt. bin of the observations must be above for the
+     special logic triggered by ``adjust_to_overworld`` to be used.
+    :type min_req_top_alt: float
+
+    :param vmr_trop_alt: the altitude (in the same units as ``vmralts``) of the tropopause as read from the .vmr file.
+     Not needed if ``adjust_to_overworld == False``.
+    :type vmr_trop_alt: float
+
+    :param vmr_theta: the profile of potential temperature (in K) on the vertical levels defined by ``vmralts``.
+     Not needed if ``adjust_to_overworld == False``.
+    :type vmr_theta: array-like
 
     :return: the combined observation + prior profile on the .vmr levels, and the observation ceiling (in kilometers)
     """
@@ -721,7 +837,56 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof):
 
     combined_prof = vmrprof.copy()
     combined_prof[zz_vmr] = binned_prof
+
+    if adjust_to_overworld and obsceil > min_req_top_alt:
+        combined_prof = _adjust_prof_to_overworld(prof_alts=vmralts, prof=combined_prof, prof_theta=vmr_theta,
+                                                  tropopause_alt=vmr_trop_alt, obs_ceiling=obsceil)
+
     return combined_prof, obsceil
+
+
+def _adjust_prof_to_overworld(prof_alts, prof, prof_theta, tropopause_alt, obs_ceiling):
+    """
+    Modify the binned profile to have a constant value to the tropopause, then linearly interpolate in theta to 380 K.
+
+    Note that if the observation ceiling is above 380 K the profile is not modified.
+
+    :param prof_alts: the vector of altitudes that the profile is defined on.
+    :type prof_alts: array-like
+
+    :param prof: the vector of concentrations that make up the profile
+    :type prof: array-like
+
+    :param prof_theta: the vector of potential temperatures (in K) on the same levels as the profile
+    :type prof_theta: array-like
+
+    :param tropopause_alt: the altitude of the tropopause
+    :type tropopause_alt: float
+
+    :param obs_ceiling: the ceiling of the observations as reported in the .atm file
+    :type obs_ceiling: float
+
+    :return: the modified profile; it is also modified in-place
+    :rtype: array-like
+    """
+    i_obs_top = np.flatnonzero(prof_alts <= obs_ceiling)[-1]
+    i_trop = np.flatnonzero(prof_alts > tropopause_alt)[0]
+    i_overworld = np.flatnonzero(prof_theta >= 380)[0]
+
+    if i_obs_top >= i_overworld:
+        return prof
+
+    obs_top_conc = prof[i_obs_top]
+
+    trop_theta = np.interp(tropopause_alt, prof_alts, prof_theta)
+    overworld_theta = prof_theta[i_overworld]
+    overworld_conc = prof[i_overworld]
+
+    prof[i_obs_top:i_trop] = obs_top_conc
+    xx_middleworld = (prof_alts > tropopause_alt) & (prof_theta < 380)
+    prof[xx_middleworld] = np.interp(prof_theta[xx_middleworld], [trop_theta, overworld_theta], [obs_top_conc, overworld_conc])
+
+    return prof
 
 
 def _get_atm_gas(atm_file):
