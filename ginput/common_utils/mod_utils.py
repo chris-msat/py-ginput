@@ -10,6 +10,7 @@ from __future__ import print_function, division
 import datetime as dt
 from collections import OrderedDict
 from datetime import timedelta
+from glob import glob
 
 import numpy
 from dateutil.relativedelta import relativedelta
@@ -58,6 +59,10 @@ class ModelError(Exception):
 
 
 class GGGPathError(Exception):
+    pass
+
+
+class ModPathError(IOError):
     pass
 
 
@@ -972,6 +977,59 @@ def _lrange(*args):
 def round_to_zero(val):
     sign = np.sign(val)
     return np.floor(np.abs(val)) * sign
+
+
+def iter_mod_dirs(mod_top_dir, path=None, check_if_exists=False):
+    """
+    Iterate over available .mod site directories.
+
+    :param mod_top_dir: the root directory for the .mod files. Must include subdirectories that are the two-letter site
+     abbreviations.
+    :type mod_top_dir: str
+
+    :param path: the subpath within each of the site dirs to return. If None, then the site directory itself is
+     returned. Otherwise this is appended to the end and that returned.
+    :type path: str
+
+    :param check_if_exists: if ``True`` verify that the subpath exists before yielding. No effect if ``path`` is None.
+    :type check_if_exists: bool
+
+    :return: iterable of .mod file directories.
+    :rtype: iterable
+    """
+    # only match two-character file names
+    site_dirs = sorted(glob(os.path.join(mod_top_dir, '??')))
+    for sdir in site_dirs:
+        if path is None:
+            yield sdir
+        else:
+            fullpath = os.path.join(sdir, path)
+            if check_if_exists and not os.path.isdir(fullpath):
+                raise ModPathError('Requested subpath "{}" does not exist in {}'.format(path, sdir))
+            yield fullpath
+
+
+def iter_mod_files(mod_top_dir, include_slant=False):
+    """
+    Iterate over available .mod files.
+
+    :param mod_top_dir: the root directory for the .mod files. Must include subdirectories that are the two-letter site
+     abbreviations.
+    :type mod_top_dir: str
+
+    :param include_slant: not yet implemented, but in the future will turn on returning pairs of files (vertical and
+     slant).
+    :type include_slant: bool
+
+    :return: iterable of paths to .mod files. The paths will start with the given ``mod_top_dir``.
+    """
+    if include_slant:
+        raise NotImplementedError('include_slant not yet implemented')
+
+    for vdir in iter_mod_dirs(mod_top_dir, 'vertical'):
+        vertical_files = sorted(glob(os.path.join(vdir, '*.mod')))
+        for f in vertical_files:
+            yield f
 
 
 def calculate_model_potential_temperature(temp, pres_levels=_std_model_pres_levels):
