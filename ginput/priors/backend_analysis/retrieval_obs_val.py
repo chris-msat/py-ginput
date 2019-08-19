@@ -192,7 +192,7 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
                                  extra_header_info=extra_header_info)
 
 
-def plot_vmr_comparison(obspack_dir, vmr_dirs, save_file, plot_if_not_measured=True, max_alt=100.0):
+def plot_vmr_comparison(obspack_dir, vmr_dirs, save_file, plot_if_not_measured=True, max_alt=100.0, log_scale_profs=None):
     """
     Create a .pdf file comparing observed profiles with multiple .vmr directories
 
@@ -206,6 +206,10 @@ def plot_vmr_comparison(obspack_dir, vmr_dirs, save_file, plot_if_not_measured=T
     :param plot_if_not_measured: set to ``False`` to omit panels for gas profile that don't have observational data.
      Otherwise the .vmr profiles are plotted regardless.
     :type plot_if_not_measured: bool
+
+    :param log_scale_profs: a collection of gas names to use log scale on the x-axis instead of linear. Names must be
+     upper cases.
+    :type log_scale_profs: list(str)
 
     :return: none, writes a .pdf file. Each page will have up to four plots, one each for CO2, N2O, CH4, and CO. If
      that profile was not measured and ``plot_if_not_measured`` is ``False``, the corresponding panel will be omitted.
@@ -221,6 +225,10 @@ def plot_vmr_comparison(obspack_dir, vmr_dirs, save_file, plot_if_not_measured=T
     gas_units = {'CO2': 'ppm', 'N2O': 'ppb', 'CH4': 'ppb', 'CO': 'ppb', 'H2O': '%'}
     vmr_color = ('b', 'r', 'g')
     vmr_marker = ('x', '+', '*')
+    x_scales = {k: 'linear' for k in gas_order}
+    if log_scale_profs is not None:
+        for k in log_scale_profs:
+            x_scales[k] = 'log'
 
     first_key = list(vmr_dirs.keys())[0]
     vmr_files = list_vmr_files(vmr_dirs[first_key])
@@ -263,6 +271,7 @@ def plot_vmr_comparison(obspack_dir, vmr_dirs, save_file, plot_if_not_measured=T
                 ax.axhline(tropz, 0.1, 0.9, color='orange', linestyle='--', label='Tropopause')
 
                 ax.set_xlabel(r'[{}] ({})'.format(gas.upper(), unit))
+                ax.set_xscale(x_scales[gas.upper()])
                 ax.set_ylabel('Altitude (km)')
                 ax.legend()
                 ax.grid()
