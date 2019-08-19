@@ -141,14 +141,17 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
         matched_vmr_files = match_atm_vmr(obskey, vmr_files)
         vmrdat = weighted_avg_vmr_files(matched_vmr_files[0], matched_vmr_files[1], wt)
         vmr_trop_alt = vmrdat['scalar']['ZTROP_VMR']
+        vmrz = vmrdat['profile'].pop('Altitude')
+        
         if adjust_to_overworld:
             matched_mod_files = match_atm_vmr(obskey, mod_files)
             moddat = weighted_avg_mod_files(matched_mod_files[0], matched_mod_files[1], wt)
-            prof_theta = moddat['profile']['theta']
+            # Must have the model data on the same altitude grid as the priors.
+            moddat = tccon_priors.interp_to_zgrid(moddat['profile'], vmrz)
+            prof_theta = moddat['PT']
         else:
             prof_theta = None
 
-        vmrz = vmrdat['profile'].pop('Altitude')
 
         observed_species = []
         for gas_file in obsfiles:
@@ -157,23 +160,25 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
             vmr_prof = vmrdat['profile'][gas_name.upper()]
 
             if combine_method == 'interp':
-                combo_prof, obs_ceiling = interp_obs_to_vmr_alts(gas_file, vmrz, vmr_prof, vmr_theta=prof_theta,
-                                                                 vmr_trop_alt=vmr_trop_alt,
-                                                                 adjust_to_overworld=adjust_to_overworld,
-                                                                 min_req_top_alt=min_req_prof_alt)
+                combo_prof, obs_ceiling, adj_flag = interp_obs_to_vmr_alts(gas_file, vmrz, vmr_prof, vmr_theta=prof_theta,
+                                                                           vmr_trop_alt=vmr_trop_alt,
+                                                                           adjust_to_overworld=adjust_to_overworld,
+                                                                           min_req_top_alt=min_req_prof_alt)
             elif combine_method == 'weighted_bin':
-                combo_prof, obs_ceiling = weighted_bin_obs_to_vmr_alts(gas_file, vmrz, vmr_prof, vmr_theta=prof_theta,
-                                                                       vmr_trop_alt=vmr_trop_alt,
-                                                                       adjust_to_overworld=adjust_to_overworld,
-                                                                       min_req_top_alt=min_req_prof_alt)
+                combo_prof, obs_ceiling, adj_flag = weighted_bin_obs_to_vmr_alts(gas_file, vmrz, vmr_prof, vmr_theta=prof_theta,
+                                                                                 vmr_trop_alt=vmr_trop_alt,
+                                                                                 adjust_to_overworld=adjust_to_overworld,
+                                                                                 min_req_top_alt=min_req_prof_alt)
             elif combine_method == 'none':
                 combo_prof = vmr_prof
                 obs_ceiling = np.nan
+                adj_flag = 0
             else:
                 raise ValueError('{} is not one of the allowed combine_method values'.format(combine_method))
 
             vmrdat['profile'][gas_name.upper()] = combo_prof
             extra_header_info['{}_ceiling'.format(gas_name.upper())] = '{:.3f} km'.format(obs_ceiling)
+            extra_header_info['{}_adjusted'.format(gas_name.upper())] = '{:d}'.format(adj_flag)
 
         extra_header_info['observed_species'] = ','.join(observed_species)
 
@@ -245,7 +250,7 @@ def plot_vmr_comparison(obspack_dir, vmr_dirs, save_file, plot_if_not_measured=T
                     zzobs = (obsz <= max_alt) & (obsz <= obsceil)
                     ax.plot(obsprof[zzobs]*scale, obsz[zzobs], color='k', marker='o', label='Observed')
                     zzold = (obsz <= max_alt) & (obsz > obsceil)
-                    ax.plot(obsprof[zzold]*scale, obsz[zzobs], color='gray', marker='o', label='GGG2014 prior')
+                    ax.plot(obsprof[zzold]*scale, obsz[zzold], color='gray', marker='o', label='GGG2014 prior')
                     ax.axhline(obsceil, 0.1, 0.9, color='k', linestyle=':', label='Obs. ceiling')
 
                 for i, (label, vdir) in enumerate(vmr_dirs.items()):
@@ -336,12 +341,12 @@ def list_mod_files(mod_dir):
     file_dict = dict()
     for site_dir in mod_utils.iter_mod_dirs(mod_dir, path='vertical'):
         site_file_dict = _make_file_dict(site_dir, '.mod', _make_vmr_key)
-        for k, v in site_file_dict:
+        for k, v in site_file_dict.items():
             if k in file_dict:
                 raise KeyError('Multiple .mod files have the same key')
             elif len(v) != 1:
                 raise NotImplementedError('>1 .mod file found for a given datetime/lat/lon')
-        file_dict[k] = v[0]
+            file_dict[k] = v[0]
 
     return file_dict
 
@@ -620,7 +625,7 @@ def weighted_avg_mod_files(mod1, mod2, wt):
         # In case of emergency: break glass. If there's an issue where the .mod files have extra data in the other
         # groups that isn't a number (so can't be weighted), use this line to cut down the dicts to just the important
         # subgroups
-        # dat = {k: dat[k] for k in ('scalar', 'profile')}
+        dat = {k: dat[k] for k in ('scalar', 'profile')}
         return dat
 
     moddat1 = load_mod_file(mod1)
@@ -717,10 +722,12 @@ def interp_obs_to_vmr_alts(obsfile, vmralts, vmrprof, adjust_to_overworld=False,
     interp_prof = np.interp(vmralts[vmralts <= obsceil], obsz, obsprof)
     combined_prof = vmrprof.copy()
     combined_prof[vmralts <= obsceil] = interp_prof
+    adj_flag = 0
     if adjust_to_overworld and obsceil > min_req_top_alt:
-        combined_prof = _adjust_prof_to_overworld(prof_alts=vmralts, prof=vmrprof, prof_theta=vmr_theta,
+        combined_prof = _adjust_prof_to_overworld(prof_alts=vmralts, prof=combined_prof, prof_theta=vmr_theta,
                                                   tropopause_alt=vmr_trop_alt, obs_ceiling=obsceil)
-    return combined_prof, obsceil
+        adj_flag = 1
+    return combined_prof, obsceil, adj_flag
 
 
 def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, adjust_to_overworld=False,
@@ -840,11 +847,13 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, adjust_to_overworld=
     combined_prof = vmrprof.copy()
     combined_prof[zz_vmr] = binned_prof
 
+    adj_flag = 0
     if adjust_to_overworld and obsceil > min_req_top_alt:
         combined_prof = _adjust_prof_to_overworld(prof_alts=vmralts, prof=combined_prof, prof_theta=vmr_theta,
                                                   tropopause_alt=vmr_trop_alt, obs_ceiling=obsceil)
+        adj_flag = 1
 
-    return combined_prof, obsceil
+    return combined_prof, obsceil, adj_flag
 
 
 def _adjust_prof_to_overworld(prof_alts, prof, prof_theta, tropopause_alt, obs_ceiling):
