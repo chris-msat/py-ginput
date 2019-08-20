@@ -174,12 +174,14 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
                 combo_prof, obs_ceiling, adj_flag = interp_obs_to_vmr_alts(gas_file, vmrz, vmr_prof, vmr_theta=prof_theta,
                                                                            vmr_trop_alt=vmr_trop_alt,
                                                                            force_prior_fxn=use_prior_fxn,
+                                                                           filter_obs_fxn=filter_obs_fxn,
                                                                            adjust_to_overworld=adjust_to_overworld,
                                                                            min_req_top_alt=min_req_prof_alt)
             elif combine_method == 'weighted_bin':
                 combo_prof, obs_ceiling, adj_flag = weighted_bin_obs_to_vmr_alts(gas_file, vmrz, vmr_prof, vmr_theta=prof_theta,
                                                                                  vmr_trop_alt=vmr_trop_alt,
                                                                                  force_prior_fxn=use_prior_fxn,
+                                                                                 filter_obs_fxn=filter_obs_fxn,
                                                                                  adjust_to_overworld=adjust_to_overworld,
                                                                                  min_req_top_alt=min_req_prof_alt)
             elif combine_method == 'none':
@@ -949,7 +951,7 @@ def _blend_top_weighted_bin(obsz, obsceil, obsprof, vmralts, vmrprof, zz_vmr):
     # Replace observations above the ceiling with the .vmr profiles, we'll use this to handle the last level below
     # the ceiling.
     obsprof[~zz_obs] = np.interp(obsz[~zz_obs], vmralts, vmrprof)
-    return obsprof
+    return obsz, obsprof
 
 
 def _adjust_prof_to_overworld(prof_alts, prof, prof_theta, tropopause_alt, obs_ceiling):
