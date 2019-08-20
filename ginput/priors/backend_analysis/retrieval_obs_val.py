@@ -77,7 +77,7 @@ def make_vmr_files(obspack_locations, save_root_dir, zgrid=None, std_vmr_file=No
 
 def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_method='weighted_bin',
                                    adjust_to_overworld=False, min_req_prof_alt=_default_min_req_top_alt,
-                                   mod_dir=None):
+                                   mod_dir=None, use_prior_fxn=None):
     """
     Generate .vmr files with the obspack data and prior profiles stiched together
 
@@ -108,6 +108,12 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
     :param min_req_prof_alt: the minimum altitude that the top alt. bin of the observations must be above for the
      special logic triggered by ``adjust_to_overworld`` to be used.
     :type min_req_prof_alt: float
+
+    :param use_prior_fxn: a function that takes four inputs (altitudes of the .vmr prior levels, the prior profile in
+     DMF, the observed profile after binning to the prior altitudes, and the .atm file name) and returns a logical array
+     the same size as the prior profile that is ``True`` for any levels that the prior should be used instead of the
+     observations, even if observations are present.
+    :type use_prior_fxn: callable
 
     :return: none, writes new .vmr files, which also contain additional header information about the .atm files.
     """
@@ -162,11 +168,13 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
             if combine_method == 'interp':
                 combo_prof, obs_ceiling, adj_flag = interp_obs_to_vmr_alts(gas_file, vmrz, vmr_prof, vmr_theta=prof_theta,
                                                                            vmr_trop_alt=vmr_trop_alt,
+                                                                           force_prior_fxn=use_prior_fxn,
                                                                            adjust_to_overworld=adjust_to_overworld,
                                                                            min_req_top_alt=min_req_prof_alt)
             elif combine_method == 'weighted_bin':
                 combo_prof, obs_ceiling, adj_flag = weighted_bin_obs_to_vmr_alts(gas_file, vmrz, vmr_prof, vmr_theta=prof_theta,
                                                                                  vmr_trop_alt=vmr_trop_alt,
+                                                                                 force_prior_fxn=use_prior_fxn,
                                                                                  adjust_to_overworld=adjust_to_overworld,
                                                                                  min_req_top_alt=min_req_prof_alt)
             elif combine_method == 'none':
@@ -702,7 +710,7 @@ def _load_obs_profile(obsfile, limit_below_ceil=False):
     return obsz, obsconc, floor_km, ceil_km
 
 
-def interp_obs_to_vmr_alts(obsfile, vmralts, vmrprof, adjust_to_overworld=False,
+def interp_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None, adjust_to_overworld=False,
                            min_req_top_alt=_default_min_req_top_alt, vmr_trop_alt=None, vmr_theta=None):
     """
     Stitch together the observed profile and prior profile with linear interpolation
@@ -715,6 +723,12 @@ def interp_obs_to_vmr_alts(obsfile, vmralts, vmrprof, adjust_to_overworld=False,
 
     :param vmrprof: the vector of concentrations in the .vmr priors, in mole fraction
     :type vmrprof: array-like
+
+    :param force_prior_fxn: a function that takes four inputs (altitudes of the .vmr prior levels, the prior profile in
+     DMF, the observed profile after interpolating to the prior altitudes, and the .atm file name) and returns a logical
+     array the same size as the prior profile that is ``True`` for any levels that the prior should be used instead of
+     the observations, even if observations are present.
+    :type force_prior_fxn: callable
 
     :param adjust_to_overworld: if True, the profile will be extended to the overworld as follows: if the obs. ceiling
      is above ``min_req_prof_alt``, then the top obs. bin will be extended to the tropopause. The concentration will
@@ -742,14 +756,20 @@ def interp_obs_to_vmr_alts(obsfile, vmralts, vmrprof, adjust_to_overworld=False,
     combined_prof = vmrprof.copy()
     combined_prof[vmralts <= obsceil] = interp_prof
     adj_flag = 0
+
     if adjust_to_overworld and obsceil > min_req_top_alt:
         combined_prof = _adjust_prof_to_overworld(prof_alts=vmralts, prof=combined_prof, prof_theta=vmr_theta,
                                                   tropopause_alt=vmr_trop_alt, obs_ceiling=obsceil)
         adj_flag = 1
+
+    if force_prior_fxn is not None:
+        xx_prior = force_prior_fxn(vmralts, vmrprof, interp_prof, obsfile)
+        combined_prof[xx_prior] = vmrprof[xx_prior]
+
     return combined_prof, obsceil, adj_flag
 
 
-def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, adjust_to_overworld=False,
+def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None, adjust_to_overworld=False,
                                  min_req_top_alt=_default_min_req_top_alt, vmr_trop_alt=None, vmr_theta=None):
     """
     Stitch together the observed and prior profiles with altitude-weighted binning
@@ -775,6 +795,12 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, adjust_to_overworld=
 
     :param vmrprof: the vector of concentrations in the .vmr priors, in mole fraction
     :type vmrprof: array-like
+
+    :param force_prior_fxn: a function that takes four inputs (altitudes of the .vmr prior levels, the prior profile in
+     DMF, the observed profile after binning to the prior altitudes, and the .atm file name) and returns a logical array
+     the same size as the prior profile that is ``True`` for any levels that the prior should be used instead of the
+     observations, even if observations are present.
+    :type force_prior_fxn: callable
 
     :param adjust_to_overworld: if True, the profile will be extended to the overworld as follows: if the obs. ceiling
      is above ``min_req_prof_alt``, then the top obs. bin will be extended to the tropopause. The concentration will
@@ -861,9 +887,9 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, adjust_to_overworld=
 
         binned_prof[i] = np.sum(weights * obsprof)
 
-    # If there are any NaNs left at the beginning (bottom) of the profile, replace them with the first non-NaN value. This
-    # assumes that the .atm file already includes a surface measurement at the bottom and we just need to extrapolat to 
-    # below surface layers.
+    # If there are any NaNs left at the beginning (bottom) of the profile, replace them with the first non-NaN value.
+    # This assumes that the .atm file already includes a surface measurement at the bottom and we just need to
+    # extrapolate to below surface layers.
     nn = np.flatnonzero(~np.isnan(binned_prof))[0]
     binned_prof[:nn] = binned_prof[nn]
 
@@ -878,6 +904,10 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, adjust_to_overworld=
         combined_prof = _adjust_prof_to_overworld(prof_alts=vmralts, prof=combined_prof, prof_theta=vmr_theta,
                                                   tropopause_alt=vmr_trop_alt, obs_ceiling=obsceil)
         adj_flag = 1
+
+    if force_prior_fxn is not None:
+        xx_prior = force_prior_fxn(vmralts, vmrprof, binned_prof, obsfile)
+        combined_prof[xx_prior] = vmrprof[xx_prior]
 
     return combined_prof, obsceil, adj_flag
 
@@ -935,3 +965,24 @@ def _get_atm_gas(atm_file):
 
 def _organize_atm_files_by_species(atm_files):
     return {_get_atm_gas(f): f for f in atm_files}
+
+
+#########################
+# FORCE PRIOR FUNCTIONS #
+#########################
+
+# These functions are not called automatically by anything in this module. They are intended to be passed to the
+# generate_obspack_modified_vmrs() function to do additional filtering for observation quality.
+def force_prior_ggg2019(alts, prior, obsprof, obsfile):
+    _, obs_header = butils.read_atm_file(obsfile)
+
+    aircraft = obs_header['aircraft_info'].lower()
+    gas = _get_atm_gas(obsfile).lower()
+
+    if aircraft == 'aircore' and gas == 'co2':
+        # Paul trusts the priors more than aircore above 20-22 km.
+        return alts >= 21
+    elif 'radiosonde' in aircraft and gas == 'h2o':
+        # Paul says that the radiosonde water is not believable above 10-12 km and should be replaced with the prior if
+        # less than 0.0003%.
+        return (alts >= 11) | (obsprof < 3e-6)
