@@ -77,7 +77,7 @@ def make_vmr_files(obspack_locations, save_root_dir, zgrid=None, std_vmr_file=No
 
 def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_method='weighted_bin',
                                    adjust_to_overworld=False, min_req_prof_alt=_default_min_req_top_alt,
-                                   mod_dir=None, use_prior_fxn=None):
+                                   mod_dir=None, use_prior_fxn=None, filter_obs_fxn=None):
     """
     Generate .vmr files with the obspack data and prior profiles stiched together
 
@@ -110,10 +110,15 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
     :type min_req_prof_alt: float
 
     :param use_prior_fxn: a function that takes four inputs (altitudes of the .vmr prior levels, the prior profile in
-     DMF, the observed profile after binning to the prior altitudes, and the .atm file name) and returns a logical array
-     the same size as the prior profile that is ``True`` for any levels that the prior should be used instead of the
-     observations, even if observations are present.
+     DMF, the combined obs+prior profile, and the .atm file name) and returns a modified combined profile with some
+     levels replaced with the prior. It is called at the end of the interpolation/binning functions.
     :type use_prior_fxn: callable
+
+    :param filter_obs_fxn: a function that takes five inputs (observation altitudes, observation concentrations, the 
+     prior altitudes, the prior concentrations, and the .atm file name) and returns modified obs. altitudes and 
+     concentrations. This is to provide a way to filter/replace bad data in the raw observations. It is called 
+     immediately after the obs. data is loaded in the interpolation/binning functions, before any other action is taken.
+    :type filter_obs_fxn: callable
 
     :return: none, writes new .vmr files, which also contain additional header information about the .atm files.
     """
@@ -710,8 +715,9 @@ def _load_obs_profile(obsfile, limit_below_ceil=False):
     return obsz, obsconc, floor_km, ceil_km
 
 
-def interp_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None, adjust_to_overworld=False,
-                           min_req_top_alt=_default_min_req_top_alt, vmr_trop_alt=None, vmr_theta=None):
+def interp_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None, filter_obs_fxn=None,
+                           adjust_to_overworld=False, min_req_top_alt=_default_min_req_top_alt, vmr_trop_alt=None,
+                           vmr_theta=None):
     """
     Stitch together the observed profile and prior profile with linear interpolation
 
@@ -725,10 +731,15 @@ def interp_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None, adju
     :type vmrprof: array-like
 
     :param force_prior_fxn: a function that takes four inputs (altitudes of the .vmr prior levels, the prior profile in
-     DMF, the observed profile after interpolating to the prior altitudes, and the .atm file name) and returns a logical
-     array the same size as the prior profile that is ``True`` for any levels that the prior should be used instead of
-     the observations, even if observations are present.
+     DMF, the combined obs+prior profile, and the .atm file name) and returns a modified combined profile with some
+     levels replaced with the prior.
     :type force_prior_fxn: callable
+
+    :param filter_obs_fxn: a function that takes five inputs (observation altitudes, observation concentrations, the
+     prior altitudes, the prior concentrations, and the .atm file name) and returns modified obs. altitudes and
+     concentrations. This is to provide a way to filter/replace bad data in the raw observations. It is called
+     immediately after the obs. data is loaded, before any other action is taken.
+    :type filter_obs_fxn: callable
 
     :param adjust_to_overworld: if True, the profile will be extended to the overworld as follows: if the obs. ceiling
      is above ``min_req_prof_alt``, then the top obs. bin will be extended to the tropopause. The concentration will
@@ -752,6 +763,8 @@ def interp_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None, adju
     :return: the combined observation + prior profile on the .vmr levels, and the observation ceiling (in kilometers)
     """
     obsz, obsprof, obsfloor, obsceil = _load_obs_profile(obsfile, limit_below_ceil=True)
+    if filter_obs_fxn is not None:
+        obsz, obsprof = filter_obs_fxn(obsz, obsprof, vmralts, vmrprof, obsfile)
     interp_prof = np.interp(vmralts[vmralts <= obsceil], obsz, obsprof)
     combined_prof = vmrprof.copy()
     combined_prof[vmralts <= obsceil] = interp_prof
@@ -763,18 +776,14 @@ def interp_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None, adju
         adj_flag = 1
 
     if force_prior_fxn is not None:
-        xx_prior = force_prior_fxn(vmralts, vmrprof, combined_prof, obsfile)
-        if xx_prior is None:
-            raise TypeError('force_prior_fxn returned None, this will cause ALL levels to be replaced with the prior. '
-                            'Since None is easy to return accidentally, if this is the desired result, instead pass a '
-                            'regular index (slice, array, etc.) that will do the same.')
-        combined_prof[xx_prior] = vmrprof[xx_prior]
+        combined_prof = force_prior_fxn(vmralts, vmrprof, combined_prof, obsfile)
 
     return combined_prof, obsceil, adj_flag
 
 
-def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None, adjust_to_overworld=False,
-                                 min_req_top_alt=_default_min_req_top_alt, vmr_trop_alt=None, vmr_theta=None):
+def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None, filter_obs_fxn=None,
+                                 adjust_to_overworld=False, min_req_top_alt=_default_min_req_top_alt,
+                                 vmr_trop_alt=None, vmr_theta=None):
     """
     Stitch together the observed and prior profiles with altitude-weighted binning
 
@@ -801,10 +810,15 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None
     :type vmrprof: array-like
 
     :param force_prior_fxn: a function that takes four inputs (altitudes of the .vmr prior levels, the prior profile in
-     DMF, the observed profile after binning to the prior altitudes, and the .atm file name) and returns a logical array
-     the same size as the prior profile that is ``True`` for any levels that the prior should be used instead of the
-     observations, even if observations are present.
+     DMF, the combined obs+prior profile, and the .atm file name) and returns a modified combined profile with some
+     levels replaced with the prior.
     :type force_prior_fxn: callable
+
+    :param filter_obs_fxn: a function that takes five inputs (observation altitudes, observation concentrations, the
+     prior altitudes, the prior concentrations, and the .atm file name) and returns modified obs. altitudes and
+     concentrations. This is to provide a way to filter/replace bad data in the raw observations. It is called
+     immediately after the obs. data is loaded, before any other action is taken.
+    :type filter_obs_fxn: callable
 
     :param adjust_to_overworld: if True, the profile will be extended to the overworld as follows: if the obs. ceiling
      is above ``min_req_prof_alt``, then the top obs. bin will be extended to the tropopause. The concentration will
@@ -833,6 +847,8 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None
     # if using the adjust_to_overworld logic, then we only want the real obs. data, not any of the old prior that was
     # appended to the top of the profile before
     obsz, obsprof, obsfloor, obsceil = _load_obs_profile(obsfile, limit_below_ceil=adjust_to_overworld)
+    if filter_obs_fxn is not None:
+        obsz, obsprof = filter_obs_fxn(obsz, obsprof, vmralts, vmrprof, obsfile)
     zz_vmr = vmralts <= obsceil
 
     if not adjust_to_overworld:
@@ -896,12 +912,7 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None
         adj_flag = 1
 
     if force_prior_fxn is not None:
-        xx_prior = force_prior_fxn(vmralts, vmrprof, combined_prof, obsfile)
-        if xx_prior is None:
-            raise TypeError('force_prior_fxn returned None, this will cause ALL levels to be replaced with the prior. '
-                            'Since None is easy to return accidentally, if this is the desired result, instead pass a '
-                            'regular index (slice, array, etc.) that will do the same.')
-        combined_prof[xx_prior] = vmrprof[xx_prior]
+        combined_prof = force_prior_fxn(vmralts, vmrprof, combined_prof, obsfile)
 
     return combined_prof, obsceil, adj_flag
 
@@ -999,6 +1010,23 @@ def _organize_atm_files_by_species(atm_files):
 # FORCE PRIOR AND OBS FILTER FUNCTIONS #
 ########################################
 
+def filter_obs_ggg2019(obsz, obsprof, prior_alts, prior, obsfile):
+    _, obs_header = butils.read_atm_file(obsfile)
+
+    aircraft = obs_header['aircraft_info'].lower()
+    gas = _get_atm_gas(obsfile).lower()
+
+    if 'radiosonde' in aircraft and gas == 'h2o':
+        # Paul says that the radiosonde water is not believable above 10-12 km and should be replaced with the prior if
+        # less than 0.0003%.
+        xx = obsprof < 3e-6
+        obsprof[xx] = np.interp(obsz[xx], prior_alts, prior, left=np.nan, right=np.nan)
+
+    if np.any(np.isnan(obsprof)):
+        raise NotImplementedError('Needed to replace values outside the altitude range of the prior')
+    return obsz, obsprof
+
+
 def force_prior_ggg2019(alts, prior, obs_prof_vmr_levels, obsfile):
     _, obs_header = butils.read_atm_file(obsfile)
 
@@ -1007,11 +1035,14 @@ def force_prior_ggg2019(alts, prior, obs_prof_vmr_levels, obsfile):
 
     if aircraft == 'aircore' and gas == 'co2':
         # Paul trusts the priors more than aircore above 20-22 km.
-        return alts >= 21
+        xx = alts >= 21
     elif 'radiosonde' in aircraft and gas == 'h2o':
         # Paul says that the radiosonde water is not believable above 10-12 km and should be replaced with the prior if
         # less than 0.0003%.
-        return (alts >= 11) | (obs_prof_vmr_levels < 3e-6)
+        xx = alts >= 11
     else:
         # if not one of the cases, above, do not replace any levels.
-        return np.zeros(alts.shape, dtype=np.bool_)
+        xx = np.zeros(alts.shape, dtype=np.bool_)
+
+    obs_prof_vmr_levels[xx] = prior[xx]
+    return obs_prof_vmr_levels
