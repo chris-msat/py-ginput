@@ -763,7 +763,11 @@ def interp_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None, adju
         adj_flag = 1
 
     if force_prior_fxn is not None:
-        xx_prior = force_prior_fxn(vmralts, vmrprof, interp_prof, obsfile)
+        xx_prior = force_prior_fxn(vmralts, vmrprof, combined_prof, obsfile)
+        if xx_prior is None:
+            raise TypeError('force_prior_fxn returned None, this will cause ALL levels to be replaced with the prior. '
+                            'Since None is easy to return accidentally, if this is the desired result, instead pass a '
+                            'regular index (slice, array, etc.) that will do the same.')
         combined_prof[xx_prior] = vmrprof[xx_prior]
 
     return combined_prof, obsceil, adj_flag
@@ -892,7 +896,11 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None
         adj_flag = 1
 
     if force_prior_fxn is not None:
-        xx_prior = force_prior_fxn(vmralts, vmrprof, binned_prof, obsfile)
+        xx_prior = force_prior_fxn(vmralts, vmrprof, combined_prof, obsfile)
+        if xx_prior is None:
+            raise TypeError('force_prior_fxn returned None, this will cause ALL levels to be replaced with the prior. '
+                            'Since None is easy to return accidentally, if this is the desired result, instead pass a '
+                            'regular index (slice, array, etc.) that will do the same.')
         combined_prof[xx_prior] = vmrprof[xx_prior]
 
     return combined_prof, obsceil, adj_flag
@@ -978,7 +986,7 @@ def _adjust_prof_to_overworld(prof_alts, prof, prof_theta, tropopause_alt, obs_c
 
 
 def _get_atm_gas(atm_file):
-    # Assumes that the gas name will be at the end of the file name, like ..._CH4.atm or ..._CO.atm. 
+    # Assumes that the gas name will be at the end of the file name, like ..._CH4.atm or ..._CO.atm.
     gas_and_ext = atm_file.split('_')[-1]
     return gas_and_ext.replace('.atm','')
 
@@ -987,13 +995,11 @@ def _organize_atm_files_by_species(atm_files):
     return {_get_atm_gas(f): f for f in atm_files}
 
 
-#########################
-# FORCE PRIOR FUNCTIONS #
-#########################
+########################################
+# FORCE PRIOR AND OBS FILTER FUNCTIONS #
+########################################
 
-# These functions are not called automatically by anything in this module. They are intended to be passed to the
-# generate_obspack_modified_vmrs() function to do additional filtering for observation quality.
-def force_prior_ggg2019(alts, prior, obsprof, obsfile):
+def force_prior_ggg2019(alts, prior, obs_prof_vmr_levels, obsfile):
     _, obs_header = butils.read_atm_file(obsfile)
 
     aircraft = obs_header['aircraft_info'].lower()
@@ -1005,4 +1011,7 @@ def force_prior_ggg2019(alts, prior, obsprof, obsfile):
     elif 'radiosonde' in aircraft and gas == 'h2o':
         # Paul says that the radiosonde water is not believable above 10-12 km and should be replaced with the prior if
         # less than 0.0003%.
-        return (alts >= 11) | (obsprof < 3e-6)
+        return (alts >= 11) | (obs_prof_vmr_levels < 3e-6)
+    else:
+        # if not one of the cases, above, do not replace any levels.
+        return np.zeros(alts.shape, dtype=np.bool_)
