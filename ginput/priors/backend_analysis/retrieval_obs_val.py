@@ -689,6 +689,16 @@ def _load_obs_profile(obsfile, limit_below_ceil=False):
         obsz = obsz[zz]
         obsconc = obsconc[zz]
 
+    # We don't want NaNs in the aircraft data. 
+    nans = np.isnan(obsconc)
+    obsz = obsz[~nans]
+    obsconc = obsconc[~nans]
+
+    # We want the aircraft data to be ordered surface-to-ceiling, monotonically increasing
+    sort_inds = np.argsort(obsz)  #  can use this if there's a case where the profile is read in upside down
+    obsz = obsz[sort_inds]
+    obsconc = obsconc[sort_inds]
+
     return obsz, obsconc, floor_km, ceil_km
 
 
@@ -806,12 +816,19 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, adjust_to_overworld=
         obs_spacing = np.diff(obsz)
         if np.any(obs_spacing < 0):
             raise NotImplementedError('Obs. data is not monotonically ascending')
-        # If the grid is not monotonically ascending, the this will be more difficult
-        obs_spacing = np.abs(np.nanmean(obs_spacing[-10:]))
+        # If the grid is not monotonically ascending, the this will be more difficult. Make the minimum spacing 1 meter
+        # - this will avoid issues of overly small or 0 grid spacing caused by truncation of the altitudes in the .atm
+        # files (i.e. sometimes 4000.1 and 4000.4 get truncated to 4000)
+        obs_spacing = np.nanmax([0.001, np.abs(np.nanmean(obs_spacing[-10:]))])
         extra_obsz = np.arange(last_obsz, target_alt, obs_spacing)
         # sort_inds = np.argsort(obsz)  #  can use this if there's a case where the profile is read in upside down
         obsz = np.concatenate([obsz, extra_obsz])
         obsprof = np.concatenate([obsprof, np.full_like(extra_obsz, np.nan)])
+
+        # Expand the vector indicating which levels are observation data to be the same size as the expanded profile.
+        zz_obs_expanded = np.zeros(obsz.shape, dtype=np.bool_)
+        zz_obs_expanded[np.nonzero(zz_obs)] = True  # zz_obs still wrong size, convert to indices for this
+        zz_obs = zz_obs_expanded
 
     # Replace observations above the ceiling with the .vmr profiles, we'll use this to handle the last level below
     # the ceiling.
@@ -912,7 +929,8 @@ def _adjust_prof_to_overworld(prof_alts, prof, prof_theta, tropopause_alt, obs_c
 def _get_atm_gas(atm_file):
     # Assumes that the gas name will be at the end of the file name, like ..._CH4.atm or ..._CO.atm. Allow 1-5 letters,
     # can't use \w+ or \w+? because regex matches from the first _ then.
-    return re.search(r'(?<=_)\w{1,5}(?=\.atm)', os.path.basename(atm_file)).group()
+    gas_and_ext = atm_file.split('_')[-1]
+    return gas_and_ext.replace('.atm','')
 
 
 def _organize_atm_files_by_species(atm_files):
