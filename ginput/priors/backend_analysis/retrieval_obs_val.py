@@ -767,7 +767,20 @@ def interp_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None, filt
     obsz, obsprof, obsfloor, obsceil = _load_obs_profile(obsfile, limit_below_ceil=True)
     if filter_obs_fxn is not None:
         obsz, obsprof = filter_obs_fxn(obsz, obsprof, vmralts, vmrprof, obsfile)
-    interp_prof = np.interp(vmralts[vmralts <= obsceil], obsz, obsprof)
+    
+    zz_vmr = vmralts <= obsceil
+    if np.any(vmralts[zz_vmr] > obsz.max()):
+        print('Warning: {} does not have values all the way up to the obs. ceiling. Lowering the effective ceiling'.format(obsfile))
+        obsceil = obsz.max()
+        zz_vmr = vmralts <= obsceil
+
+    # We want to do constant-value extrapolation down, so we don't specify a "left" value. But we don't always want
+    # to do the same up, it depends on the options given, so we set those to NaN.
+    interp_prof = np.interp(vmralts[zz_vmr], obsz, obsprof, right=np.nan)
+
+    if np.any(np.isnan(interp_prof)):
+        raise RuntimeError('Not all levels got a value')
+
     combined_prof = vmrprof.copy()
     combined_prof[vmralts <= obsceil] = interp_prof
     adj_flag = 0
@@ -851,7 +864,12 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None
     obsz, obsprof, obsfloor, obsceil = _load_obs_profile(obsfile, limit_below_ceil=adjust_to_overworld)
     if filter_obs_fxn is not None:
         obsz, obsprof = filter_obs_fxn(obsz, obsprof, vmralts, vmrprof, obsfile)
+
     zz_vmr = vmralts <= obsceil
+    if np.any(vmralts[zz_vmr] > obsz.max()):
+        print('Warning: {} does not have values all the way up to the obs. ceiling. Lowering the effective ceiling'.format(obsfile))
+        obsceil = obsz.max()
+        zz_vmr = vmralts <= obsceil
 
     if not adjust_to_overworld:
         # adjust_to_overworld means that we extend the top obs. bin to the met. tropopause then linearly interpolating
@@ -1015,7 +1033,8 @@ def _organize_atm_files_by_species(atm_files):
 def filter_obs_ggg2019(obsz, obsprof, prior_alts, prior, obsfile):
     _, obs_header = butils.read_atm_file(obsfile)
 
-    aircraft = obs_header['aircraft_info'].lower()
+    info_key = _find_key(obs_header, 'info$')
+    aircraft = obs_header[info_key].lower()
     gas = _get_atm_gas(obsfile).lower()
 
     if 'radiosonde' in aircraft and gas == 'h2o':
@@ -1023,6 +1042,12 @@ def filter_obs_ggg2019(obsz, obsprof, prior_alts, prior, obsfile):
         # less than 0.0003%.
         xx = obsprof < 3e-6
         obsprof[xx] = np.interp(obsz[xx], prior_alts, prior, left=np.nan, right=np.nan)
+    elif 'aircore' in aircraft and gas == 'co':
+        # I notice there's some aircores where the CO goes negative (e.g. one at 2014-09-17 20:10:57 at 97.55 W, 36.72 N)
+        # If CO gets below 0.1 ppb, there's got to be something wrong with the aircore measurement.
+        xx = obsprof >= 1e-10
+        obsz = obsz[xx]
+        obsprof = obsprof[xx]
 
     if np.any(np.isnan(obsprof)):
         raise NotImplementedError('Needed to replace values outside the altitude range of the prior')
@@ -1032,10 +1057,11 @@ def filter_obs_ggg2019(obsz, obsprof, prior_alts, prior, obsfile):
 def force_prior_ggg2019(alts, prior, obs_prof_vmr_levels, obsfile):
     _, obs_header = butils.read_atm_file(obsfile)
 
-    aircraft = obs_header['aircraft_info'].lower()
+    info_key = _find_key(obs_header, 'info$')
+    aircraft = obs_header[info_key].lower()
     gas = _get_atm_gas(obsfile).lower()
 
-    if aircraft == 'aircore' and gas == 'co2':
+    if 'aircore' in aircraft:
         # Paul trusts the priors more than aircore above 20-22 km.
         xx = alts >= 21
     elif 'radiosonde' in aircraft and gas == 'h2o':
