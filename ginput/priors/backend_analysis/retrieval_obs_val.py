@@ -816,32 +816,20 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None
     if vmralts[0] > 0:
         raise NotImplementedError('Expected the bottom level of the .vmr profiles to be at altitude 0.')
 
-    obsz, obsprof, obsfloor, obsceil = _load_obs_profile(obsfile, limit_below_ceil=False)
+    # if using the adjust_to_overworld logic, then we only want the real obs. data, not any of the old prior that was
+    # appended to the top of the profile before
+    obsz, obsprof, obsfloor, obsceil = _load_obs_profile(obsfile, limit_below_ceil=adjust_to_overworld)
     zz_vmr = vmralts <= obsceil
-    zz_obs = obsz <= obsceil
 
-    # check that the obs. profiles go past the next .vmr level above the ceiling - this is to allow us to properly
-    # handle the last .vmr level below the ceiling. If the obs. don't go that high, it's probably because we got
-    # obs files that didn't have an old stratosphere appended to the top. In that case, what we'll do is add a bunch of
-    # altitude levels that we can then put the prior values into. We'll use the average level spacing of the last 10
-    # levels to decide how fine a grid to make
-    i_ceil = np.flatnonzero(zz_vmr)[-1]
-    if np.all(obsz < vmralts[i_ceil + 1]):
-        last_obsz = np.nanmax(obsz)
-        target_alt = vmralts[i_ceil + 2]
-        obs_spacing = np.diff(obsz)
-        if np.any(obs_spacing < 0):
-            raise NotImplementedError('Obs. data is not monotonically ascending')
-        # If the grid is not monotonically ascending, the this will be more difficult
-        obs_spacing = np.abs(np.nanmean(obs_spacing[-10:]))
-        extra_obsz = np.arange(last_obsz, target_alt, obs_spacing)
-        # sort_inds = np.argsort(obsz)  #  can use this if there's a case where the profile is read in upside down
-        obsz = np.concatenate([obsz, extra_obsz])
-        obsprof = np.concatenate([obsprof, np.full_like(extra_obsz, np.nan)])
+    if not adjust_to_overworld:
+        # adjust_to_overworld means that we extend the top obs. bin to the met. tropopause then linearly interpolating
+        # in theta-space between the trop. and 380 K. This gets messed up if we allow the top obs. bin to include some
+        # of the prior, because that will change the value that gets extrapolated. On the other hand, if we're appending
+        # the new priors right to the top of the obs. profile, then it does make sense to fill out the top bin with
+        # prior data to make a smooth transition.
+        obsz, obsprof = _blend_top_weighted_bin(obsz=obsz, obsprof=obsprof, obsceil=obsceil,
+                                                vmralts=vmralts, vmrprof=vmrprof, zz_vmr=zz_vmr)
 
-    # Replace observations above the ceiling with the .vmr profiles, we'll use this to handle the last level below
-    # the ceiling.
-    obsprof[~zz_obs] = np.interp(obsz[~zz_obs], vmralts, vmrprof)
     binned_prof = np.full([zz_vmr.sum()], np.nan)
 
     for i in np.flatnonzero(zz_vmr):
@@ -857,10 +845,15 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None
             in_layer = (obsz >= vmralts[i-1]) & (obsz < vmralts[i])
             weights[in_layer] = (obsz[in_layer] - vmralts[i-1])/zdiff
 
-        # All layers have observations above them, even the last .vmr level below the ceiling. For that level, we needed
-        # to be careful that the observed profiles extend the whole way to the next .vmr level, even though the flight
-        # ceiling is below the next .vmr level. To handle that, we already appended the .vmr prior profile to the
-        # observed profile at the vertical resolution of the observed profile.
+        # The top bin can be handled by this code whether or not adjust_to_overworld is set, but the result will be
+        # different:
+        #   * if adjust_to_overworld is False, then there will be "observations" extending at least to the next bin
+        #     above the obs. ceiling. Some of these will be from the prior, but the will be spaced out so that they are
+        #     on the same z-grid as the obs. The weighted average will then include some amount of the prior, depending
+        #     on how much of the inter-level space needed prior data. This ensures a smooth transition to the prior.
+        #   * if adjust_to_overworld is True, then the will be no observations above the ceiling. The last bin below the
+        #     ceiling will potentially have fewer points than the others, but it will represent only observations and
+        #     so can be extended to the tropopause.
         zdiff = vmralts[i+1] - vmralts[i]
         in_layer = (obsz >= vmralts[i]) & (obsz < vmralts[i+1])
         weights[in_layer] = (vmralts[i+1] - obsz[in_layer])/zdiff
@@ -893,6 +886,35 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None
         combined_prof[xx_prior] = vmrprof[xx_prior]
 
     return combined_prof, obsceil, adj_flag
+
+
+def _blend_top_weighted_bin(obsz, obsceil, obsprof, vmralts, vmrprof, zz_vmr):
+    zz_obs = obsz <= obsceil
+
+    # check that the obs. profiles go past the next .vmr level above the ceiling - this is to allow us to properly
+    # handle the last .vmr level below the ceiling. If the obs. don't go that high, it's probably because we got
+    # obs files that didn't have an old stratosphere appended to the top. In that case, what we'll do is add a bunch of
+    # altitude levels that we can then put the prior values into. We'll use the average level spacing of the last 10
+    # levels to decide how fine a grid to make
+    i_ceil = np.flatnonzero(zz_vmr)[-1]
+    if np.all(obsz < vmralts[i_ceil + 1]):
+        last_obsz = np.nanmax(obsz)
+        target_alt = vmralts[i_ceil + 2]
+        obs_spacing = np.diff(obsz)
+        if np.any(obs_spacing < 0):
+            raise NotImplementedError('Obs. data is not monotonically ascending')
+        # If the grid is not monotonically ascending, this will not work, however the _load_obs_profile function ensures
+        # that it is.
+        obs_spacing = np.abs(np.nanmean(obs_spacing[-10:]))
+        extra_obsz = np.arange(last_obsz, target_alt, obs_spacing)
+        # sort_inds = np.argsort(obsz)  #  can use this if there's a case where the profile is read in upside down
+        obsz = np.concatenate([obsz, extra_obsz])
+        obsprof = np.concatenate([obsprof, np.full_like(extra_obsz, np.nan)])
+
+    # Replace observations above the ceiling with the .vmr profiles, we'll use this to handle the last level below
+    # the ceiling.
+    obsprof[~zz_obs] = np.interp(obsz[~zz_obs], vmralts, vmrprof)
+    return obsprof
 
 
 def _adjust_prof_to_overworld(prof_alts, prof, prof_theta, tropopause_alt, obs_ceiling):
