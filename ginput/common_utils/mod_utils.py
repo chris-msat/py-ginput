@@ -541,6 +541,11 @@ def write_map_file(map_file, site_lat, trop_eqlat, prof_ref_lat, surface_alt, tr
                 mapf.write('\n')
 
 
+def vmr_output_subdir(top_dir, site_abbrev, product='fpit', slant=False):
+    path_dir = 'vmrs-slant' if slant else 'vmrs-vertical'
+    return os.path.join(top_dir, product, site_abbrev, path_dir)
+
+
 def vmr_file_name(obs_date, lon, lat, keep_latlon_prec=False, date_fmt='%Y%m%d%H', in_utc=True):
     """
     Construct the standard filename for a .vmr file produced by this code
@@ -2395,11 +2400,17 @@ def check_site_lat_lon_alt(abbrev, lat=None, lon=None, alt=None):
         return val, len(val)
 
     are_none = [x is None for x in (lat, lon, alt)]
+    abb_tuple, _ = to_tuple(abbrev)
     if all(are_none):
-        if abbrev not in site_dict:
-            raise ValueError('Site abbreviation not a predefined TCCON site, must give lat, lon, alt')
+        if len(abb_tuple) == 1 and abb_tuple[0] == 'all':
+            pass
+        elif any(abb not in site_dict for abb in abb_tuple):
+            raise ValueError('One or more site abbreviation not a predefined TCCON site, must give lat, lon, alt')
     elif any(are_none):
-        raise ValueError('If any of lat, lon, or alt are given, all must be given')
+        if len(abb_tuple) == 1 and abb_tuple[0] == 'all':
+            raise ValueError('Running all sites is incompatible with giving custom lat/lons')
+        else:
+            raise ValueError('If any of lat, lon, or alt are given, all must be given')
 
     vals = dict()
     n = dict()

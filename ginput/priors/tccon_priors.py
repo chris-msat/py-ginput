@@ -2815,7 +2815,8 @@ def generate_full_tccon_vmr_file(mod_data, utc_offsets, save_dir, std_vmr_file=N
 
 
 def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='xx', write_maps=False,
-                                 write_vmrs=False, gas_name_order=None, keep_latlon_prec=False, **prior_kwargs):
+                                 write_vmrs=False, gas_name_order=None, keep_latlon_prec=False, flat_outdir=True,
+                                 **prior_kwargs):
     """
     Generate multiple TCCON priors or a file containing multiple gas concentrations
 
@@ -2955,7 +2956,13 @@ def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='x
         if write_vmrs:
             vmr_name = mod_utils.vmr_file_name(obs_date=site_date, lon=site_lon, lat=site_lat,
                                                keep_latlon_prec=keep_latlon_prec)
-            vmr_name = os.path.join(vmrs_dir, vmr_name)
+            if flat_outdir:
+                vmr_name = os.path.join(vmrs_dir, vmr_name)
+            else:
+                this_vmr_dir = mod_utils.vmr_output_subdir(vmrs_dir, site_abbrevs[iprofile])
+                if not os.path.exists(this_vmr_dir):
+                    os.makedirs(this_vmr_dir)
+                vmr_name = os.path.join(this_vmr_dir, vmr_name)
             mod_utils.write_vmr_file(vmr_name, tropopause_alt=map_constants['tropopause_alt'],
                                      profile_date=site_date, profile_lat=site_lat,
                                      profile_alt=profile_dict['Height'], profile_gases=vmr_gases,

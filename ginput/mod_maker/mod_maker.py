@@ -1604,7 +1604,7 @@ def mod_maker_new(start_date=None, end_date=None, func_dict=None, GEOS_path=None
     if lat is not None: # a custom location was given
         site_abbrv = 'xx' if site_abbrv is None else site_abbrv
         locations = {site_abbrv:{'name':'custom site','loc':'custom loc','lat':lat,'lon':lon,'alt':alt}}
-    elif site_abbrv: # if not custom location is given, but a site abbreviation is given, just do that one site
+    elif site_abbrv and site_abbrv != 'all': # if not custom location is given, but a site abbreviation is given, just do that one site
         locations = {site_abbrv:locations[site_abbrv]}
 
     if chem_path is None:
