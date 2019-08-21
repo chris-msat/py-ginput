@@ -1014,6 +1014,46 @@ def iter_mod_dirs(mod_top_dir, path=None, check_if_exists=False):
             yield fullpath
 
 
+def extract_mod_site_abbrevs(mod_files, default='xx'):
+    """
+    Extract the site abbreviations from .mod file paths
+
+    The .mod files no longer include the site abbreviation anywhere in the file name or header, so we need to extract
+    those from the directory paths. This function assumes paths of the format ".../abbr/<something>/*.mod", i.e. that
+    there are are least three levels (including the .mod file) and that the third from the end is the site abbreviation.
+
+    For each path, if (a) there are not three directory levels, (b) the third part from the end is not a two-letter
+    name, or (c) if it is a dictionary, this returns the default abbreviation.
+
+    :param mod_files: a single path to a .mod file, or a list of .mod files
+    :type mod_files: str or list(str)
+
+    :param default: the default site abbreviation to return if cannot find an abbreviation
+    :type default: str
+
+    :return: a single site abbreviation if ``mod_files`` is a string, a tuple of abbreviations otherwise.
+    :rtype: str or tuple(str)
+    """
+    def extract_single(modf):
+        if isinstance(modf, dict):
+            return default
+        elif not isinstance(modf, str):
+            raise TypeError('Expected string or dictionary for each mod file')
+
+        fileparts = modf.split(os.sep)
+        if len(fileparts) < 3:
+            return default
+        elif not re.match(r'[a-z]{2}', fileparts[-3]):
+            return default
+        else:
+            return fileparts[-3]
+
+    if isinstance(mod_files, str):
+        return extract_single(mod_files)
+    else:
+        return tuple([extract_single(modf) for modf in mod_files])
+
+
 def iter_mod_files(mod_top_dir, include_slant=False):
     """
     Iterate over available .mod files.

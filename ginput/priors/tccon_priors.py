@@ -2765,7 +2765,7 @@ def _get_std_vmr_file(std_vmr_file):
 
 
 def generate_full_tccon_vmr_file(mod_data, utc_offsets, save_dir, std_vmr_file=None, site_abbrevs='xx',
-                                 keep_latlon_prec=False, **kwargs):
+                                 keep_latlon_prec=False, use_existing_luts=False, **kwargs):
     """
     Generate a .vmr file with all the gases required by TCCON (both retrieved and secondary).
 
@@ -2796,6 +2796,11 @@ def generate_full_tccon_vmr_file(mod_data, utc_offsets, save_dir, std_vmr_file=N
      Set this to ``True`` to keep 2 decimal places of precision.
     :type keep_latlon_prec: bool
 
+    :param use_existing_luts: set to ``True`` to avoid recalculating stratospheric LUTs for the MLO/SMO records. Doing
+     so will make it much faster for this to start, but risks using an out-of-date LUT that was generated with old code
+     or input data.
+    :type use_existing_luts: bool
+
     :return: none, writes .vmr files
     :raises GGGPathError: if ``$GGGPATH`` is not defined and it needs to find the standard file or it cannot find the
      standard file in the expected place.
@@ -2808,7 +2813,24 @@ def generate_full_tccon_vmr_file(mod_data, utc_offsets, save_dir, std_vmr_file=N
         std_vmr_gases.remove('Altitude')
     else:
         std_vmr_gases = list(gas_records.keys())
-    species = [gas_records[gas.lower()]() if gas.lower() in gas_records else MidlatTraceGasRecord(gas, vmr_file=std_vmr_file) for gas in std_vmr_gases]
+
+    species = []
+    if use_existing_luts:
+        mlo_smo_kwargs = {'recalculate_strat_lut': False, 'save_strat': False}
+    else:
+        mlo_smo_kwargs = dict()
+
+    for gas in std_vmr_gases:
+        if gas.lower() not in gas_records:
+            species.append(MidlatTraceGasRecord(gas, vmr_file=std_vmr_file))
+            continue
+
+        rec = gas_records[gas.lower()]
+        if issubclass(rec, MloSmoTraceGasRecord):
+            species.append(rec(**mlo_smo_kwargs))
+        else:
+            species.append(rec())
+
     generate_tccon_priors_driver(mod_data=mod_data, utc_offsets=utc_offsets, species=species, site_abbrevs=site_abbrevs,
                                  write_vmrs=save_dir, keep_latlon_prec=keep_latlon_prec, gas_name_order=std_vmr_gases,
                                  **kwargs)
@@ -2861,6 +2883,8 @@ def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='x
     :return:
     """
     num_profiles = max(np.size(inpt) for inpt in [mod_data, utc_offsets, site_abbrevs])
+    if site_abbrevs == 'all':
+        site_abbrevs = mod_utils.extract_mod_site_abbrevs(mod_data)
 
     def check_input(inpt, name, allowed_types):
         type_err_msg = '{} must be either a collection or single instance of one of the types: {}'.format(
