@@ -105,7 +105,7 @@ from ..common_utils.mod_utils import gravity, check_site_lat_lon_alt
 from ..common_utils.mod_constants import ratio_molec_mass as rmm, p_ussa, t_ussa, z_ussa, mass_dry_air
 from ..common_utils.ggg_logging import logger
 from .slantify import * # code to make slant paths
-from .tccon_sites import site_dict,tccon_site_info # dictionary to store lat/lon/alt of tccon sites
+from .tccon_sites import site_dict, tccon_site_info, tccon_site_info_for_date
 
 
 ####################
@@ -1611,8 +1611,6 @@ def mod_maker_new(start_date=None, end_date=None, func_dict=None, GEOS_path=None
         # Assume that the chemistry files are in the same folder as the met files
         chem_path = GEOS_path
 
-    site_dict = tccon_site_info(locations)
-
     if save_path:
         mod_path = os.path.join(save_path,'fpit')
     else: # if a destination path is not given, try saving MOD files in GGGPATH/models/gnd/fpit
@@ -1643,12 +1641,13 @@ def mod_maker_new(start_date=None, end_date=None, func_dict=None, GEOS_path=None
             raise RuntimeError('Dates for the chemistry files do not match the dates for the met file. Something '
                                'went wrong when looking for these files.')
 
-    nsite = len(site_dict.keys())
+    nsite = len(locations)
 
     start = time.time()
     mod_dicts = dict()
 
     for date_ID, UTC_date in enumerate(select_dates):
+        site_dict = tccon_site_info_for_date(UTC_date, site_dict_in=locations)
         mod_dicts[UTC_date] = dict()
         start_it = time.time()
 
