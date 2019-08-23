@@ -233,7 +233,7 @@ def mm_helper(kwargs):
     mm_helper_internal(**kwargs)
 
 
-def make_priors(prior_dir, mod_dir, gas_name, acdates, aclons, aclats, nprocs=0):
+def make_priors(prior_dir, mod_dir, gas_name, acdates, aclons, aclats, zgrid_file=None, nprocs=0):
     print('Will save to', prior_dir)
     # Find all the .mod files, get unique date/lat/lon (should be 8 files per)
     # and make an output directory for that
@@ -289,7 +289,7 @@ def make_priors(prior_dir, mod_dir, gas_name, acdates, aclons, aclats, nprocs=0)
     for k, files in grouped_mod_files.items():
         this_out_dir = os.path.join(prior_dir, k)
         for f in files:
-            these_args = (f, this_out_dir, gas_rec)
+            these_args = (f, this_out_dir, gas_rec, zgrid_file)
             prior_args.append(these_args)
 
     if nprocs == 0:
@@ -300,15 +300,16 @@ def make_priors(prior_dir, mod_dir, gas_name, acdates, aclons, aclats, nprocs=0)
             pool.starmap(_prior_helper, prior_args)
 
 
-def _prior_helper(ph_f, ph_out_dir, gas_rec):
+def _prior_helper(ph_f, ph_out_dir, gas_rec, zgrid=None):
     _fbase = os.path.basename(ph_f)
     print('Processing {}, saving to {}'.format(_fbase, ph_out_dir))
     tccon_priors.generate_single_tccon_prior(ph_f, tdel(hours=0), gas_rec, write_map=ph_out_dir,
-                                             use_eqlat_strat=True)
+                                             use_eqlat_strat=True, zgrid=zgrid)
 
 
 def driver(check_geos, download, makemod, makepriors, site_file, geos_top_dir, geos_chm_top_dir,
-           mod_top_dir, prior_top_dir, gas_name, nprocs, dl_file_types, dl_levels):
+           mod_top_dir, prior_top_dir, gas_name, nprocs, dl_file_types, dl_levels, integral_file=None,
+           **_):
     if dl_file_types is None:
         dl_file_types = ('met', 'met', 'chm')
     if dl_levels is None:
@@ -332,7 +333,7 @@ def driver(check_geos, download, makemod, makepriors, site_file, geos_top_dir, g
 
     if makepriors:
         make_priors(prior_top_dir, make_full_mod_dir(mod_top_dir, 'fpit'), gas_name,
-                    acdates=acdates, aclons=aclons, aclats=aclats, nprocs=nprocs)
+                    acdates=acdates, aclons=aclons, aclats=aclats, nprocs=nprocs, zgrid_file=integral_file)
     else:
         print('Not making priors')
 

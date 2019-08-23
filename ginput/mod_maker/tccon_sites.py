@@ -99,7 +99,6 @@ def tccon_site_info_for_date(date, site_abbrv=None, site_dict_in=None, use_close
     for site, info in new_site_dict.items():
         # If a site has the time spans defined, then we need to find the one that has the date we're interested in
         if 'time_spans' in info:
-            import pdb; pdb.set_trace()
             time_spans = info.pop('time_spans')
             found_time = False
 
