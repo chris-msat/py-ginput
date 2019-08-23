@@ -1993,7 +1993,8 @@ def _age_of_air_legacy(lat, z, ztrop, ref_lat=45.0, ggg2014=False):
 
 def _waugh_age_of_air(lat, z, ztrop, ref_lat=0.0):
     def age_internal(lat):
-        return np.interp(lat, [-30.0, 30.0], [.75, -.75])
+        f = interp1d([-31., -30., 30., 31.], [1.5, 1.5, 0., 0.], kind='cubic', bounds_error=False, fill_value=(1.5, 0.))
+        return f(lat)
 
     age_surf = age_internal(lat)
     age_ref = age_internal(ref_lat)
@@ -2043,7 +2044,7 @@ def seasonal_cycle_factor(lat, z, ztrop, fyr, species, ref_lat=45.0, aoa_method=
     if species.gas_seas_cyc_coeff is None:
         raise TypeError('The species record ({}) does not define a seasonal cycle coefficient')
 
-    aoa = age_of_air(lat, z, ztrop, ref_lat=ref_lat, method=aoa_method)
+    aoa = age_of_air(lat, z, ztrop, ref_lat=ref_lat, method=aoa_method)/4
     if species.gas_name.lower() == 'co2':
         sv = np.sin(2*np.pi * (fyr - 0.834 - aoa))
         svnl = sv + 1.80 * np.exp(-((lat - 74)/41)**2)*(0.5 - sv**2)
