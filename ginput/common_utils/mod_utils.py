@@ -31,6 +31,7 @@ from .mod_constants import days_per_year
 from .ggg_logging import logger
 from ..mod_maker.tccon_sites import site_dict
 
+_default_aoa = 'waugh-simple'
 _std_model_pres_levels = np.array([1000.0, 975.0, 950.0, 925.0, 900.0, 875.0, 850.0, 825.0, 800.0, 775.0, 750.0, 725.0,
                                    700.0, 650.0, 600.0, 550.0, 500.0, 450.0, 400.0, 350.0, 300.0, 250.0, 200.0, 150.0,
                                    100.0, 70.0, 50.0, 40.0, 30.0, 20.0, 10.0, 7.0, 5.0, 4.0, 3.0, 2.0, 1.0, 0.7, 0.5,
@@ -1931,7 +1932,16 @@ def get_ussa_for_pres(pres):
     return t, z
 
 
-def age_of_air(lat, z, ztrop, ref_lat=45.0):
+def age_of_air(lat, z, ztrop, ref_lat=45.0, method=_default_aoa):
+    if method == 'waugh-simple':
+        return _waugh_age_of_air(lat=lat, z=z, ztrop=ztrop, ref_lat=ref_lat)
+    elif method in ('ggg2014', 'ggg2014-scaled'):
+        return _age_of_air_legacy(lat=lat, z=z, ztrop=ztrop, ref_lat=ref_lat, ggg2014=method == 'ggg2014')
+    else:
+        raise ValueError('Method "{}" is not valid'.format(method))
+
+
+def _age_of_air_legacy(lat, z, ztrop, ref_lat=45.0, ggg2014=False):
     """
     Calculate age of air using a function form from GGG 2014.
 
@@ -1949,6 +1959,10 @@ def age_of_air(lat, z, ztrop, ref_lat=45.0):
      was chosen as the default as the center of the northern hemisphere, where most anthropogenic emissions are.
     :type ref_lat: float
 
+    :param ggg2014: use the parameterization exactly as it was in GGG2014, without scaling to match Fig. 7 of Waugh et
+     al. 2013.
+    :type ggg2014: bool
+
     :return: age of air, in years, as a numpy array
     :rtype: :class:`numpy.ndarray`
     """
@@ -1965,10 +1979,39 @@ def age_of_air(lat, z, ztrop, ref_lat=45.0):
     # this term in the stratosphere.
     extra_term = 7.0 * (z[z > ztrop]-ztrop)/z[z > ztrop]
     aoa[z > ztrop] += extra_term
+
+    if not ggg2014:
+        # Compared to Waugh et al. 2013 (doi: 10.1002/jgrd.50848), the above age parameterization is underestimated.
+        # Generally, it gives ~0.6 year difference between 40N and 40S, but Waugh et al. shows about 1.75 (Fig. 7c).
+        # Looking at that panel, we need to scale up the northern hemisphere by 4 and the southern hemisphere by ~3.25
+        # to match the profiles. This interpolation will return 3.25 south of 20S, 4 north of 0, and smoothly blend in
+        # between.
+        aoa *= np.interp(lat, [-20.0, 0.0], [3.25, 4.0])
+
     return aoa
 
 
-def seasonal_cycle_factor(lat, z, ztrop, fyr, species, ref_lat=45.0):
+def _waugh_age_of_air(lat, z, ztrop, ref_lat=0.0):
+    def age_internal(lat):
+        return np.interp(lat, [-30.0, 30.0], [.75, -.75])
+
+    age_surf = age_internal(lat)
+    age_ref = age_internal(ref_lat)
+
+    # From Waugh et al. 2013 (doi: 10.1002/jgrd.50848) there's really no vertical gradient in the southern
+    # hemisphere. Add a smooth decay of the tropical gradient so that by 30S there is no gradient (Fig. 6).
+    # The NH looks more complicated; between 20 and 30 N it looks like the gradient gets larger (but is still linear)
+    # then at higher latitudes gets flat below 6-8 km with a curve over from descending stratospheric air. Capturing
+    # that curve is more complicated that we need to be right now.
+    #
+    # This interpolation will make the age gradient be ~2 months between the surface and tropopause in the tropics
+    # (which is consistent with our assumptions for the stratosphere), then smoothly decay to zero outside that.
+    tropics_z_factor = 2.0 / 12.0 * z / ztrop
+    z_factor = np.interp(np.abs(lat), [20., 30.], [1.0, 0.0]) * tropics_z_factor
+    return age_surf - age_ref + z_factor
+
+
+def seasonal_cycle_factor(lat, z, ztrop, fyr, species, ref_lat=45.0, aoa_method=_default_aoa):
     """
     Calculate a factor to multiply a concentration by to account for the seasonal cycle.
 
@@ -2000,9 +2043,9 @@ def seasonal_cycle_factor(lat, z, ztrop, fyr, species, ref_lat=45.0):
     if species.gas_seas_cyc_coeff is None:
         raise TypeError('The species record ({}) does not define a seasonal cycle coefficient')
 
-    aoa = age_of_air(lat, z, ztrop, ref_lat=ref_lat)
+    aoa = age_of_air(lat, z, ztrop, ref_lat=ref_lat, method=aoa_method)
     if species.gas_name.lower() == 'co2':
-        sv = np.sin(2*np.pi *(fyr - 0.834 - aoa))
+        sv = np.sin(2*np.pi * (fyr - 0.834 - aoa))
         svnl = sv + 1.80 * np.exp(-((lat - 74)/41)**2)*(0.5 - sv**2)
         sca = svnl * np.exp(-aoa/0.20)*(1 + 1.33*np.exp(-((lat-76)/48)**2) * (z+6)/(z+1.4))
     else:
