@@ -1,5 +1,6 @@
 from __future__ import print_function, division
 import datetime as dt
+from matplotlib import pyplot as plt
 import numpy as np
 import os
 import unittest
@@ -29,7 +30,8 @@ class TestModMaker(unittest.TestCase):
         # recalculates them and either verifies them against the saved LUTs or runs the priors with them.
         mod_files = [f for f in test_utils.iter_mod_file_pairs(test_utils.mod_output_dir, None)]
         tccon_priors.generate_full_tccon_vmr_file(mod_files, dt.timedelta(hours=0), save_dir=test_utils.vmr_output_dir,
-                                                  std_vmr_file=test_utils.std_vmr_file, site_abbrevs=test_utils.test_site)
+                                                  std_vmr_file=test_utils.std_vmr_file, site_abbrevs=test_utils.test_site,
+                                                  )
 
     def test_mod_files(self):
         self._comparison_helper(test_utils.iter_mod_file_pairs, mod_utils.read_mod_file,
@@ -55,10 +57,79 @@ class TestModMaker(unittest.TestCase):
                             # Not all variables with be float arrays. If np.isclose() can't coerce the data to a numeric
                             # type, it'll raise a TypeError and we fall back on the equality test
                             test_result = np.all(variable_data == this_new_data)
+                        if not test_result:
+                            try:
+                                self._plot_helper(check_data=check_data, new_data=new_data, category=category_name,
+                                                  variable=variable_name, new_file=new_file)
+                            except Exception as err:
+                                print('Could not generate plot for {} {}, error was {}'.format(new_file, variable_name, err.args[0]))
                         self.assertTrue(test_result, msg='"{variable}" in {filename} does not match the check data'
                                         .format(variable=variable_name, filename=new_file))
 
-                    #print('"{}" in "{}" OK'.format(variable_name, new_file))
+    def _plot_helper(self, check_data, new_data, category, variable, new_file):
+        def plotting_internal(axs, oldz, newz, oldx, newx, ypres):
+            axs[0].plot(oldx, oldz, marker='+', label='Original')
+            axs[0].plot(newx, newz, marker='x', linestyle='--', label='New')
+            axs[0].legend()
+            axs[0].set_xlabel(variable)
+
+            if ypres:
+                axs[0].set_ylabel('Pressure (hPa)')
+                axs[0].set_yscale('log')
+                axs[0].invert_yaxis()
+            else:
+                axs[0].set_ylabel('Altitude (km)')
+
+            if ypres:
+                new_on_old = mod_utils.mod_interpolation_new(oldz, np.flipud(newz), np.flipud(newx), interp_mode='log-log')
+                old_on_new = mod_utils.mod_interpolation_new(newz, np.flipud(oldz), np.flipud(oldx), interp_mode='log-log')
+            else:
+                new_on_old = mod_utils.mod_interpolation_new(oldz, newz, newx, interp_mode='linear')
+                old_on_new = mod_utils.mod_interpolation_new(newz, oldz, oldx, interp_mode='linear')
+
+            axs[1].plot(new_on_old - oldx, oldz, marker='+', label='On old z')
+            axs[1].plot(newx - old_on_new, newz, marker='x', linestyle='--', label='On new z')
+            axs[1].legend()
+            axs[1].set_xlabel(r'$\Delta$ {}'.format(variable))
+
+            # Shared y-axes will both be formatted together
+            if ypres:
+                axs[1].set_yscale('log')
+                axs[1].invert_yaxis()
+
+        if category != 'profile':
+            return
+
+        zvar = 'Height' if 'Height' in check_data[category] else 'altitude'
+        oldalt = check_data[category][zvar]
+        newalt = new_data[category][zvar]
+        oldval = check_data[category][variable]
+        newval = new_data[category][variable]
+        try:
+            oldpres = check_data[category]['Pressure']
+            newpres = new_data[category]['Pressure']
+        except KeyError:
+            oldpres, newpres = None, None
+            include_pres = False
+            ny = 1
+        else:
+            include_pres = True
+            ny = 2
+
+        fig, all_axs = plt.subplots(ny, 2)
+        if include_pres:
+            plotting_internal(all_axs[0], oldalt, newalt, oldval, newval, False)
+            plotting_internal(all_axs[1], oldpres, newpres, oldval, newval, True)
+        else:
+            plotting_internal(all_axs, oldalt, newalt, oldval, newval, False)
+
+        fig.set_size_inches(12, 6*ny)
+
+        datestr = mod_utils.find_datetime_substring(new_file)
+        savename = '{var}_{date}Z.pdf'.format(var=variable, date=datestr)
+        savename = os.path.join(test_utils.test_plots_dir, savename)
+        plt.savefig(savename)
+        plt.close(fig)
 
 
 if __name__ == '__main__':
