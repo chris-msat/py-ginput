@@ -253,15 +253,23 @@ def py_map_file_subpath(lon, lat, date_time):
     return _py_maps_file(np.abs(lon), _lon_ew(lon), np.abs(lat), _lat_ns(lat), date_time)
 
 
-def _py_maps_file(lon, ew, lat, ns, date_time):
+def _py_maps_file(lon, ew, lat, ns, date_time, latlon_uncertainty=False):
     # we need the extra round calls b/c in the list of dates/lats/lons, the lat/lons are rounded to 3 decimal places
     # which means that in rare cases the rounding to 2 decimal places in the map directory names is different
     # starting from 3 decimal places or unlimited, e.g. -21.43524898159509 vs -21.435 - the first rounds to -21.44,
     # the second to -21.43
     lon = round(lon, 3)
     lat = round(lat, 3)
-    subdir = '{ymd}_{lon:.2f}{ew}_{lat:.2f}{ns}'.format(ymd=date_time.strftime('%Y%m%d'), lon=lon, ew=ew,
-                                                        lat=lat, ns=ns)
+    lonstr = '{:.2f}'.format(lon)
+    latstr = '{:.2f}'.format(lat)
+    if not latlon_uncertainty:
+        subdir = '{ymd}_{lon}{ew}_{lat}{ns}'.format(ymd=date_time.strftime('%Y%m%d'), lon=lonstr, ew=ew,
+                                                    lat=latstr, ns=ns)
+    else:
+        # if requested allow the hundredths place of lat/lon to vary. This deals with cases where the hundredths place
+        # gets off by one by using single-character glob wildcards there
+        subdir = '{ymd}_{lon}?{ew}_{lat}?{ns}'.format(ymd=date_time.strftime('%Y%m%d'), lon=lonstr[:-1], ew=ew,
+                                                      lat=latstr[:-1], ns=ns)
     # the new files are given every three hours. Need to find the closest one in time
     hrs = np.arange(0, 24, 3)
     i_hr = np.argmin(np.abs(hrs - date_time.hour))
@@ -403,7 +411,9 @@ def iter_matched_data(atm_dir, map_dir, years=None, months=None, skip_missing_ma
                 missing += 1
                 continue
             else:
-                raise IOError('Could not find {} corresponding to atm file {}'.format(map_file, atmf))
+                #raise IOError('Could not find {} corresponding to atm file {}'.format(map_file, atmf))
+                map_file = find_map_for_obs(atmf, map_dir, check_file_exists=True, map_file_fxn=map_file_fxn,
+                                            allow_latlon_error=True)
         if ret_filenames:
             yield atmf, map_file
         else:
@@ -443,7 +453,7 @@ def find_map_for_obs_by_type(obs_file, data_type, prof_type, data_root=None, che
     return find_map_for_obs(obs_file, map_dir, check_file_exists=check_file_exists)
 
 
-def find_map_for_obs(obs_file, map_dir, check_file_exists=True, map_file_fxn=None):
+def find_map_for_obs(obs_file, map_dir, check_file_exists=True, map_file_fxn=None, allow_latlon_error=True):
     """
     Find a .map file that corresponds to a given observation .atm file
 
@@ -474,7 +484,22 @@ def find_map_for_obs(obs_file, map_dir, check_file_exists=True, map_file_fxn=Non
 
     map_file = os.path.join(map_dir, map_file_fxn(lon, ew, lat, ns, date_time))
     if check_file_exists and not os.path.isfile(map_file):
-        raise IOError('Could not find {} corresponding to atm file {}'.format(map_file, obs_file))
+        file_missing = True
+        if allow_latlon_error:
+            try:
+                map_file_pattern = os.path.join(map_dir, map_file_fxn(lon, ew, lat, ns, date_time, latlon_uncertainty=True))
+            except TypeError:
+                pass
+            else:
+                possible_map_files = glob(map_file_pattern)
+                if len(possible_map_files) == 1:
+                    map_file = possible_map_files[0]
+                    file_missing = False
+                elif len(possible_map_files) > 1:
+                    raise IOError('Multiple .map files matched "{}" corresponding to atm file {}'.format(map_file_pattern, obs_file))
+
+        if file_missing:
+            raise IOError('Could not find {} corresponding to atm file {}'.format(map_file, obs_file))
 
     return map_file
 
