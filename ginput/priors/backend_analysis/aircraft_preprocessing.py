@@ -291,5 +291,5 @@ def write_date_lat_lon_list(atm_dir, list_file):
             lon = header_info['TCCON_site_longitude_E']
             lat = header_info['TCCON_site_latitude_N']
 
-            line = '{date},{lat:.3f},{lon:.3f}\n'.format(date=date.strftime('%Y-%m-%d'), lat=lat, lon=lon)
+            line = '{date},{lat:.9f},{lon:.9f}\n'.format(date=date.strftime('%Y-%m-%d'), lat=lat, lon=lon)
             wobj.write(line)
