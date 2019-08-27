@@ -216,6 +216,10 @@ def make_mod_files(acdates, aclons, aclats, geos_dir, out_dir, chem_dir=None, np
         for kwargs in mm_args.values():
             mm_helper(kwargs)
     else:
+        # Convert this so that each value is a list with one element: the args dict. This way, starmap will expand
+        # the list into a single argument for mm_helper, which then expands the dict into a set of keyword arguments
+        # for mm_helper_internal
+        mm_args = {k: [v] for k, v in mm_args.items()}
         print('Making .mod file in parallel mode with {} processors'.format(nprocs))
         with Pool(processes=nprocs) as pool:
             pool.starmap(mm_helper, mm_args.values())
@@ -249,7 +253,7 @@ def make_priors(prior_dir, mod_dir, gas_name, acdates, aclons, aclats, zgrid_fil
         latstr = mod_utils.find_lat_substring(fbase)
         datestr = mod_utils.find_datetime_substring(fbase)
 
-        utc_datetime = dtime.strptime(datestr, '%Y%m%d_%H%M')
+        utc_datetime = dtime.strptime(datestr, '%Y%m%d%H')
         utc_date = utc_datetime.date()
         utc_datestr = utc_datetime.date().strftime('%Y%m%d')
         lon = mod_utils.format_lon(lonstr)
