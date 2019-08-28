@@ -1925,9 +1925,27 @@ class O3Record(TraceGasRecord):
         return prof_gas, dict()
 
 
+class HDORecord(TraceGasRecord):
+    _gas_name = 'hdo'
+    _gas_unit = 'mol/mol'
+    _gas_seas_cyc_coeff = None
+
+    def add_trop_prior(self, prof_gas, obs_date, obs_lat, mod_data, **kwargs):
+        import pdb; pdb.set_trace()
+        h2o_dmf = mod_data['profile']['H2O']
+        prof_gas[:] = h2o_dmf * 0.16 * (8.0 + np.log10(h2o_dmf))
+        return prof_gas, dict()
+
+    def add_strat_prior(self, prof_gas, retrieval_date, mod_data, **kwargs):
+        return prof_gas, dict()
+
+    def add_extra_column(self, prof_gas, retrieval_date, mod_data, **kwargs):
+        return prof_gas, dict()
+
+
 # Make the list of available gases' records
 gas_records = {r._gas_name: r for r in [CO2TropicsRecord, N2OTropicsRecord, CH4TropicsRecord, HFTropicsRecord,
-                                       CORecord, O3Record, H2ORecord]}
+                                        CORecord, O3Record, H2ORecord, HDORecord]}
 
 
 def regenerate_gas_strat_lut_files():
