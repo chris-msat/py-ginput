@@ -280,9 +280,6 @@ class MloSmoTraceGasRecord(TraceGasRecord):
     # The lifetime is used to account for chemical loss between emission and the prior location. Setting to infinity
     # will effectively disable this correction, since e^(-x/infinity) = 1.0.
     gas_trop_lifetime_yrs = np.inf
-    # The latitudinal corrections apply to the troposphere only. Give the northern and southern hemisphere correction
-    # as a dictionary with values in ppx/degree, the unit "ppx" will be ppm, ppb, etc., whatever the base record is in.
-    gas_lat_correction = {'nh': 0.0, 'sh': 0.0}
 
     months_avg_for_trend = 12
     age_spec_regions = ('tropics', 'midlat', 'vortex')
@@ -1296,9 +1293,9 @@ class MloSmoTraceGasRecord(TraceGasRecord):
         :param mod_data: the dictionary of data read in from the .mod file
         :type mod_data: dict
 
-        :param prior_data: a dictionary of data calculated for the prior, including the keys: "prof_gas" (the gas
-         profile, before adding the tropospheric part), "age_of_air" (the tropospheric age of air profile), "adj_zgrid"
-         (the adjusted altitude grid used for the tropospheric prior) and "z_trop" (the tropopause height).
+        :param prior_data: a dictionary of data calculated for the prior, including the keys: "age_of_air" (the 
+         tropospheric age of air profile), "adj_zgrid" (the adjusted altitude grid used for the tropospheric prior) and 
+         "z_trop" (the tropopause height).
         :type prior_data: dict
 
         :return: a float or float array to add to the prior profile to correct latitudinally-dependent biases in the
@@ -1775,7 +1772,7 @@ class CH4TropicsRecord(MloSmoTraceGasRecord):
 
         return fch4_lut_final
 
-    def lat_bias_correction(self, obs_date, obs_lat, mod_data):
+    def lat_bias_correction(self, obs_date, obs_lat, mod_data, prior_data):
         if obs_lat < 0:
             return 0.0
         else:
@@ -2304,7 +2301,7 @@ def add_trop_prior_standard(prof_gas, obs_date, obs_lat, gas_record, mod_data, r
     # Apply a correction to account for chemical loss between the emission and MLO/SMO measurement or between the
     # prior location and MLO/SMO. For some gases we also apply a latitudinal correction.
     lifetime_adj = np.exp(-air_age / gas_record.gas_trop_lifetime_yrs)
-    prior_data = {'prof_gas': prof_gas, 'age_of_air': prof_aoa, 'adj_zgrid': z_grid, 'z_trop': z_trop}
+    prior_data = {'age_of_air': air_age, 'adj_zgrid': z_grid[xx_trop], 'z_trop': z_trop}
     lat_correction = gas_record.lat_bias_correction(obs_date=obs_date, obs_lat=obs_lat, mod_data=mod_data,
                                                     prior_data=prior_data)
 
