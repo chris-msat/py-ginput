@@ -17,6 +17,11 @@ If the instrument has moved enough so that the rounded lat and lon is different,
 the longitudes must be given in the range [0-360]
 """
 
+
+class TCCONTimeSpanError(Exception):
+    pass
+
+
 site_dict = {
     'pa':{'name': 'Park Falls','loc':'Wisconsin, USA','lat':45.945,'lon':269.727,'alt':442},
     'oc':{'name': 'Lamont','loc':'Oklahoma, USA','lat':36.604,'lon':262.514,'alt':320},
@@ -71,6 +76,7 @@ def tccon_site_info(site_dict_in=None):
     site_dict_in = deepcopy(site_dict_in)
 
     for site in site_dict_in:
+        # If the site has different time spans, handle each one's longitude
         if 'time_spans' in site_dict_in[site].keys():
             for time_span in site_dict_in[site]['time_spans']:
                 if site_dict_in[site]['time_spans'][time_span]['lon']>180:
@@ -86,15 +92,52 @@ def tccon_site_info(site_dict_in=None):
     return OrderedDict(site_dict_in)
 
 
-def tccon_site_info_for_date(date, site_abbrv=None):
-    new_site_dict = tccon_site_info()
+def tccon_site_info_for_date(date, site_abbrv=None, site_dict_in=None, use_closest_in_time=True):
+    # Get the raw dictionary or ensure that the input has the lon_180 key.
+    new_site_dict = tccon_site_info() if site_dict_in is None else tccon_site_info(site_dict_in)
+
     for site, info in new_site_dict.items():
+        # If a site has the time spans defined, then we need to find the one that has the date we're interested in
         if 'time_spans' in info:
             time_spans = info.pop('time_spans')
+            found_time = False
+
+            # Loop through each time span. If we're in that span, add the span-specific information (usually lat/lon)
+            # to the main site info dict
+            first_date_range = None
+            last_date_range = None
             for date_range, values in time_spans.items():
                 if date_range[0] <= date < date_range[1]:
                     info.update(values)
+                    found_time = True
                     break
+                else:
+                    # Keep track of which date range is first and last so that if we need to find the closest in time
+                    # we can
+                    if first_date_range is None or first_date_range[0] > date_range[0]:
+                        first_date_range = date_range
+                    if last_date_range is None or last_date_range[1] < date_range[1]:
+                        last_date_range = date_range
+
+            # Could not find one of the predefined time spans that match. Need to find the closest one. For now, we're
+            # assuming that the time spans cover a continuous range (no inner gaps) and match if we're before or after
+            # the whole range spanned.
+            if not found_time:
+                if not use_closest_in_time:
+                    raise TCCONTimeSpanError('Could not find information for {} for {}'.format(site, date))
+
+                if date < first_date_range[0]:
+                    date_range = first_date_range
+                elif date > last_date_range[1]:
+                    date_range = last_date_range
+                else:
+                    raise NotImplementedError('The date requested ({date}) is outside the available dates '
+                                              '({first}-{last}) for {site}. This case is not yet implemented'
+                                              .format(date=date, first=first_date_range, last=last_date_range,
+                                                      site=site))
+
+                info.update(time_spans[date_range])
+
     if site_abbrv is None:
         return new_site_dict
     else:

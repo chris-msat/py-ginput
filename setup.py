@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 _mydir = os.path.dirname(__file__)
 
 setup(
-    name='GGG-Inputs',
+    name='GInput',
     desciption='Python code that creates the .mod and .vmr files used in GGG',
     author='Joshua Laughner, Sebastien Roche, Matt Kiel',
     author_email='jlaugh@caltech.edu',

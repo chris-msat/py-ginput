@@ -254,12 +254,6 @@ def py_map_file_subpath(lon, lat, date_time):
 
 
 def _py_maps_file(lon, ew, lat, ns, date_time):
-    # we need the extra round calls b/c in the list of dates/lats/lons, the lat/lons are rounded to 3 decimal places
-    # which means that in rare cases the rounding to 2 decimal places in the map directory names is different
-    # starting from 3 decimal places or unlimited, e.g. -21.43524898159509 vs -21.435 - the first rounds to -21.44,
-    # the second to -21.43
-    lon = round(lon, 3)
-    lat = round(lat, 3)
     subdir = '{ymd}_{lon:.2f}{ew}_{lat:.2f}{ns}'.format(ymd=date_time.strftime('%Y%m%d'), lon=lon, ew=ew,
                                                         lat=lat, ns=ns)
     # the new files are given every three hours. Need to find the closest one in time
@@ -267,7 +261,9 @@ def _py_maps_file(lon, ew, lat, ns, date_time):
     i_hr = np.argmin(np.abs(hrs - date_time.hour))
     hr = hrs[i_hr]
 
-    filename = 'xx{lat:.0f}{ns}_{ymd}_{hr:02d}00.map'.format(lat=lat, ns=ns, ymd=date_time.strftime('%Y%m%d'),
+    # need to round the latitude to 3 decimals here because that is what gets used to make the .map file name, since the
+    # latitude in the .mod file is rounded to 3 decimals.
+    filename = 'xx{lat:.0f}{ns}_{ymd}_{hr:02d}00.map'.format(lat=round(lat, 3), ns=ns, ymd=date_time.strftime('%Y%m%d'),
                                                              hr=hr)
     return os.path.join(subdir, filename)
 

@@ -22,6 +22,7 @@ output_data_dir = os.path.join(_mydir, 'test_output_data')
 mod_output_top_dir = os.path.join(output_data_dir, 'mod_files')
 mod_output_dir = os.path.join(mod_output_top_dir, 'fpit')
 vmr_output_dir = os.path.join(output_data_dir, 'vmr_files', 'fpit')
+test_plots_dir = os.path.join(_mydir, 'plots')
 
 test_date = dt.datetime(2018, 1, 1)
 test_site = 'oc'
@@ -147,7 +148,7 @@ def _iter_file_pairs(pattern, base_dir, test_dir):
         else:
             test_file = os.path.join(test_dir, os.path.basename(base_file))
             if not os.path.exists(test_file):
-                raise InputDataMismatchError('Could not find a test file corresponding to the base file {}'
-                                             .format(base_file))
+                raise InputDataMismatchError('Could not find a test file corresponding to the base file {}. Was '
+                                             'looking for {}.'.format(base_file, test_file))
             else:
                 yield base_file, test_file

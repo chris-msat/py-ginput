@@ -280,9 +280,6 @@ class MloSmoTraceGasRecord(TraceGasRecord):
     # The lifetime is used to account for chemical loss between emission and the prior location. Setting to infinity
     # will effectively disable this correction, since e^(-x/infinity) = 1.0.
     gas_trop_lifetime_yrs = np.inf
-    # The latitudinal corrections apply to the troposphere only. Give the northern and southern hemisphere correction
-    # as a dictionary with values in ppx/degree, the unit "ppx" will be ppm, ppb, etc., whatever the base record is in.
-    gas_lat_correction = {'nh': 0.0, 'sh': 0.0}
 
     months_avg_for_trend = 12
     age_spec_regions = ('tropics', 'midlat', 'vortex')
@@ -1283,6 +1280,30 @@ class MloSmoTraceGasRecord(TraceGasRecord):
         info_dict = {'latency': df.latency[ts]}
         return df.dmf_mean[ts], info_dict
 
+    def lat_bias_correction(self, obs_date, obs_lat, mod_data, prior_data):
+        """
+        Returns a latitudinal bias correction to add to the prior
+
+        :param obs_date: the date of the observation
+        :type obs_date: datetime-like
+
+        :param obs_lat: the latitude of the observation
+        :type obs_lat: float
+
+        :param mod_data: the dictionary of data read in from the .mod file
+        :type mod_data: dict
+
+        :param prior_data: a dictionary of data calculated for the prior, including the keys: "age_of_air" (the 
+         tropospheric age of air profile), "adj_zgrid" (the adjusted altitude grid used for the tropospheric prior) and 
+         "z_trop" (the tropopause height).
+        :type prior_data: dict
+
+        :return: a float or float array to add to the prior profile to correct latitudinally-dependent biases in the
+         troposphere.
+        :rtype: float or array-like
+        """
+        return 0.0
+
 
 class MidlatTraceGasRecord(TraceGasRecord):
     _std_vmr_file = ''
@@ -1383,10 +1404,6 @@ class MidlatTraceGasRecord(TraceGasRecord):
         age_of_air_years = get_clams_age(prof_theta, prof_eqlat, retrieval_doy, as_timedelta=False)
         xx_middleworld[xx_strat & np.isnan(age_of_air_years)] = True
         age_of_air_years = age_of_air_years[xx_strat]
-        # Because the legacy approach to dealing with the gases may identify a level below 380 K as "stratosphere
-        #first_age = np.flatnonzero(~np.isnan(age_of_air_years))[0]
-        #xx_nans = slice(first_age)
-        #age_of_air_years[xx_nans] = age_of_air_years[first_age]
 
         prof_gas[xx_strat] = self.apply_lat_grad(prof_gas[xx_strat], lat_obs=prof_eqlat[xx_strat], z=z[xx_strat],
                                                  ztrop_mod=ztrop)
@@ -1638,6 +1655,15 @@ class CO2TropicsRecord(MloSmoTraceGasRecord):
     # gas_trop_lifetime_yrs = 200.0 # estimated from Box 6.1 of Ch 6 of the IPCC AR5 (p. 473).
     _max_trend_poly_deg = 'exp'
 
+    def lat_bias_correction(self, obs_date, obs_lat, mod_data, prior_data):
+        # From JLL notes on 2019-08-26, the current bias in CO2 w.r.t. age of air is 3.55*growth rate/yr. Therefore, to
+        # correct that we need to add the negative of it
+        age_prof = prior_data['age_of_air']
+        last_co2 = self.get_gas_for_dates(obs_date - relativedelta(years=1))
+        next_co2 = self.get_gas_for_dates(obs_date + relativedelta(years=1))
+        growth = 0.5 * (next_co2 - last_co2)
+        return -3.55 * growth * age_prof
+
 
 class N2OTropicsRecord(MloSmoTraceGasRecord):
     _gas_name = 'n2o'
@@ -1688,9 +1714,7 @@ class CH4TropicsRecord(MloSmoTraceGasRecord):
     _gas_unit = 'ppb'
     _gas_seas_cyc_coeff = 0.012
     gas_trop_lifetime_yrs = 12.4  # from Table 8.A.1 of IPCC AR5, Ch 8, p. 731
-    # Values determined from the binned boundary layer (p > 800 hPa) differences between priors and ATom/HIPPO quantum
-    # cascade laser CH4, filtering out over-land data. The bias increased from ~0 at the equator to ~60 ppb at 80 deg N.
-    gas_lat_correction = {'nh': 0.75, 'sh': 0.0}
+
 
     _nyears_for_extrap_avg = 5
 
@@ -1748,6 +1772,15 @@ class CH4TropicsRecord(MloSmoTraceGasRecord):
 
         return fch4_lut_final
 
+    def lat_bias_correction(self, obs_date, obs_lat, mod_data, prior_data):
+        if obs_lat < 0:
+            return 0.0
+        else:
+            # Values determined from the binned boundary layer (p > 800 hPa) differences between priors and ATom/HIPPO
+            # quantum cascade laser CH4, filtering out over-land data. The bias increased from ~0 at the equator to
+            # ~60 ppb at 80 deg N.
+            return 0.75 * obs_lat
+
 
 class CORecord(TraceGasRecord):
     _gas_name = 'co'
@@ -1800,7 +1833,6 @@ class CORecord(TraceGasRecord):
         if np.any(np.isnan(prof_gas)):
             raise GasRecordError('Expected the CO profile to be all non-NaN values before adding the stratospheric '
                                  'modifications.')
-
 
         pres = mod_data['profile']['Pressure']
         theta = mod_data['profile']['PT']
@@ -1893,9 +1925,27 @@ class O3Record(TraceGasRecord):
         return prof_gas, dict()
 
 
+class HDORecord(TraceGasRecord):
+    _gas_name = 'hdo'
+    _gas_unit = 'mol/mol'
+    _gas_seas_cyc_coeff = None
+
+    def add_trop_prior(self, prof_gas, obs_date, obs_lat, mod_data, **kwargs):
+        import pdb; pdb.set_trace()
+        h2o_dmf = mod_data['profile']['H2O']
+        prof_gas[:] = h2o_dmf * 0.16 * (8.0 + np.log10(h2o_dmf))
+        return prof_gas, dict()
+
+    def add_strat_prior(self, prof_gas, retrieval_date, mod_data, **kwargs):
+        return prof_gas, dict()
+
+    def add_extra_column(self, prof_gas, retrieval_date, mod_data, **kwargs):
+        return prof_gas, dict()
+
+
 # Make the list of available gases' records
 gas_records = {r._gas_name: r for r in [CO2TropicsRecord, N2OTropicsRecord, CH4TropicsRecord, HFTropicsRecord,
-                                       CORecord, O3Record, H2ORecord]}
+                                        CORecord, O3Record, H2ORecord, HDORecord]}
 
 
 def regenerate_gas_strat_lut_files():
@@ -2269,8 +2319,9 @@ def add_trop_prior_standard(prof_gas, obs_date, obs_lat, gas_record, mod_data, r
     # Apply a correction to account for chemical loss between the emission and MLO/SMO measurement or between the
     # prior location and MLO/SMO. For some gases we also apply a latitudinal correction.
     lifetime_adj = np.exp(-air_age / gas_record.gas_trop_lifetime_yrs)
-    lat_correction_factor = gas_record.gas_lat_correction['nh'] if obs_lat >= 0 else gas_record.gas_lat_correction['sh']
-    lat_correction = lat_correction_factor * obs_lat
+    prior_data = {'age_of_air': air_age, 'adj_zgrid': z_grid[xx_trop], 'z_trop': z_trop}
+    lat_correction = gas_record.lat_bias_correction(obs_date=obs_date, obs_lat=obs_lat, mod_data=mod_data,
+                                                    prior_data=prior_data)
 
     prof_gas[xx_trop] = gas_df['dmf_mean'].values * lifetime_adj + lat_correction
     # Must reshape the 1D latency vector into an n-by-1 matrix to broadcast successfully
@@ -2415,7 +2466,7 @@ def modify_strat_co(base_co_profile, pres_profile, eqlat_profile, pt_profile, tr
 
     :param excess_co_lut: the path to the lookup table with the excess mesospheric CO. If not given, the standard table
      file included in the repo is used. This file is created with
-     :func:`ggg_inputs.priors.backend_analysis.ace_fts_analysis.make_excess_co_lut`.
+     :func:`ginput.priors.backend_analysis.ace_fts_analysis.make_excess_co_lut`.
     :type excess_co_lut: str
 
     :return: the CO profile with the CO from mesospheric descent added.
@@ -2440,6 +2491,9 @@ def modify_strat_co(base_co_profile, pres_profile, eqlat_profile, pt_profile, tr
     eqlat_profile = xr.DataArray(eqlat_profile[xx_overworld], coords=level_coords)
     doy_grid = xr.DataArray(np.full(eqlat_profile.shape, prof_doy), coords=level_coords)
 
+    # Eq. lat. can get outside the range of the CMAM model's latitude, we clip the eqlat profile so that
+    # effectively we use the last CMAM lat bin for any out-of-range latitudes.
+    eqlat_profile = eqlat_profile.clip(co_lut.lat.min().item(), co_lut.lat.max().item())
     cmam_co_prof = co_lut.interp(doy=doy_grid, lat=eqlat_profile, plev=pres_profile).data
 
     # Rather than mess with calculating "excess" CO concentrations for the lookup table, we just averaged the CMAM model
@@ -2688,6 +2742,9 @@ def generate_single_tccon_prior(mod_file_data, utc_offset, concentration_record,
     concentration_record.add_extra_column(map_dict[gas_name], retrieval_date=obs_utc_date, mod_data=mod_file_data)
 
     # Finally prepare the output, writing a .map file if needed.
+    if np.any(np.isnan(gas_prof)):
+        raise RuntimeError('Some levels were not assigned a value in the gas profile')
+
     units_dict = {'Height': 'km',
                   'Temp': 'K',
                   'Pressure': 'hPa',
@@ -2759,7 +2816,7 @@ def _get_std_vmr_file(std_vmr_file):
 
 
 def generate_full_tccon_vmr_file(mod_data, utc_offsets, save_dir, std_vmr_file=None, site_abbrevs='xx',
-                                 keep_latlon_prec=False, **kwargs):
+                                 keep_latlon_prec=False, use_existing_luts=False, **kwargs):
     """
     Generate a .vmr file with all the gases required by TCCON (both retrieved and secondary).
 
@@ -2790,6 +2847,11 @@ def generate_full_tccon_vmr_file(mod_data, utc_offsets, save_dir, std_vmr_file=N
      Set this to ``True`` to keep 2 decimal places of precision.
     :type keep_latlon_prec: bool
 
+    :param use_existing_luts: set to ``True`` to avoid recalculating stratospheric LUTs for the MLO/SMO records. Doing
+     so will make it much faster for this to start, but risks using an out-of-date LUT that was generated with old code
+     or input data.
+    :type use_existing_luts: bool
+
     :return: none, writes .vmr files
     :raises GGGPathError: if ``$GGGPATH`` is not defined and it needs to find the standard file or it cannot find the
      standard file in the expected place.
@@ -2802,14 +2864,32 @@ def generate_full_tccon_vmr_file(mod_data, utc_offsets, save_dir, std_vmr_file=N
         std_vmr_gases.remove('Altitude')
     else:
         std_vmr_gases = list(gas_records.keys())
-    species = [gas_records[gas.lower()]() if gas.lower() in gas_records else MidlatTraceGasRecord(gas, vmr_file=std_vmr_file) for gas in std_vmr_gases]
+
+    species = []
+    if use_existing_luts:
+        mlo_smo_kwargs = {'recalculate_strat_lut': False, 'save_strat': False}
+    else:
+        mlo_smo_kwargs = dict()
+
+    for gas in std_vmr_gases:
+        if gas.lower() not in gas_records:
+            species.append(MidlatTraceGasRecord(gas, vmr_file=std_vmr_file))
+            continue
+
+        rec = gas_records[gas.lower()]
+        if issubclass(rec, MloSmoTraceGasRecord):
+            species.append(rec(**mlo_smo_kwargs))
+        else:
+            species.append(rec())
+
     generate_tccon_priors_driver(mod_data=mod_data, utc_offsets=utc_offsets, species=species, site_abbrevs=site_abbrevs,
                                  write_vmrs=save_dir, keep_latlon_prec=keep_latlon_prec, gas_name_order=std_vmr_gases,
                                  **kwargs)
 
 
 def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='xx', write_maps=False,
-                                 write_vmrs=False, gas_name_order=None, keep_latlon_prec=False, **prior_kwargs):
+                                 write_vmrs=False, gas_name_order=None, keep_latlon_prec=False, flat_outdir=True,
+                                 **prior_kwargs):
     """
     Generate multiple TCCON priors or a file containing multiple gas concentrations
 
@@ -2854,6 +2934,8 @@ def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='x
     :return:
     """
     num_profiles = max(np.size(inpt) for inpt in [mod_data, utc_offsets, site_abbrevs])
+    if site_abbrevs == 'all':
+        site_abbrevs = mod_utils.extract_mod_site_abbrevs(mod_data)
 
     def check_input(inpt, name, allowed_types):
         type_err_msg = '{} must be either a collection or single instance of one of the types: {}'.format(
@@ -2949,7 +3031,13 @@ def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='x
         if write_vmrs:
             vmr_name = mod_utils.vmr_file_name(obs_date=site_date, lon=site_lon, lat=site_lat,
                                                keep_latlon_prec=keep_latlon_prec)
-            vmr_name = os.path.join(vmrs_dir, vmr_name)
+            if flat_outdir:
+                vmr_name = os.path.join(vmrs_dir, vmr_name)
+            else:
+                this_vmr_dir = mod_utils.vmr_output_subdir(vmrs_dir, site_abbrevs[iprofile])
+                if not os.path.exists(this_vmr_dir):
+                    os.makedirs(this_vmr_dir)
+                vmr_name = os.path.join(this_vmr_dir, vmr_name)
             mod_utils.write_vmr_file(vmr_name, tropopause_alt=map_constants['tropopause_alt'],
                                      profile_date=site_date, profile_lat=site_lat,
                                      profile_alt=profile_dict['Height'], profile_gases=vmr_gases,
@@ -3002,45 +3090,57 @@ def parse_args(parser=None):
 def cl_driver(date_range, mod_dir=None, mod_root_dir=None, save_dir=None, product='fpit',
               site_lat=None, site_lon=None, site_abbrev='xx', keep_latlon_prec=False, **kwargs):
 
-    if site_lat is None != site_lon is None:
-        raise TypeError('Both or neither of site_lat and site_lon must be given')
+    # Normalize scalar and collection abbreviations, lats, and lons
+    site_abbrev, site_lat, site_lon, _ = mod_utils.check_site_lat_lon_alt(abbrev=site_abbrev, lat=site_lat, lon=site_lon, alt=None if site_lat is None else 0.0)
 
+    # Find input and output directories, looking in GGGPATH if not specified.
     if mod_dir is None and mod_root_dir is None:
         mod_root_dir = mod_utils.get_ggg_path(os.path.join('models', 'gnd'), 'mod file directory')
-    if mod_dir is None:
-        mod_dir = os.path.join(mod_root_dir, product, site_abbrev, 'vertical')
 
     if save_dir is None:
         save_dir = mod_utils.get_ggg_path(os.path.join('vmrs', 'gnd'), 'save directory')
 
+    # Expand the date range to explicitly include every 3 hours
     orig_date_range = date_range
     date_range = pd.date_range(date_range[0], date_range[1], freq='3H')
     if date_range[-1] == orig_date_range[-1]:
         # Make sure the end date is not included
         date_range = date_range[:-1]
+
+    # Find all the .mod files we need to process for the given dates and locations
     mod_files = []
     missing_files = []
+    all_site_abbrevs = []
     for d in date_range:
-        if site_lat is None:
-            site_info = tccon_sites.tccon_site_info_for_date(d, site_abbrv=site_abbrev)
-            lat, lon = site_info['lat'], site_info['lon_180']
-        else:
-            lat, lon = site_lat, site_lon
-        this_file = os.path.join(mod_dir, mod_utils.mod_file_name_for_priors(d, site_lat=lat, site_lon_180=lon,
-                                                                             round_latlon=not keep_latlon_prec))
-        if os.path.isfile(this_file):
-            mod_files.append(this_file)
-        else:
-            missing_files.append(this_file)
+        for this_abbrev, this_lat, this_lon in zip(site_abbrev, site_lat, site_lon):
+            if mod_dir is not None:
+                this_mod_dir = mod_dir
+            else:
+                this_mod_dir = os.path.join(mod_root_dir, product, this_abbrev, 'vertical')
 
+            if this_lat is None:
+                site_info = tccon_sites.tccon_site_info_for_date(d, site_abbrv=this_abbrev)
+                lat, lon = site_info['lat'], site_info['lon_180']
+            else:
+                lat, lon = this_lat, this_lon
+            this_file = os.path.join(this_mod_dir, mod_utils.mod_file_name_for_priors(d, site_lat=lat, site_lon_180=lon,
+                                                                                      round_latlon=not keep_latlon_prec))
+            if os.path.isfile(this_file):
+                mod_files.append(this_file)
+                all_site_abbrevs.append(this_abbrev)
+            else:
+                missing_files.append(this_file)
+
+    # Ensure that we have all the .mod files we need
     if len(missing_files) > 0:
-        print('Could not find the following .mod files required:', file=sys.stderr)
-        print('  * ' + '\n  * '.join(missing_files), file=sys.stderr)
-        print('Either correct the mod path or generate these files', file=sys.stderr)
-        sys.exit(1)
+        msg = 'Could not find the following .mod files required:\n'
+        msg += '  * ' + '\n  * '.join(missing_files)
+        msg += 'Either correct the mod path or generate these files'
+        raise IOError(msg)
 
+    # GO!
     generate_full_tccon_vmr_file(mod_data=mod_files, utc_offsets=dt.timedelta(0), save_dir=save_dir,
-                                 site_abbrevs=site_abbrev, **kwargs)
+                                 keep_latlon_prec=keep_latlon_prec, site_abbrevs=all_site_abbrevs, **kwargs)
 
 
 ###########################################

@@ -30,6 +30,13 @@ _req_info_help = {'gas_name': 'The name of the gas to generate priors for.',
                   'prior_top_dir': 'The directory to save the .mod files to. Will be organized into subdirectories by '
                                    'date, lat, and lon automatically.'}
 
+_opt_info_keys = ('integral_file', 'base_vmr_file')
+_opt_info_ispath = ('integral_file', 'base_vmr_file')
+_opt_info_help = {'integral_file': 'A path to an integral.gnd file that specifies the altitude grid for the .vmr '
+                                   'files. If not present, the .vmr files will be on the native GEOS grid.',
+                  'base_vmr_file': 'A path to a summer 35N .vmr file that can be used for the secondary gases. '
+                                   'If not given, the .vmr files will only include the primary gases.'}
+
 _default_file_types = ('2dmet', '3dmet')
 
 def unfmt_lon(lonstr):
@@ -44,23 +51,46 @@ def _date_range_str_to_dates(drange_str):
 
 
 def read_info_file(info_filename):
-    info_dict = {k: None for k in _req_info_keys}
+    """
+    Read the info/config file for this set of profiles to generate.
+
+    The file will have the format ``key = value``, one per line. Comments must be on lines by themselves, cannot start
+    mid-line.
+
+    :param info_filename: path to the info/config file
+    :type info_filename: str
+
+    :return: a dictionary with keys _reg_info_keys and _opt_info_keys containing information from the info file. Paths
+     are all converted to absolute paths.
+    :rtype: dict
+    """
+    # Setup the dictionary that will receive the data. Default everything to None; will check that required keys were
+    # overwritten at the end.
+    info_dict = {k: None for k in _req_info_keys + _opt_info_keys}
     info_file_dir = os.path.abspath(os.path.dirname(info_filename))
+
     with open(info_filename, 'r') as fobj:
         for line_num, line in enumerate(fobj):
-            key, value = [el.strip() for el in line.split('=')]
+            # Skip comment lines
             if re.match(r'\s*#', line):
                 continue
-            elif key not in _req_info_keys:
+
+            # Each line must have the format key = value
+            key, value = [el.strip() for el in line.split('=')]
+            if key not in _req_info_keys + _opt_info_keys:
+                # Skip unexpected keys
                 print('Ignoring line {} of {}: key "{}" not one of the required keys'.format(line_num, info_filename, key))
                 continue
-            elif key in _req_info_ispath:
+
+            elif key in _req_info_ispath + _opt_info_ispath:
+                # Make any relative paths relative to the location of the info file.
                 value = value if os.path.isabs(value) else os.path.join(info_file_dir, value)
 
             info_dict[key] = value
 
-    for key, value in info_dict.items():
-        if value is None:
+    # Check that all required keys were read in. Any optional keys not read in will be left as None.
+    for key in _req_info_keys:
+        if info_dict[key] is None:
             raise RuntimeError('Key "{}" was missing from the input file {}'.format(key, info_filename))
 
     return info_dict
@@ -148,10 +178,11 @@ def make_mod_files(acdates, aclons, aclats, geos_dir, out_dir, chem_dir=None, np
     geos_chm_files = sorted(glob(os.path.join(chem_dir, 'Nv', 'GEOS*.nc4')))
     geos_chm_dates = set([dtime.strptime(re.search(r'\d{8}', f).group(), '%Y%m%d') for f in geos_chm_files])
 
-    mm_args = []
+    mm_args = dict()
 
     print('  (Making list of .mod files to generate...)')
     for (dates, lon, lat) in zip(acdates, aclons, aclats):
+        # First, check whether this .mod file already exists. If so, we can skip it.
         start_date, end_date = [dtime.strptime(d, '%Y%m%d') for d in dates.split('-')]
         if start_date not in geos_dates or start_date not in geos_chm_dates:
             print('Cannot run {}, missing either met or chem GEOS data'.format(start_date))
@@ -168,30 +199,45 @@ def make_mod_files(acdates, aclons, aclats, geos_dir, out_dir, chem_dir=None, np
         else:
             print('One or more files for {} at {}/{} needs generated'.format(dates, lon, lat))
 
-        these_args = ([start_date, end_date], lon, lat, geos_dir, chem_dir, out_dir, nprocs)
-        mm_args.append(these_args)
+        # If we're here, this combination of date/lat/lon needs generated. But we can be more efficient if we do all
+        # locations for one date in one go because then we only have to make the eq. lat. interpolators once, so we
+        # create one set of args per day and take advantage of the mod maker driver's ability to loop over lat/lons.
+        key = (start_date, end_date)
+        if key in mm_args:
+            mm_args[key]['mm_lons'].append(lon)
+            mm_args[key]['mm_lats'].append(lat)
+        else:
+            # The keys here must match the argument names of mm_helper_internal as the dict will be ** expanded.
+            mm_args[key] = {'mm_lons': [lon], 'mm_lats': [lat], 'geos_dir': geos_dir, 'chem_dir': chem_dir,
+                            'out_dir': out_dir, 'nprocs': nprocs, 'date_range': key}
 
     if nprocs == 0:
         print('Making .mod files in serial mode')
-        for args in mm_args:
-            mm_helper(*args)
+        for kwargs in mm_args.values():
+            mm_helper(kwargs)
     else:
+        # Convert this so that each value is a list with one element: the args dict. This way, starmap will expand
+        # the list into a single argument for mm_helper, which then expands the dict into a set of keyword arguments
+        # for mm_helper_internal
+        mm_args = {k: [v] for k, v in mm_args.items()}
         print('Making .mod file in parallel mode with {} processors'.format(nprocs))
         with Pool(processes=nprocs) as pool:
-            pool.starmap(mm_helper, mm_args)
+            pool.starmap(mm_helper, mm_args.values())
 
 
-def mm_helper(date_range, mm_lon, mm_lat, geos_dir, chem_dir, out_dir, nprocs):
-    date_fmt = '%Y-%m-%d'
-    print('Generating .mod files at {}/{} for {} to {}'.format(mm_lon, mm_lat,
-                                                               date_range[0].strftime(date_fmt),
-                                                               date_range[1].strftime(date_fmt)))
-    mod_maker.driver(date_range=date_range, met_path=geos_dir, chem_path=chem_dir, save_path=out_dir, include_chm=True,
-                     mode='fpit-eta', keep_latlon_prec=True, save_in_utc=True, lon=mm_lon, lat=mm_lat, alt=0.0,
-                     muted=nprocs > 0)
+def mm_helper(kwargs):
+    def mm_helper_internal(date_range, mm_lons, mm_lats, geos_dir, chem_dir, out_dir, nprocs):
+        date_fmt = '%Y-%m-%d'
+        # Duplicate
+        print('Generating .mod files {} to {}'.format(date_range[0].strftime(date_fmt), date_range[1].strftime(date_fmt)))
+        mod_maker.driver(date_range=date_range, met_path=geos_dir, chem_path=chem_dir, save_path=out_dir,
+                         include_chm=True, mode='fpit-eta', keep_latlon_prec=True, save_in_utc=True,
+                         lon=mm_lons, lat=mm_lats, alt=0.0, muted=nprocs > 0)
+
+    mm_helper_internal(**kwargs)
 
 
-def make_priors(prior_dir, mod_dir, gas_name, acdates, aclons, aclats, nprocs=0):
+def make_priors(prior_dir, mod_dir, gas_name, acdates, aclons, aclats, zgrid_file=None, nprocs=0):
     print('Will save to', prior_dir)
     # Find all the .mod files, get unique date/lat/lon (should be 8 files per)
     # and make an output directory for that
@@ -207,7 +253,7 @@ def make_priors(prior_dir, mod_dir, gas_name, acdates, aclons, aclats, nprocs=0)
         latstr = mod_utils.find_lat_substring(fbase)
         datestr = mod_utils.find_datetime_substring(fbase)
 
-        utc_datetime = dtime.strptime(datestr, '%Y%m%d_%H%M')
+        utc_datetime = dtime.strptime(datestr, '%Y%m%d%H')
         utc_date = utc_datetime.date()
         utc_datestr = utc_datetime.date().strftime('%Y%m%d')
         lon = mod_utils.format_lon(lonstr)
@@ -247,7 +293,7 @@ def make_priors(prior_dir, mod_dir, gas_name, acdates, aclons, aclats, nprocs=0)
     for k, files in grouped_mod_files.items():
         this_out_dir = os.path.join(prior_dir, k)
         for f in files:
-            these_args = (f, this_out_dir, gas_rec)
+            these_args = (f, this_out_dir, gas_rec, zgrid_file)
             prior_args.append(these_args)
 
     if nprocs == 0:
@@ -258,15 +304,16 @@ def make_priors(prior_dir, mod_dir, gas_name, acdates, aclons, aclats, nprocs=0)
             pool.starmap(_prior_helper, prior_args)
 
 
-def _prior_helper(ph_f, ph_out_dir, gas_rec):
+def _prior_helper(ph_f, ph_out_dir, gas_rec, zgrid=None):
     _fbase = os.path.basename(ph_f)
     print('Processing {}, saving to {}'.format(_fbase, ph_out_dir))
     tccon_priors.generate_single_tccon_prior(ph_f, tdel(hours=0), gas_rec, write_map=ph_out_dir,
-                                             use_eqlat_strat=True)
+                                             use_eqlat_strat=True, zgrid=zgrid)
 
 
 def driver(check_geos, download, makemod, makepriors, site_file, geos_top_dir, geos_chm_top_dir,
-           mod_top_dir, prior_top_dir, gas_name, nprocs, dl_file_types, dl_levels):
+           mod_top_dir, prior_top_dir, gas_name, nprocs, dl_file_types, dl_levels, integral_file=None,
+           **_):
     if dl_file_types is None:
         dl_file_types = ('met', 'met', 'chm')
     if dl_levels is None:
@@ -290,7 +337,7 @@ def driver(check_geos, download, makemod, makepriors, site_file, geos_top_dir, g
 
     if makepriors:
         make_priors(prior_top_dir, make_full_mod_dir(mod_top_dir, 'fpit'), gas_name,
-                    acdates=acdates, aclons=aclons, aclats=aclats, nprocs=nprocs)
+                    acdates=acdates, aclons=aclons, aclats=aclats, nprocs=nprocs, zgrid_file=integral_file)
     else:
         print('Not making priors')
 

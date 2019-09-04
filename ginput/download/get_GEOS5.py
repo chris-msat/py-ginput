@@ -4,7 +4,7 @@ from __future__ import print_function
 import argparse
 import os
 from datetime import datetime, timedelta
-from subprocess import Popen, PIPE, CalledProcessError
+from subprocess import Popen, PIPE, STDOUT, CalledProcessError
 import sys
 
 from . import download_utils as dlutils
@@ -27,11 +27,11 @@ _level_types = tuple(_std_out_paths.keys())
 _default_level_type = 'p'
 
 
-def execute(cmd,cwd=os.getcwd()):
+def execute(cmd, cwd=os.getcwd()):
     '''
     function to execute a unix command and print the output as it is produced
     '''
-    popen = Popen(cmd, stdout=PIPE, universal_newlines=True,cwd=cwd)
+    popen = Popen(cmd, stdout=PIPE, stderr=STDOUT, universal_newlines=True, cwd=cwd)
     for stdout_line in iter(popen.stdout.readline, ""):
         yield stdout_line
     popen.stdout.close()
@@ -189,7 +189,8 @@ def check_types_levels(filetypes, levels):
     return filetypes, levels
 
 
-def driver(date_range, mode='FP', path='.', filetypes=_default_file_type, levels=_default_level_type, **kwargs):
+def driver(date_range, mode='FP', path='.', filetypes=_default_file_type, levels=_default_level_type,
+           log_file=sys.stdout, verbosity=0, **kwargs):
     """
     Run get_GEOS5 as if called from the command line.
 
@@ -224,6 +225,12 @@ def driver(date_range, mode='FP', path='.', filetypes=_default_file_type, levels
     :return: none, downloads GEOS files to ``path``.
     """
     filetypes, levels = check_types_levels(filetypes, levels)
+    verbosity_dict = {-1: '--quiet', 0: '--no-verbose', 1: '--verbose'}
+    if verbosity < -1:
+        verbosity = -1
+    elif verbosity > 1:
+        verbosity = 1
+    wget_cmd = 'wget {} -N -i getGEOS.dat'.format(verbosity_dict[verbosity])
 
     start, end = date_range
     for ftype, ltype in zip(filetypes, levels):
@@ -233,8 +240,8 @@ def driver(date_range, mode='FP', path='.', filetypes=_default_file_type, levels
             os.makedirs(outpath)
 
         _func_dict[mode](start, end, filetype=ftype, levels=ltype, outpath=os.path.join(outpath, 'getGEOS.dat'))
-        for line in execute('wget -N -i getGEOS.dat'.split(), cwd=outpath):
-            print(line, end="")
+        for line in execute(wget_cmd.split(), cwd=outpath):
+            print(line, end="", file=log_file)
 
 
 ########

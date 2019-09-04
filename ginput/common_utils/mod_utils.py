@@ -10,6 +10,7 @@ from __future__ import print_function, division
 import datetime as dt
 from collections import OrderedDict
 from datetime import timedelta
+from glob import glob
 
 import numpy
 from dateutil.relativedelta import relativedelta
@@ -28,6 +29,7 @@ import sys
 from . import mod_constants as const
 from .mod_constants import days_per_year
 from .ggg_logging import logger
+from ..mod_maker.tccon_sites import site_dict
 
 _std_model_pres_levels = np.array([1000.0, 975.0, 950.0, 925.0, 900.0, 875.0, 850.0, 825.0, 800.0, 775.0, 750.0, 725.0,
                                    700.0, 650.0, 600.0, 550.0, 500.0, 450.0, 400.0, 350.0, 300.0, 250.0, 200.0, 150.0,
@@ -57,6 +59,10 @@ class ModelError(Exception):
 
 
 class GGGPathError(Exception):
+    pass
+
+
+class ModPathError(IOError):
     pass
 
 
@@ -179,7 +185,25 @@ def get_num_header_lines(filename):
     return int(header_info.split()[0])
 
 
-def _write_header(fobj, header_lines, n_data_columns, file_mode='w'):
+def _write_header(fobj, header_lines, n_data_columns):
+    """
+    Write a standard header to a GGG file.
+
+    A typical header in a GGG file begins with a line with two numbers: the number of header lines and the number of
+    data columns. This automatically formats that line, then writes the given lines.
+
+    :param fobj: File handle (i.e. object returned by :func:`open`)
+    :type fobj: :class:`_io.TextIO`
+
+    :param header_lines: a list of header lines (after the first) to write. Should be strings, each may or may not end
+     in newlines (both cases are handled).
+    :type header_lines: list(str)
+
+    :param n_data_columns: number of data columns in the main part of the file
+    :type n_data_columns: int
+
+    :return: none, writes to the file object.
+    """
     line1 = ' {} {}\n'.format(len(header_lines)+1, n_data_columns)
     fobj.write(line1)
     header_lines = [l if l.endswith('\n') else l + '\n' for l in header_lines]
@@ -517,7 +541,12 @@ def write_map_file(map_file, site_lat, trop_eqlat, prof_ref_lat, surface_alt, tr
                 mapf.write('\n')
 
 
-def vmr_file_name(obs_date, lon, lat, keep_latlon_prec=False):
+def vmr_output_subdir(top_dir, site_abbrev, product='fpit', slant=False):
+    path_dir = 'vmrs-slant' if slant else 'vmrs-vertical'
+    return os.path.join(top_dir, product, site_abbrev, path_dir)
+
+
+def vmr_file_name(obs_date, lon, lat, keep_latlon_prec=False, date_fmt='%Y%m%d%H', in_utc=True):
     """
     Construct the standard filename for a .vmr file produced by this code
 
@@ -542,11 +571,12 @@ def vmr_file_name(obs_date, lon, lat, keep_latlon_prec=False):
     lat = format_lat(lat, prec=prec)
     lon = format_lon(lon, prec=prec, zero_pad=True)
     major_version = const.priors_version.split('.')[0]
-    return 'JL{ver}_{date}_{lat}_{lon}.vmr'.format(ver=major_version, date=obs_date.strftime('%Y%m%d%H'),
-                                                   lat=lat, lon=lon)
+    return 'JL{ver}_{date}{tz}_{lat}_{lon}.vmr'.format(ver=major_version, date=obs_date.strftime(date_fmt),
+                                                       tz='Z' if in_utc else 'L', lat=lat, lon=lon)
 
 
-def write_vmr_file(vmr_file, tropopause_alt, profile_date, profile_lat, profile_alt, profile_gases, gas_name_order=None):
+def write_vmr_file(vmr_file, tropopause_alt, profile_date, profile_lat, profile_alt, profile_gases, gas_name_order=None,
+                   extra_header_info=None):
     """
     Write a new-style .vmr file (without seasonal cycle, secular trends, and latitudinal gradients
 
@@ -574,6 +604,10 @@ def write_vmr_file(vmr_file, tropopause_alt, profile_date, profile_lat, profile_
      insensitive). Any gases not listed here that are in ``profile_gases`` are skipped.
     :type gas_name_order: list(str)
 
+    :param extra_header_info: optional, if given, must be a dictionary or list of lines to include at the end of the
+     header in the .vmr. If a list, must be a list of strings. If a dict, each line will be formatted as "key: value"
+     and the keys/values may be any type.
+
     :return: none, writes the .vmr file.
     """
 
@@ -582,6 +616,11 @@ def write_vmr_file(vmr_file, tropopause_alt, profile_date, profile_lat, profile_
 
     if gas_name_order is None:
         gas_name_order = [k for k in profile_gases.keys()]
+
+    if extra_header_info is None:
+        extra_header_info = []
+    elif isinstance(extra_header_info, dict):
+        extra_header_info = ['{}: {}'.format(k, v) for k, v in extra_header_info.items()]
 
     gas_name_order_lower = [name.lower() for name in gas_name_order]
     gas_name_mapping = {k: None for k in gas_name_order}
@@ -609,8 +648,9 @@ def write_vmr_file(vmr_file, tropopause_alt, profile_date, profile_lat, profile_
     table_header = ['Altitude'] + ['{:10}'.format(name) for name in gas_name_order]
     header_lines = [' ZTROP_VMR: {:.1f}'.format(tropopause_alt),
                     ' DATE_VMR: {:.3f}'.format(date_to_decimal_year(profile_date)),
-                    ' LAT_VMR: {:.2f}'.format(profile_lat),
-                    ' '.join(table_header)]
+                    ' LAT_VMR: {:.2f}'.format(profile_lat)] \
+                   + [' ' + l for l in extra_header_info] \
+                   + [ ' '.join(table_header)]
 
     with open(vmr_file, 'w') as fobj:
         _write_header(fobj, header_lines, len(gas_name_order) + 1)
@@ -646,7 +686,12 @@ def read_vmr_file(vmr_file, as_dataframes=False, lowercase_names=True, style='ne
             const_name, const_val = [v.strip() for v in line.split(':')]
             if lowercase_names:
                 const_name = const_name.lower()
-            header_data[const_name] = float(const_val)
+
+            try:
+                const_val = float(const_val)
+            except ValueError:
+                pass
+            header_data[const_name] = const_val
 
         prior_info = dict()
         if old_style:
@@ -838,12 +883,16 @@ def find_datetime_substring(string, out_type=str):
 
     :return: the string or parsed datetime value
     """
-    date_re = r'\d{8}(_\d{4})?'
+
+    # Search for YYYYMMDDHH or YYYYMMDD_HHMM preferentially but allow just YYYYMMDD
+    date_re = r'\d{8}(_\d{4}|\d{2})?'
     date_str = re.search(date_re, string).group()
+
     if out_type is str:
         return date_str
     else:
-        date_fmt = '%Y%m%d' if len(date_str) == 8 else '%Y%m%d_%H%M'
+        date_fmts = {8: '%Y%m%d', 10: '%Y%m%d%H', 13: '%Y%m%d_%H%M'}
+        date_fmt = date_fmts[len(date_str)]
         return out_type.strptime(date_str, date_fmt)
 
 
@@ -933,6 +982,99 @@ def _lrange(*args):
 def round_to_zero(val):
     sign = np.sign(val)
     return np.floor(np.abs(val)) * sign
+
+
+def iter_mod_dirs(mod_top_dir, path=None, check_if_exists=False):
+    """
+    Iterate over available .mod site directories.
+
+    :param mod_top_dir: the root directory for the .mod files. Must include subdirectories that are the two-letter site
+     abbreviations.
+    :type mod_top_dir: str
+
+    :param path: the subpath within each of the site dirs to return. If None, then the site directory itself is
+     returned. Otherwise this is appended to the end and that returned.
+    :type path: str
+
+    :param check_if_exists: if ``True`` verify that the subpath exists before yielding. No effect if ``path`` is None.
+    :type check_if_exists: bool
+
+    :return: iterable of .mod file directories.
+    :rtype: iterable
+    """
+    # only match two-character file names
+    site_dirs = sorted(glob(os.path.join(mod_top_dir, '??')))
+    for sdir in site_dirs:
+        if path is None:
+            yield sdir
+        else:
+            fullpath = os.path.join(sdir, path)
+            if check_if_exists and not os.path.isdir(fullpath):
+                raise ModPathError('Requested subpath "{}" does not exist in {}'.format(path, sdir))
+            yield fullpath
+
+
+def extract_mod_site_abbrevs(mod_files, default='xx'):
+    """
+    Extract the site abbreviations from .mod file paths
+
+    The .mod files no longer include the site abbreviation anywhere in the file name or header, so we need to extract
+    those from the directory paths. This function assumes paths of the format ".../abbr/<something>/*.mod", i.e. that
+    there are are least three levels (including the .mod file) and that the third from the end is the site abbreviation.
+
+    For each path, if (a) there are not three directory levels, (b) the third part from the end is not a two-letter
+    name, or (c) if it is a dictionary, this returns the default abbreviation.
+
+    :param mod_files: a single path to a .mod file, or a list of .mod files
+    :type mod_files: str or list(str)
+
+    :param default: the default site abbreviation to return if cannot find an abbreviation
+    :type default: str
+
+    :return: a single site abbreviation if ``mod_files`` is a string, a tuple of abbreviations otherwise.
+    :rtype: str or tuple(str)
+    """
+    def extract_single(modf):
+        if isinstance(modf, dict):
+            return default
+        elif not isinstance(modf, str):
+            raise TypeError('Expected string or dictionary for each mod file')
+
+        fileparts = modf.split(os.sep)
+        if len(fileparts) < 3:
+            return default
+        elif not re.match(r'[a-z]{2}', fileparts[-3]):
+            return default
+        else:
+            return fileparts[-3]
+
+    if isinstance(mod_files, str):
+        return extract_single(mod_files)
+    else:
+        return tuple([extract_single(modf) for modf in mod_files])
+
+
+def iter_mod_files(mod_top_dir, include_slant=False):
+    """
+    Iterate over available .mod files.
+
+    :param mod_top_dir: the root directory for the .mod files. Must include subdirectories that are the two-letter site
+     abbreviations.
+    :type mod_top_dir: str
+
+    :param include_slant: not yet implemented, but in the future will turn on returning pairs of files (vertical and
+     slant).
+    :type include_slant: bool
+
+    :return: iterable of paths to .mod files. The paths will start with the given ``mod_top_dir``.
+    """
+    if include_slant:
+        raise NotImplementedError('include_slant not yet implemented')
+
+    for vdir in iter_mod_dirs(mod_top_dir, 'vertical'):
+        vertical_files = sorted(glob(os.path.join(vdir, '*.mod')))
+        for f in vertical_files:
+            yield f
 
 
 def calculate_model_potential_temperature(temp, pres_levels=_std_model_pres_levels):
@@ -2208,9 +2350,12 @@ def from_unix_time(utime, out_type=dt.datetime):
 def mod_file_name(prefix,date,time_step,site_lat,site_lon_180,ew,ns,mod_path,round_latlon=True,in_utc=True):
 
     YYYYMMDD = date.strftime('%Y%m%d')
-    HHMM = date.strftime('%H%M')
+    HH = date.strftime('%H')
     if in_utc:
-        HHMM += 'Z'
+        HH += 'Z'
+    else:
+        HH += 'L'
+
     if round_latlon:
         site_lat = round(abs(site_lat))
         site_lon = round(abs(site_lon_180))
@@ -2220,11 +2365,11 @@ def mod_file_name(prefix,date,time_step,site_lat,site_lon_180,ew,ns,mod_path,rou
         site_lon = abs(site_lon_180)
         latlon_precision = 2
     if time_step < timedelta(days=1):
-        mod_fmt = '{{prefix}}_{{ymd}}_{{hm}}_{{lat:0>2.{prec}f}}{{ns:>1}}_{{lon:0>3.{prec}f}}{{ew:>1}}.mod'.format(prec=latlon_precision)
+        mod_fmt = '{{prefix}}_{{ymd}}{{hh}}_{{lat:0>2.{prec}f}}{{ns:>1}}_{{lon:0>3.{prec}f}}{{ew:>1}}.mod'.format(prec=latlon_precision)
     else:
         mod_fmt = '{{prefix}}_{{ymd}}_{{lat:0>2.{prec}f}}{{ns:>1}}_{{lon:0>3.{prec}f}}{{ew:>1}}.mod'.format(prec=latlon_precision)
 
-    mod_name = mod_fmt.format(prefix=prefix, ymd=YYYYMMDD, hm=HHMM, lat=site_lat, ns=ns, lon=site_lon, ew=ew)
+    mod_name = mod_fmt.format(prefix=prefix, ymd=YYYYMMDD, hh=HH, lat=site_lat, ns=ns, lon=site_lon, ew=ew)
     return mod_name
 
 
@@ -2264,3 +2409,66 @@ def get_ggg_path(subdir, subdir_name):
         raise GGGPathError('Could not find default {} {}'.format(subdir_name, full_subdir))
 
     return full_subdir
+
+
+def check_site_lat_lon_alt(abbrev, lat=None, lon=None, alt=None):
+    """
+    Verify that the input site abbreviation, latitude, longitude, and altitude are consistent.
+
+    This checks that (1) if any of lat/lon/alt are given, all are, (2) if any inputs are > 1 long all those that are
+    are the same length, (3) if any inputs are scalar (None, int, float, or string) they are converted to tuples
+    of the proper length, and (4) all longitudes are given in [0, 360)
+
+    :param abbrev: site abbreviation(s), as string or iterable of such
+    :type abbrev: str or list(str)
+
+    :param lat: site latitude(s), as float or iterable of such, or None
+    :type lat: float or list(float)
+
+    :param lon: site longitude(s), as float or iterable of such, or None
+    :type lon: float or list(float)
+
+    :param alt: site altitude(s), as float or iterable of such, or None
+    :type alt: float or list(float)
+
+    :return: abbrev, lat, lon, and "alt" converted to tuples of the same length. Scalar values are repeated.
+    :rtype: tuples
+    """
+    def to_tuple(val):
+        if isinstance(val, (int, float, str, type(None))):
+            val = (val,)
+        return val, len(val)
+
+    are_none = [x is None for x in (lat, lon, alt)]
+    abb_tuple, _ = to_tuple(abbrev)
+    if all(are_none):
+        if len(abb_tuple) == 1 and abb_tuple[0] == 'all':
+            pass
+        elif any(abb not in site_dict for abb in abb_tuple):
+            raise ValueError('One or more site abbreviation not a predefined TCCON site, must give lat, lon, alt')
+    elif any(are_none):
+        if len(abb_tuple) == 1 and abb_tuple[0] == 'all':
+            raise ValueError('Running all sites is incompatible with giving custom lat/lons')
+        else:
+            raise ValueError('If any of lat, lon, or alt are given, all must be given')
+
+    vals = dict()
+    n = dict()
+    vals['abbrev'], n['abbrev'] = to_tuple(abbrev)
+    vals['lat'], n['lat'] = to_tuple(lat)
+    vals['lon'], n['lon'] = to_tuple(lon)
+    vals['alt'], n['alt'] = to_tuple(alt)
+
+    max_n = max(v for v in n.values())
+    for k in vals.keys():
+        if n[k] == 1:
+            vals[k] *= max_n
+        elif n[k] != max_n:
+            raise ValueError('{} is not a single value or the same length as the longest input'.format(k))
+
+    # Constrain longitude between 0 and 360
+    vals['lon'] = tuple([l + 360 if l is not None and l < 0 else l for l in vals['lon']])
+    if any([l < 0 or l >= 360 for l in vals['lon'] if l is not None]):
+        raise ValueError('Longitude outside of valid range (-360, +360, exclusive) found')
+
+    return vals['abbrev'], vals['lat'], vals['lon'], vals['alt']
