@@ -99,7 +99,6 @@ def plot_acos_tccon_comparison(tccon_data, acos_data, tccon_var, acos_var=None, 
 
     alts_differ = np.any(np.abs(tz - az) > 0.05)
     if interp == 'always' or (interp == 'needed' and alts_differ):
-        import pdb; pdb.set_trace()
         adata_i = np.full_like(tz, np.nan)
         for i in range(adata.shape[1]):
             adata_i[:, i] = np.interp(tz[:, i], az[:, i], adata[:, i])
@@ -358,7 +357,7 @@ def _list_mod_files_for_time(mod_dir, datetime, mod_file_order=None):
     :rtype: list(str)
     """
     if mod_file_order is None:
-        pattern = datetime.strftime('%Y%m%d_%H%MZ')
+        pattern = datetime.strftime('%Y%m%d%HZ')
         pattern = '*{}*.mod'.format(pattern)
         return sorted(glob(os.path.join(mod_dir, pattern)))
 

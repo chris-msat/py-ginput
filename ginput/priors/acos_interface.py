@@ -25,6 +25,7 @@ from ..common_utils.sat_utils import time_weight, datetime2datenum
 from ..common_utils.ggg_logging import logger, setup_logger
 from ..mod_maker import mod_maker
 from ..priors import tccon_priors
+from .. import __version__
 
 _acos_tstring_fmt = '%Y-%m-%dT%H:%M:%S.%fZ'
 # Values lower than this will be replaced with NaNs when reading in the resampled met data
@@ -861,6 +862,7 @@ def write_prior_h5(output_file, profile_variables, units, geos_files, resampler_
     with h5py.File(output_file, 'w') as h5obj:
         h5obj.attrs['geos_files'] = ','.join(os.path.abspath(f) for f in geos_files)
         h5obj.attrs['resampler_file'] = os.path.abspath(resampler_file)
+        h5obj.attrs['ginput_version'] = __version__
         h5grp = h5obj.create_group('priors')
         for var_name, var_data in profile_variables.items():
             # Replace NaNs with numeric fill values
