@@ -8,6 +8,7 @@ setup(
     desciption='Python code that creates the .mod and .vmr files used in GGG',
     author='Joshua Laughner, Sebastien Roche, Matt Kiel',
     author_email='jlaugh@caltech.edu',
+    version='1.0.0-rc1',
     url='',
     packages=find_packages(),
 )

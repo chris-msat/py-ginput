@@ -27,6 +27,7 @@ import subprocess
 import sys
 
 from . import mod_constants as const
+from .. import __version__ as _ginput_version
 from .mod_constants import days_per_year
 from .ggg_logging import logger
 from ..mod_maker.tccon_sites import site_dict
@@ -503,8 +504,10 @@ def write_map_file(map_file, site_lat, trop_eqlat, prof_ref_lat, surface_alt, tr
     header_lines.append(os.path.basename(map_file))
     # Header line 3: version info
     hg_parent, hg_branch, hg_date = hg_commit_info()
-    header_lines.append('{pgrm:19} {vers:14} ({branch:19}) {date} {author:10}'
-                        .format(pgrm='MOD_MAKER.py', vers=hg_parent, branch=hg_branch, date=hg_date, author='SR, MK, JL'))
+    header_lines.append('{pgrm:19} v{vers:12} {commit:14} ({branch:19}) {date} {author:10}'
+                        .format(pgrm='GINPUT', vers=_ginput_version, commit=hg_parent, branch=hg_branch, date=hg_date,
+                                author='SR, MK, JL')
+                        )
     # Header line 4: wiki link
     header_lines.append('Please see https://tccon-wiki.caltech.edu for a complete description of this file and its usage.')
     # Header line 5 to (n-2): constants/site lat
@@ -646,11 +649,12 @@ def write_vmr_file(vmr_file, tropopause_alt, profile_date, profile_lat, profile_
     alt_fmt = '{:9.3f} '
     gas_fmt = '{:.3E}  '
     table_header = ['Altitude'] + ['{:10}'.format(name) for name in gas_name_order]
-    header_lines = [' ZTROP_VMR: {:.1f}'.format(tropopause_alt),
+    header_lines = [' GINPUT_VERSION: {}'.format(_ginput_version),
+                    ' ZTROP_VMR: {:.1f}'.format(tropopause_alt),
                     ' DATE_VMR: {:.3f}'.format(date_to_decimal_year(profile_date)),
                     ' LAT_VMR: {:.2f}'.format(profile_lat)] \
-                   + [' ' + l for l in extra_header_info] \
-                   + [ ' '.join(table_header)]
+                + [' ' + l for l in extra_header_info] \
+                + [' '.join(table_header)]
 
     with open(vmr_file, 'w') as fobj:
         _write_header(fobj, header_lines, len(gas_name_order) + 1)

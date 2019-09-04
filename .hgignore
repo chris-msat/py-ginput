@@ -7,3 +7,6 @@
 .vmr$
 .orig$
 egg-info
+ginput/testing/plots/.*.pdf$
+# this will need to be unignored later
+^docs
