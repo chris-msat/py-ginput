@@ -27,6 +27,8 @@ from ..mod_maker import mod_maker
 from ..priors import tccon_priors
 from .. import __version__
 
+__acos_int_version__ = 'rc2'
+
 _acos_tstring_fmt = '%Y-%m-%dT%H:%M:%S.%fZ'
 # Values lower than this will be replaced with NaNs when reading in the resampled met data
 _fill_val_threshold = -9e5
@@ -122,7 +124,7 @@ _def_errh = ErrorHandler(suppress_error=False)
 
 
 def acos_interface_main(instrument, met_resampled_file, geos_files, output_file, mlo_co2_file=None, smo_co2_file=None,
-                        cache_strat_lut=False, nprocs=0, error_handler=_def_errh):
+                        use_trop_eqlat=False, cache_strat_lut=False, nprocs=0, error_handler=_def_errh):
     """
     The primary interface to create CO2 priors for the ACOS algorithm
 
@@ -208,11 +210,11 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
     if nprocs == 0:
         profiles, units = _prior_serial(orig_shape=orig_shape, var_mapping=var_mapping, var_type_info=var_type_info,
                                         met_data=met_data, co2_record=co2_record, prior_flags=prior_flags,
-                                        error_handler=error_handler)
+                                        use_trop_eqlat=use_trop_eqlat, error_handler=error_handler)
     else:
         profiles, units = _prior_parallel(orig_shape=orig_shape, var_mapping=var_mapping, var_type_info=var_type_info,
                                           met_data=met_data, co2_record=co2_record, prior_flags=prior_flags, nprocs=nprocs,
-                                          error_handler=error_handler)
+                                          use_trop_eqlat=use_trop_eqlat, error_handler=error_handler)
 
     # Add latitude, longitude, and flags to the priors file
     profiles['sounding_longitude'] = met_data['longitude']
@@ -247,7 +249,7 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
     write_prior_h5(output_file, profiles, units, geos_files, met_resampled_file)
 
 
-def _prior_helper(i_sounding, i_foot, qflag, mod_data, co2_record, var_mapping, var_type_info,
+def _prior_helper(i_sounding, i_foot, qflag, mod_data, co2_record, var_mapping, var_type_info, use_trop_eqlat=False,
                   prior_flags=None, error_handler=_def_errh):
     """
     Underlying function that generates individual prior profiles in serial and parallel mode
@@ -317,7 +319,7 @@ def _prior_helper(i_sounding, i_foot, qflag, mod_data, co2_record, var_mapping, 
 
     try:
         priors_dict, priors_units, priors_constants = tccon_priors.generate_single_tccon_prior(
-            mod_data, dt.timedelta(hours=0), co2_record,
+            mod_data, dt.timedelta(hours=0), co2_record, use_eqlat_trop=use_trop_eqlat,
         )
     except Exception as err:
         new_err = err.__class__(err.args[0] + ' Occurred at sounding = {}, footprint = {}'.format(i_sounding+1, i_foot+1))
@@ -380,7 +382,7 @@ def _make_output_profiles_dict(orig_shape, var_mapping, var_type_info):
     return prof_dict, unit_dict
 
 
-def _prior_serial(orig_shape, var_mapping, var_type_info, met_data, co2_record, prior_flags=None,
+def _prior_serial(orig_shape, var_mapping, var_type_info, met_data, co2_record, prior_flags=None, use_trop_eqlat=False,
                   error_handler=_def_errh):
     """
     Generate the priors, running in serial mode.
@@ -402,12 +404,11 @@ def _prior_serial(orig_shape, var_mapping, var_type_info, met_data, co2_record, 
         for i_foot in range(orig_shape[1]):
 
             mod_data = _construct_mod_dict(met_data, i_sounding, i_foot)
-            obs_date = met_data['dates'][i_sounding, i_foot]
             qflag = met_data['quality_flags'][i_sounding, i_foot]
 
             this_profiles, this_units, _ = _prior_helper(i_sounding, i_foot, qflag, mod_data, co2_record,
                                                          var_mapping, var_type_info, prior_flags=prior_flags,
-                                                         error_handler=error_handler)
+                                                         use_trop_eqlat=use_trop_eqlat, error_handler=error_handler)
             for h5_var, h5_array in profiles.items():
                 h5_array[i_sounding, i_foot, :] = this_profiles[h5_var]
             if not units_set and this_units is not None:
@@ -418,7 +419,7 @@ def _prior_serial(orig_shape, var_mapping, var_type_info, met_data, co2_record, 
 
 
 def _prior_parallel(orig_shape, var_mapping, var_type_info, met_data, co2_record, nprocs, prior_flags=None,
-                    error_handler=_def_errh):
+                    use_trop_eqlat=False, error_handler=_def_errh):
     """
     Generate the priors, running in parallel mode.
 
@@ -447,7 +448,7 @@ def _prior_parallel(orig_shape, var_mapping, var_type_info, met_data, co2_record
     with Pool(processes=nprocs) as pool:
         result = pool.starmap(_prior_helper, zip(sounding_inds, footprint_inds, qflags, mod_dicts,
                                                  repeat(co2_record), repeat(var_mapping), repeat(var_type_info),
-                                                 repeat(prior_flags), repeat(error_handler)))
+                                                 repeat(use_trop_eqlat), repeat(prior_flags), repeat(error_handler)))
 
     # At this point, result will be a list of tuples of pairs of dicts, the first dict the profiles dict, the second
     # the units dict or None if the prior calculation did not run. We need to combine the profiles into one array per
@@ -863,6 +864,7 @@ def write_prior_h5(output_file, profile_variables, units, geos_files, resampler_
         h5obj.attrs['geos_files'] = ','.join(os.path.abspath(f) for f in geos_files)
         h5obj.attrs['resampler_file'] = os.path.abspath(resampler_file)
         h5obj.attrs['ginput_version'] = __version__
+        h5obj.attrs['interface_version'] = __acos_int_version__
         h5grp = h5obj.create_group('priors')
         for var_name, var_data in profile_variables.items():
             # Replace NaNs with numeric fill values
@@ -1083,6 +1085,8 @@ def parse_args(parser=None, oco_or_gosat=None):
     parser.add_argument('output_file', help='The filename to give the output HDF5 file containing the CO2 profiles and '
                                             'any additional variables. Note that this path will be overwritten without '
                                             'any warning.')
+    parser.add_argument('--use-trop-eqlat', action='store_true',
+                        help='Turn on using a theta-derived equivalent latitude in the troposphere.')
     parser.add_argument('--cache-strat-lut', action='store_true',
                         help='Give this flag to turn on the ability of the code to cache the stratospheric CO2 lookup '
                              'table rather than recalculating it each time this program is launched. Even when cached, '
