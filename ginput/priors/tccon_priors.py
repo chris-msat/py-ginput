@@ -2193,12 +2193,17 @@ def get_trop_eq_lat(prof_theta, p_levels, obs_lat, obs_date, theta_wt=1.0, lat_w
 
     # Last we find the part on the lookup curve that has the same mid-tropospheric theta as our profile. We have to be
     # careful because we will have the same theta in both the NH and SH. The way we'll handle this is to require that we
-    # stay in the same hemisphere if we're in the extra tropics (|lat| > 30) and just find the closest latitude with the
-    # same theta in the climatology in the tropics
-    if obs_lat > 0:
-        yy = this_lat_clim >= 0.0
+    # stay in the same hemisphere if we're in the extra tropics (|lat| > 20) and just use the geographic latitude in
+    # the tropics since this theta/latitude relationship doesn't hold.
+
+    # is_tropics doesn't actually use the age & doy arguments, they are just there for consistency with is_vortex, so
+    # we can pass them None.
+    if mod_utils.is_tropics(obs_lat, None, None):
+        return obs_lat
+    elif obs_lat > 0:
+        yy = this_lat_clim > 0.0
     else:
-        yy = this_lat_clim <= 0.0
+        yy = this_lat_clim < 0.0
 
     this_lat_clim = this_lat_clim[yy]
     this_theta_clim = this_theta_clim[yy]
