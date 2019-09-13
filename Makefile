@@ -1,3 +1,11 @@
+ENV ?= ginput-py3
+
+help:
+	@cat .makehelp
+
+install:
+	./install.sh $(ENV)
+
 test: test-profiles test-utils
 
 quicktest: test-utils

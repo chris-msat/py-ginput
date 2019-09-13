@@ -5,6 +5,7 @@ channels:
 dependencies:
   - astropy=3.1.2
   - ephem=3.7.6.0
+  - h5py=2.9.0
   - jplephem=2.9
   - matplotlib=3.0.3
   - netcdf4=1.4.2

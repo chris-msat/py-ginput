@@ -1,0 +1,30 @@
+Make commands for ginput:
+
+make help: print this help text
+
+make install: install the ginput Python package and its dependencies.
+    By default, this will create a conda environment named "ginput-py3"
+    and install ginput and its dependencies there. This is the preferred
+    method, as the package versions are frozen to ensure that ginput
+    works correctly. You can change the environment name with the ENV
+    argument, i.e. "make install ENV=my-env" will use "my-env" as the
+    environment name.
+
+    If you do not have conda installed, then this will fall back on
+    standard Python 3 virtual environments. It will create the environment
+    in this folder, named "ginput-py3-env" by default. The prefix, before
+    the "-env" can be changed with the ENV argument.
+
+    Once the install is complete, a "run_ginput.py" script will be
+    placed in this directory. Executing it directly (i.e. "./run_ginput.py")
+    will automatically use the correct environment without needing to
+    activate it.
+
+make test:
+    Carries out full set of tests on ginput. Requires GEOS-FPIT data from
+    2018-01-01 to be placed in ./ginput/testing/test_input_data/geosfp-it/Nv
+    (met and chem on eta level files) and ./ginput/test_input_data/geosfp-it/Nx
+    (2D data).
+
+make quicktest:
+    Carries out quick unit tests on ginput; does not require GEOS-FPIT data.
