@@ -1,0 +1,17 @@
+name: modmaker-py3
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - astropy=3.1.2
+  - ephem=3.7.6.0
+  - jplephem=2.9
+  - matplotlib=3.0.3
+  - netcdf4=1.4.2
+  - pandas=0.24.2
+  - pydap=3.2.2
+  - python=3.6.8
+  - scipy=1.2.1
+  - sgp4=1.4
+  - skyfield=1.10
+  - xarray=0.12.1

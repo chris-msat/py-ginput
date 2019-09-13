@@ -6,9 +6,23 @@ _mydir = os.path.dirname(__file__)
 setup(
     name='GInput',
     desciption='Python code that creates the .mod and .vmr files used in GGG',
-    author='Joshua Laughner, Sebastien Roche, Matt Kiel',
+    author='Joshua Laughner, Sebastien Roche, Matthaeus Kiel',
     author_email='jlaugh@caltech.edu',
     version='1.0.0-rc1',
     url='',
+    install_requires=[
+        'astropy>=3.1.2',
+        'ephem>=3.7.6.0',
+        'jplephem>=2.9',
+        'matplotlib>=3.0.3',
+        'netcdf4>=1.4.2',
+        'pandas>=0.24.2',
+        'pydap>=3.2.2',
+        'requests>=2.14.2',
+        'scipy>=1.2.1',
+        'sgp4>=1.4',
+        'skyfield>=1.10',
+        'xarray>=0.12.1'
+    ],
     packages=find_packages(),
 )
