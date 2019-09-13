@@ -132,6 +132,36 @@ def plot_acos_tccon_comparison(tccon_data, acos_data, tccon_var, acos_var=None, 
     return fig, axs
 
 
+def plot_acos_changes(old_oco_prof_file, new_oco_prof_file):
+    with h5py.File(new_oco_prof_file, 'r') as newf, h5py.File(old_oco_prof_file, 'r') as oldf:
+        new_co2 = newf['priors']['co2_prior'][:]
+        new_alt = newf['priors']['altitude'][:]
+        new_pres = newf['priors']['pressure'][:]
+        old_co2 = oldf['priors']['co2_prior'][:]
+
+    new_co2 = new_co2.reshape(-1, 72)
+    new_co2[new_co2 < 0] = np.nan
+    new_alt = new_alt.reshape(-1, 72)
+    new_alt[new_alt < 0] = np.nan
+    new_pres = new_pres.reshape(-1, 72)
+    new_pres[new_pres < 0] = np.nan
+    old_co2 = old_co2.reshape(-1, 72)
+    old_co2[old_co2 < 0] = np.nan
+    co2_diff = new_co2 - old_co2
+
+    fig, axs = plt.subplots(1, 2, figsize=(12, 4))
+    axs[0].plot(1e6 * co2_diff.T, new_alt.T, color='gray')
+    axs[0].set_xlabel(r'$\Delta$ [CO$_2$]')
+    axs[0].set_ylabel('Altitude (km)')
+    axs[1].plot(1e6 * co2_diff.T, new_pres.T, color='gray')
+    axs[1].invert_yaxis()
+    axs[1].set_xlabel(r'$\Delta$ [CO$_2$]')
+    axs[1].set_ylabel('Pressure (hPa)')
+    plt.subplots_adjust(wspace=0.3)
+
+    return fig, axs
+
+
 def match_acos_tccon_profiles(mod_dir, map_dir, acos_met_file, acos_prof_file):
     # Step 1: find the limits of times in the acos file, use this to determine which GEOS times we need
     # Step 2: list the .mod files for the first GEOS time, find the corresponding .mod files for the second GEOS time
