@@ -664,7 +664,10 @@ def weighted_avg_dicts(dict1, dict2, wt):
         for subk in dict1[k]:
             data1 = dict1[k][subk]
             data2 = dict2[k][subk]
-            group[subk] = wt * data1 + (1 - wt) * data2
+            try:
+                group[subk] = wt * data1 + (1 - wt) * data2
+            except TypeError as err:
+                print('Cannot weight {}/{}: {}'.format(k, subk, err.args[0]))
         avg[k] = group
 
     return avg
