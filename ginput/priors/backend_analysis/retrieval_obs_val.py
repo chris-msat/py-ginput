@@ -146,8 +146,9 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
         # will add the ceilings for each gas in the loop, in case they differ
 
         # The first step is to weight the vmr profiles to the time of the .atm file. Remember we're using the floor time
-        # because we assume that temporal variation will be most important at the surface.
-        wt = sat_utils.time_weight_from_datetime(atm_date, prev_time, next_time)
+        # because we assume that temporal variation will be most important at the surface. Need to adjust end time
+        # because it's 3 hours past the actual next file to work with mod_maker's end time being exclusive.
+        wt = sat_utils.time_weight_from_datetime(atm_date, prev_time, next_time - dt.timedelta(hours=3))
         # Get the two .vmr files that bracket the observation
         matched_vmr_files = match_atm_vmr(obskey, vmr_files)
         vmrdat = weighted_avg_vmr_files(matched_vmr_files[0], matched_vmr_files[1], wt)
@@ -646,10 +647,6 @@ def weighted_avg_vmr_files(vmr1, vmr2, wt):
 def weighted_avg_mod_files(mod1, mod2, wt):
     def load_mod_file(fname):
         dat = mod_utils.read_mod_file(fname)
-        # In case of emergency: break glass. If there's an issue where the .mod files have extra data in the other
-        # groups that isn't a number (so can't be weighted), use this line to cut down the dicts to just the important
-        # subgroups
-        dat = {k: dat[k] for k in ('scalar', 'profile')}
         return dat
 
     moddat1 = load_mod_file(mod1)
