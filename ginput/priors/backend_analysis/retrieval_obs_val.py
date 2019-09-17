@@ -1016,14 +1016,17 @@ def _adjust_prof_to_overworld(prof_alts, prof, prof_theta, tropopause_alt, obs_c
     return prof
 
 
-def _get_atm_gas(atm_file):
+def _get_atm_gas(atm_file, force_lower=False):
     # Assumes that the gas name will be at the end of the file name, like ..._CH4.atm or ..._CO.atm.
     gas_and_ext = atm_file.split('_')[-1]
-    return gas_and_ext.replace('.atm','')
+    gas = gas_and_ext.replace('.atm','')
+    if force_lower:
+        gas = gas.lower()
+    return gas
 
 
-def _organize_atm_files_by_species(atm_files):
-    return {_get_atm_gas(f): f for f in atm_files}
+def _organize_atm_files_by_species(atm_files, force_lower=False):
+    return {_get_atm_gas(f, force_lower): f for f in atm_files}
 
 
 ########################################
