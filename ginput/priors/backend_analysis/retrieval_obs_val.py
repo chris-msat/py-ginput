@@ -856,9 +856,6 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None
 
     :return: the combined observation + prior profile on the .vmr levels, and the observation ceiling (in kilometers)
     """
-    if vmralts[0] > 0:
-        raise NotImplementedError('Expected the bottom level of the .vmr profiles to be at altitude 0.')
-
     # if using the adjust_to_overworld logic, then we only want the real obs. data, not any of the old prior that was
     # appended to the top of the profile before
     obsz, obsprof, obsfloor, obsceil = _load_obs_profile(obsfile, limit_below_ceil=adjust_to_overworld)
@@ -893,7 +890,18 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None
             # it.
             zdiff = vmralts[i] - vmralts[i-1]
             in_layer = (obsz >= vmralts[i-1]) & (obsz < vmralts[i])
-            weights[in_layer] = (obsz[in_layer] - vmralts[i-1])/zdiff
+        else:
+            # There's a couple different ways we could handle the case where there is aircraft data below the bottom
+            # layer. We could just ignore it, which might make sense if the profiles we defined on layer edges. For
+            # TCCON, when we do that, typically the bottom edge is at 0, so there will be no values there. We could just
+            # give all points below the bottom layer a relative weight of 1, but that's inconsistent with the idea that
+            # points near the prior level should contribute the most. What I've chosen to do is to assume the altitude
+            # is in the center of the layer, so it should extend as far below as it does above, as use that to weight
+            # the aircraft data.
+            zdiff = vmralts[i+1] - vmralts[i]
+            bottom_alt = vmralts[i] - zdiff
+            in_layer = (obsz >= bottom_alt) & (obsz < vmralts[i])
+        weights[in_layer] = (obsz[in_layer] - vmralts[i-1])/zdiff
 
         # The top bin can be handled by this code whether or not adjust_to_overworld is set, but the result will be
         # different:
