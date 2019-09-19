@@ -506,7 +506,12 @@ def _make_vmr_key(filename):
     file_date = mod_utils.find_datetime_substring(filename, out_type=dt.datetime)
     file_lon = mod_utils.find_lon_substring(filename, to_float=False)
     file_lat = mod_utils.find_lat_substring(filename, to_float=False)
-    return file_date, file_lon.lstrip('0'), file_lat.lstrip('0')
+
+    # remove leading 0s to be consistent with how the aircraft keys are made, but leave one zero before the decimal if
+    # there are only zeros before the decimal
+    file_lon = re.sub(r'0+(?=\d)', '', file_lon)
+    file_lat = re.sub(r'0+(?=\d)', '', file_lat)
+    return file_date, file_lon, file_lat
 
 
 def get_atm_date(file_or_header):
