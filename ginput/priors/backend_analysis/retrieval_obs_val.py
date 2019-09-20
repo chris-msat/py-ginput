@@ -509,8 +509,8 @@ def _make_vmr_key(filename):
 
     # remove leading 0s to be consistent with how the aircraft keys are made, but leave one zero before the decimal if
     # there are only zeros before the decimal
-    file_lon = re.sub(r'0+(?=\d)', '', file_lon)
-    file_lat = re.sub(r'0+(?=\d)', '', file_lat)
+    file_lon = re.sub(r'^0+(?=\d)', '', file_lon)
+    file_lat = re.sub(r'^0+(?=\d)', '', file_lat)
     return file_date, file_lon, file_lat
 
 
