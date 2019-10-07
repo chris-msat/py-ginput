@@ -3087,6 +3087,9 @@ def parse_args(parser=None):
                                                                         'precision in their file names.')
     parser.add_argument('-i', '--integral-file', dest='zgrid', help='Path to an integral file that defined the '
                                                                     'altitude grid to place the priors on.')
+    parser.add_argument('-f', '--flat-outdir', action='store_true', 
+                        help='Write the .vmr files directly to the specified output directory, rather than organizing '
+                             'by site, similarly to .mod files')
 
     parser.set_defaults(driver_fxn=cl_driver)
 
