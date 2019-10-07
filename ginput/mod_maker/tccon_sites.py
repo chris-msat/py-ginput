@@ -44,7 +44,7 @@ site_dict = {
     'ae':{'name': 'Ascension Island','loc':'United Kingdom','lat':-7.933333,'lon':345.583333,'alt':0},
     'eu':{'name': 'Eureka','loc':'Canada','lat':80.05,'lon':273.58,'alt':610},
     'so':{'name': 'Sodankyla','loc':'Finland','lat':67.3668,'lon':26.6310,'alt':188},
-    'iz':{'name': 'Izana','loc':'Spain','lat':28.0,'lon':344.0,'alt':2370},
+    'iz':{'name': 'Izana','loc':'Spain','lat':28.0,'lon':343.49,'alt':2370},
     'if':{'name': 'Idianapolis','loc':'Indiana, USA','lat':39.861389,'lon':273.996389,'alt':270},
     'df':{'name': 'Dryden','loc':'California, USA','lat':34.959917,'lon':242.118931,'alt':700},
     'js':{'name': 'Saga','loc':'Japan','lat':33.240962,'lon':130.288239,'alt':7},
