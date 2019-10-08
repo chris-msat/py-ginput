@@ -688,15 +688,15 @@ def _load_obs_profile(obsfile, limit_below_ceil=False):
     :return: the altitude vector, concentration vector, floor altitude, and ceiling altitude. All altitudes are in
      kilometers, the concentrations are in mole fraction.
     """
-    conc_scaling = {'ppm': 1e-6, 'ppb': 1e-9}
+    conc_scaling = {'ppm': 1e-6, 'ppmv': 1e-6, 'ppb': 1e-9, 'ppbv': 1e-9}
     obsdat, obsinfo = butils.read_atm_file(obsfile)
 
-    # If "Altitude_m" is not the key for altitude, or the concentration is not the last three char in the last column
+    # If "Altitude_m" is not the key for altitude, or the concentration is not the part after the last _ in the column
     # header, we'll get a key error so we should be able to catch different units.
     obsz = obsdat['Altitude_m'].to_numpy() * 1e-3
 
     conc_key = obsdat.keys()[-1]
-    unit = conc_key[-3:]
+    unit = conc_key.split('_')[-1]
     obsconc = obsdat[conc_key].to_numpy() * conc_scaling[unit]
 
     floor_key = _find_key(obsinfo, r'floor_m$')
