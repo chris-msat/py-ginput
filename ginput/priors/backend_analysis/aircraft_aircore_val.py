@@ -177,7 +177,7 @@ def rmse2(diff_values):
     :return: root mean squared error
     :rtype: float
     """
-    return np.sqrt(np.nanmean((diff_values)**2.0))
+    return np.sqrt(np.nanmean(diff_values**2.0))
 
 
 def iter_prior_pairs(prior_root_1, prior_root_2, return_type='dict'):
