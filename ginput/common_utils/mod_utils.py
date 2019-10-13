@@ -183,7 +183,11 @@ def get_num_header_lines(filename):
     with open(filename, 'r') as fobj:
         header_info = fobj.readline()
 
-    return int(header_info.split()[0])
+    if ',' in header_info:
+        header = header_info.split(',')
+    else:
+        header = header_info.split()
+    return int(header[0])
 
 
 def _write_header(fobj, header_lines, n_data_columns):
