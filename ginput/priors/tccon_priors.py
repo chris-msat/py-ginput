@@ -1808,8 +1808,28 @@ class CORecord(TraceGasRecord):
 
         :return: the modified gas profile and a dictionary on ancillary information (currently empty).
         """
-        prof_gas[:] = mod_data['profile']['CO'] * 1e9
-        return prof_gas, dict()
+        co = mod_data['profile']['CO'] * 1e9
+
+        # Comparison with ATom showed a low bias in the free trop. We need to scale up the free trop to 1.23x its base
+        # value, but want to relax the scale to 1 at the bottom level and in the stratosphere. We'll define "boundary
+        # layer" as below 800 hPa.
+        scale = 1.23
+        pres = mod_data['profile']['Pressure']
+        z = mod_data['profile']['Height']
+        theta = mod_data['profile']['PT']
+
+        xx_ft = np.flatnonzero((pres < 800) & (pres > mod_data['scalar']['TROPPB']))
+        ft_start = xx_ft[0]
+        ft_stop = xx_ft[-1]
+        strat_start = np.flatnonzero((theta > 380) & (pres < mod_data['scalar']['TROPPB']))[0]
+
+        scale_factors = np.ones_like(co)
+        scale_factors[xx_ft] = scale
+        scale_factors[:ft_start] = np.interp(z[:ft_start], [z[0], z[ft_start]], [1, scale])
+        scale_factors[ft_stop:strat_start] = np.interp(theta[ft_stop:strat_start], [theta[ft_stop], theta[strat_start]], [scale, 1])
+
+        prof_gas[:] = co * scale_factors
+        return prof_gas, {'scale_factors': scale_factors}
 
     def add_strat_prior(self, prof_gas, retrieval_date, mod_data, **kwargs):
         """
@@ -2585,7 +2605,7 @@ def _float2datetime(dtarray):
     return np.array([None if np.isnan(d) else mod_utils.from_unix_time(d, pd.Timestamp) for d in dtarray])
 
 
-def interp_to_zgrid(profile_dict, zgrid):
+def interp_to_zgrid(profile_dict, zgrid, gas_extrap_method='linear'):
     """
     Interpolate the output profile variables to a desired altitude grid.
 
@@ -2608,6 +2628,7 @@ def interp_to_zgrid(profile_dict, zgrid):
     # Specify pairs of functions to convert and unconvert the values of the input arrays. Each key must match a key in
     # the profile_dict, and the values must be two element tuples, where the first element is the function to use to
     # convert the values in the dict to ones that can be interpolated and the second does the reverse process.
+    met_variables = ('Height', 'Temp', 'Pressure', 'PT', 'EqL')
     dt_converters = (_datetime2float, _float2datetime)
     converters = {'gas_record_dates': dt_converters,
                   'gas_date': dt_converters}
@@ -2622,7 +2643,15 @@ def interp_to_zgrid(profile_dict, zgrid):
             v = converters[k][0](v)
 
         v = xr.DataArray(v, coords=[profile_z], dims=['z'])
-        v = v.interp(z=zgrid, method='linear', kwargs={'fill_value': 'extrapolate'})
+        if gas_extrap_method == 'linear' or k in met_variables:
+            # we always want to linearly extrapolate the met variables, especially since they often act as vertical
+            # coordinates. If more met variables are added, you'll have to update the list.
+            fills = 'extrapolate'
+        elif gas_extrap_method in ('const', 'constant'):
+            fills = (v[0], v[-1])
+        else:
+            raise ValueError('extrap_method must be one of: "linear", "const", or "constant".')
+        v = v.interp(z=zgrid, method='linear', kwargs={'fill_value': fills})
 
         if k in converters:
             v = converters[k][1](v.data)
@@ -2653,6 +2682,10 @@ def generate_single_tccon_prior(mod_file_data, utc_offset, concentration_record,
 
     :param site_abbrev: the two-letter site abbreviation. Currently only used in naming the output file.
     :type site_abbrev: str
+
+    :param zgrid: specifies what altitude grid to interpolate the priors to. May be either a string pointing to an
+     :file:`integral*.gnd` file or an array of altitudes (in kilometers).
+    :type zgrid: str, :class:`numpy.ndarray`, or :class:`xarray.DataArray`
 
     :param use_eqlat_trop: when ``True``, the latitude used for age-of-air and seasonal cycle calculations is calculate
      based on the climatology of latitude vs. mid-tropospheric potential temperature. When ``False``, the geographic
@@ -2742,7 +2775,10 @@ def generate_single_tccon_prior(mod_file_data, utc_offset, concentration_record,
                 'gas_date': gas_date_prof,  # TODO: eliminate duplicate
                 'gas_record_dates': gas_date_prof}
 
-    map_dict = interp_to_zgrid(map_dict, zgrid)
+    # 2019-10-17: definitely do not want to extrapolate CO linearly to the surface, as this can result in very large
+    # surface CO value (e.g. nearly 10,000 ppb for ci 2017-06-23). At present, the other gases behave fine with linear
+    # extrapolation, so we'll keep that.
+    map_dict = interp_to_zgrid(map_dict, zgrid, gas_extrap_method='const' if gas_name == CORecord._gas_name else 'linear')
     concentration_record.add_extra_column(map_dict[gas_name], retrieval_date=obs_utc_date, mod_data=mod_file_data)
 
     # Finally prepare the output, writing a .map file if needed.
