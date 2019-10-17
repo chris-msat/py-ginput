@@ -1810,26 +1810,13 @@ class CORecord(TraceGasRecord):
         """
         co = mod_data['profile']['CO'] * 1e9
 
-        # Comparison with ATom showed a low bias in the free trop. We need to scale up the free trop to 1.23x its base
-        # value, but want to relax the scale to 1 at the bottom level and in the stratosphere. We'll define "boundary
-        # layer" as below 800 hPa.
+        # Comparison with ATom showed a low bias so we multiply the CO profile by the correct factor to bring it in line
+        # with ATom. This assumes that the same scale factor applies throughout the profile, which is supported by the
+        # ATom data for the whole troposphere, and is to some extent irrelevant in the stratosphere since CO from
+        # mesospheric descent dominates there.
         scale = 1.23
-        pres = mod_data['profile']['Pressure']
-        z = mod_data['profile']['Height']
-        theta = mod_data['profile']['PT']
-
-        xx_ft = np.flatnonzero((pres < 800) & (pres > mod_data['scalar']['TROPPB']))
-        ft_start = xx_ft[0]
-        ft_stop = xx_ft[-1]
-        strat_start = np.flatnonzero((theta > 380) & (pres < mod_data['scalar']['TROPPB']))[0]
-
-        scale_factors = np.ones_like(co)
-        scale_factors[xx_ft] = scale
-        scale_factors[:ft_start] = np.interp(z[:ft_start], [z[0], z[ft_start]], [1, scale])
-        scale_factors[ft_stop:strat_start] = np.interp(theta[ft_stop:strat_start], [theta[ft_stop], theta[strat_start]], [scale, 1])
-
-        prof_gas[:] = co * scale_factors
-        return prof_gas, {'scale_factors': scale_factors}
+        prof_gas[:] = co * scale
+        return prof_gas, {'scale': scale}
 
     def add_strat_prior(self, prof_gas, retrieval_date, mod_data, **kwargs):
         """
