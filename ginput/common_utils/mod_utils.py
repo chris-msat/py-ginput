@@ -261,7 +261,7 @@ def read_mod_file(mod_file, as_dataframes=False):
 
     out_dict = dict()
     if as_dataframes:
-        out_dict['file'] = pd.DataFrame(file_vars)
+        out_dict['file'] = pd.DataFrame(file_vars, index=[0])
         out_dict['constants'] = constant_vars
         out_dict['scalar'] = scalar_vars
         out_dict['profile'] = profile_vars
