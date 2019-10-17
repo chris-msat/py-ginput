@@ -2215,7 +2215,12 @@ def get_trop_eq_lat(prof_theta, p_levels, obs_lat, obs_date, theta_wt=1.0, lat_w
     this_lat_clim = this_lat_clim[yy]
     this_theta_clim = this_theta_clim[yy]
 
-    return find_closest_theta(this_theta_clim, this_lat_clim, midtrop_theta)
+    eqlat = find_closest_theta(this_theta_clim, this_lat_clim, midtrop_theta)
+    if np.abs(obs_lat) < 25:
+        wt = min((np.abs(obs_lat) - 20)/5.0, 1.0)
+        eqlat = (1 - wt) * obs_lat + wt * eqlat
+
+    return eqlat
 
 
 def adjust_zgrid(z_grid, z_trop, z_obs):
