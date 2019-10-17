@@ -571,7 +571,7 @@ def vmr_file_name(obs_date, lon, lat, keep_latlon_prec=False, date_fmt='%Y%m%d%H
     :rtype: str
     """
     prec = 2 if keep_latlon_prec else 0
-    lat = format_lat(lat, prec=prec)
+    lat = format_lat(lat, prec=prec, zero_pad=True)
     lon = format_lon(lon, prec=prec, zero_pad=True)
     major_version = const.priors_version.split('.')[0]
     return 'JL{ver}_{date}{tz}_{lat}_{lon}.vmr'.format(ver=major_version, date=obs_date.strftime(date_fmt),
