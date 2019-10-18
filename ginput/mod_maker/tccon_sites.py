@@ -70,6 +70,12 @@ site_dict = {
 def tccon_site_info(site_dict_in=None):
     """
     Takes the site_dict dictionary and adds longitudes in the [-180,180] range
+
+    :param site_dict_in: the site dictionary to add lon_180 to. If not given, the default stored in this module is used.
+    :type site_dict_in: dict
+
+    :return: an ordered version of the site dictionary with the lon_180 key added.
+    :rtype: :class:`collections.OrderedDict`
     """
     if site_dict_in is None:
         site_dict_in = site_dict
@@ -94,11 +100,43 @@ def tccon_site_info(site_dict_in=None):
 
 
 def tccon_site_info_for_date(date, site_abbrv=None, site_dict_in=None, use_closest_in_time=True):
+    """
+    Get the information (lat, lon, alt, etc.) for a given site for a specific date.
+
+    Generally, the date only matters if the site changed positions at some point, which currently only affects Darwin.
+    However, using this function to get the specific dict for a given site means that if more sites change position
+    in the future, your code will not require adjustment.
+
+    :param date: the date to get site info for
+    :type datetime: datetime-like
+
+    :param site_abbrv: the two-letter site abbreviation, specifying the site to get info for. If left as ``None``, all
+     sites are returned.
+    :type site_abbrv: str
+
+    :param site_dict_in: optional, if you have a site dictionary already prepared, you can pass it in to save a little
+     bit of time. Otherwise, the default dictionary will be loaded.
+    :type site_dict_in: None or dict
+
+    :param use_closest_in_time: controls what happens if you try to get a profile outside a defined time range. For
+     example, Darwin was in one location between 1 Aug 2005 and 1 Jul 2015 and another after 1 Jul 2015. If you request
+     Darwin's information before 1 Aug 2005, it's technically undefined because the site did not exist. When this
+     parameter is ``True`` (default) the nearest time period will be used, so in this example, requesting Darwin's
+     information before 1 Aug 2005 will return its first location. Setting this to ``False`` will cause a
+     TCCONTimeSpanError to be raised if you request a time outside those defined for a site. Note that this only affects
+     sites like Darwin that have moved.
+
+    :return: dictionary defining the name, loc (location), lat, lon, and alt of the site requested. If ``site_abbrv``
+     is ``None``, then it will be a dictionary of dictionaries, with the top dictionary having the site IDs as keys.
+    :rtype: dict
+    """
     # Get the raw dictionary or ensure that the input has the lon_180 key.
     new_site_dict = tccon_site_info() if site_dict_in is None else tccon_site_info(site_dict_in)
 
     for site, info in new_site_dict.items():
         # If a site has the time spans defined, then we need to find the one that has the date we're interested in
+        # Otherwise, we can just leave the entry for this site as-is and select the correct site at the end of the
+        # function.
         if 'time_spans' in info:
             time_spans = info.pop('time_spans')
             found_time = False
