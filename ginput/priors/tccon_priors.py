@@ -1816,6 +1816,10 @@ class CORecord(TraceGasRecord):
         # mesospheric descent dominates there.
         scale = 1.23
         prof_gas[:] = co * scale
+        # Testing shows that the profiles at Caltech have too much CO in the PBL. To try to reduce this smoothly, we
+        # cut CO in excess of ~300 ppb with a power law. This should just accentuate the decrease toward the surface
+        # we'd expect in a well-mixed PBL
+        prof_gas[prof_gas > 300] = 300 + (prof_gas[prof_gas > 300] - 300)**0.9
         return prof_gas, {'scale': scale}
 
     def add_strat_prior(self, prof_gas, retrieval_date, mod_data, **kwargs):
