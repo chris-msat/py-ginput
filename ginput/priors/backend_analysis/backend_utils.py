@@ -215,6 +215,67 @@ def get_matching_val_profiles(prior_lons, prior_lats, prior_dates, prior_alts, v
     return out_profiles, out_prof_errors, prior_alts, out_datetimes
 
 
+def read_mav_file(filename, key='vmr', rtype='dict'):
+    def read_mav_block(f):
+        header_dict = dict()
+        spec_line = f.readline()
+        if len(spec_line) == 0:
+            # at the end of the file
+            return None, None
+        header_dict['spectrum'] = spec_line.split(':')[1].strip()
+
+        header_count_line = f.readline().split()
+        nhead = int(header_count_line[0])
+        nlines = int(header_count_line[2])
+        # nhead includes the count line itself and the header of the table
+        for i in range(nhead-1, 1, -1):
+            line = fobj.readline()
+            if i == 3:
+                header_dict['vmr_file'] = line.strip()
+            elif i == 2:
+                header_dict['mod_file'] = line.strip()
+            else:
+                head_key, value = [x.strip() for x in line.split(':')]
+                try:
+                    value = float(value)
+                except ValueError:
+                    pass  # value not intepretable as a float
+                header_dict[head_key] = value
+
+        # total hack, but read_csv seems to move the file pointer too far, so record the current location, then we'll
+        # rewind and read the right number of lines
+        ptr = f.tell()
+        df = pd.read_csv(fobj, nrows=nlines, sep=r'\s+')
+        f.seek(ptr)
+        for i in range(nlines+1):  # +1 for the header
+            f.readline()
+
+        if key == 'vmr':
+            keyval = os.path.splitext(os.path.basename(header_dict['vmr_file']))[0]
+        elif key == 'mod':
+            keyval = os.path.splitext(os.path.basename(header_dict['mod_file']))[0]
+        elif key == 'spectrum':
+            keyval = header_dict['spectrum']
+        else:
+            raise ValueError('key must be "vmr", "mod", or "spectrum"')
+        return keyval, {'header': header_dict, 'profile': df}
+
+    blocks = dict() if rtype == 'dict' else []
+
+    with open(filename, 'r') as fobj:
+        fobj.readline()  # first line just gives the gsetup version
+        while True:
+            keyval, data_dict = read_mav_block(fobj)
+            if keyval is None:
+                break
+            if rtype == 'dict':
+                blocks[keyval] = data_dict
+            else:
+                blocks.append(data_dict)
+
+    return blocks
+
+
 def read_atm_file(filename, limit_to_meas=False):
     """
     Read a .atm file
