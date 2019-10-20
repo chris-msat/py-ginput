@@ -1,5 +1,6 @@
 from __future__ import print_function, division
 
+from collections import OrderedDict
 import datetime as dt
 from datetime import datetime as dtime
 from glob import glob
@@ -16,6 +17,10 @@ _mydir = os.path.abspath(os.path.dirname(__file__))
 
 
 class ACEFileError(Exception):
+    pass
+
+
+class AtmUnitError(Exception):
     pass
 
 
@@ -276,7 +281,7 @@ def read_mav_file(filename, key='vmr', rtype='dict'):
     return blocks
 
 
-def read_atm_file(filename, limit_to_meas=False):
+def read_atm_file(filename, limit_to_meas=False, keep_header_strings=False):
     """
     Read a .atm file
 
@@ -289,10 +294,9 @@ def read_atm_file(filename, limit_to_meas=False):
     :return: the data from the .atm file and the header information
     :rtype: :class:`pandas.DataFrame`, dict
     """
-    header_info = dict()
+    header_info = OrderedDict()
     with open(filename, 'r') as fobj:
-        # skip line 1
-        fobj.readline()
+        header_info['description'] = fobj.readline()
         line_num = 0
         for line in fobj:
             line_num += 1
@@ -301,7 +305,7 @@ def read_atm_file(filename, limit_to_meas=False):
                 break
             else:
                 k, v = [s.strip() for s in line.split(':', 1)]
-                header_info[k] = convert_atm_value(v)
+                header_info[k] = v if keep_header_strings else convert_atm_value(v)
 
     data = pd.read_csv(filename, header=line_num + 1, na_values='NAN')
     if limit_to_meas:
@@ -309,6 +313,14 @@ def read_atm_file(filename, limit_to_meas=False):
         top_alt = header_info['aircraft_ceiling_m']
         xx = (data['Altitude_m'] >= bottom_alt) & (data['Altitude_m'] <= top_alt)
         data = data[xx]
+
+    # check units - can update later to do conversion if there's a problem
+    expected_units = ['m', 'hPa', 'C']
+    data_keys = list(data.keys())
+    for expected, colname in zip(expected_units, data_keys):
+        actual = colname.split('_')[-1]
+        if actual != expected:
+            raise AtmUnitError('In {}, column "{}" was expected to have units of "{}"'.format(filename, colname, expected))
 
     return data, header_info
 
