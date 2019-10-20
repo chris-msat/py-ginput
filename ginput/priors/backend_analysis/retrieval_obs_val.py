@@ -27,7 +27,8 @@ class AtmStitchError(Exception):
     pass
 
 
-def generate_obspack_base_vmrs(obspack_dir, zgrid, std_vmr_file, save_dir, geos_dir, chm_dir=None, make_mod=True, make_vmrs=True):
+def generate_obspack_base_vmrs(obspack_dir, zgrid, std_vmr_file, save_dir, geos_dir, chm_dir=None, make_mod=True,
+                               make_vmrs=True, overwrite=True):
     """
     Create the prior-only .vmr files for the times and locations of the .atm files in the given obspack directory
 
@@ -47,6 +48,9 @@ def generate_obspack_base_vmrs(obspack_dir, zgrid, std_vmr_file, save_dir, geos_
      the path to that directory. That directory must have a "Nv" subdirectory.
     :type chm_dir: str
 
+    :param overwrite: controls whether to overwrite existing files. Only currently implemented for .mod files
+    :type overwrite: bool
+
     :return: None. Writes .mod and .vmr files.
     """
     # For each .atm file, we will need to generate the corresponding .mod and .vmr files
@@ -57,17 +61,34 @@ def generate_obspack_base_vmrs(obspack_dir, zgrid, std_vmr_file, save_dir, geos_
     obspack_files = list_obspack_files(obspack_dir)
     obspack_locations = construct_profile_locs(obspack_files)
     if make_mod:
-        make_mod_files(obspack_locations=obspack_locations, save_dir=save_dir, geos_dir=geos_dir, chm_dir=chm_dir)
+        make_mod_files(obspack_locations=obspack_locations, save_dir=save_dir, geos_dir=geos_dir, chm_dir=chm_dir,
+                       overwrite=overwrite)
     if make_vmrs:
         make_vmr_files(obspack_locations=obspack_locations, save_root_dir=save_dir, zgrid=zgrid, std_vmr_file=std_vmr_file)
 
 
-def make_mod_files(obspack_locations, save_dir, geos_dir, chm_dir=None):
+def make_mod_files(obspack_locations, save_dir, geos_dir, chm_dir=None, overwrite=True):
     for date_range, loc_info in obspack_locations.items():
         loc_lon = loc_info['lon']
         loc_lat = loc_info['lat']
         loc_alt = [0.0 for x in loc_lon]
         loc_abbrev = loc_info['abbrev']
+
+        if not overwrite:
+            if len(loc_lat) != len(loc_lon) or len(loc_lat) != len(loc_abbrev):
+                raise NotImplementedError('lon, lat, and abbrevs all assumed to be the same length')
+            dates = pd.date_range(date_range[0], date_range[1], closed='left', freq='3H')
+            exists = []
+            for d in dates:
+                for lon, lat, abbrev in zip(loc_lon, loc_lat, loc_abbrev):
+                    mod_file = mod_utils.mod_file_name_for_priors(d, lat, lon, round_latlon=False)
+                    exists.append(os.path.join(save_dir, 'fpit', abbrev, 'vertical', mod_file))
+            if all(exists):
+                print('.mod files for {}-{} already exist, not remaking'.format(*date_range))
+                continue
+            elif any(exists):
+                print('{}/{} .mod files for {}-{} already exist, not remaking'.format(sum(exists), len(exists), *date_range))
+                continue
 
         mod_maker.driver(date_range=date_range, met_path=geos_dir, chem_path=chm_dir, save_path=save_dir,
                          keep_latlon_prec=True, lon=loc_lon, lat=loc_lat, alt=loc_alt, site_abbrv=loc_abbrev,
