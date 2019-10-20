@@ -296,7 +296,7 @@ def read_atm_file(filename, limit_to_meas=False, keep_header_strings=False):
     """
     header_info = OrderedDict()
     with open(filename, 'r') as fobj:
-        header_info['description'] = fobj.readline()
+        header_info['description'] = fobj.readline().strip()
         line_num = 0
         for line in fobj:
             line_num += 1

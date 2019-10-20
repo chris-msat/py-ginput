@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 
+from ... import __version__
 from ...common_utils import mod_utils, sat_utils
 from ...mod_maker import mod_maker, tccon_sites
 from .. import tccon_priors
@@ -226,9 +227,10 @@ def merge_vmr_files(vmr_in_dir, vmr_out_dir):
         return start, end
 
     def merge_vmr_files(main_file, *additional_files):
-        main_vmr = mod_utils.read_vmr_file(main_file)
+        print('Merging {} into {}'.format(', '.join([os.path.basename(f) for f in additional_files]), os.path.basename(main_file)))
+        main_vmr = mod_utils.read_vmr_file(main_file, lowercase_names=False)
         for other_file in additional_files:
-            other_vmr = mod_utils.read_vmr_file(other_file)
+            other_vmr = mod_utils.read_vmr_file(other_file, lowercase_names=False)
             other_species = other_vmr['scalar']['observed_species'].split(',')
             main_vmr['scalar']['observed_species'] += ',' + other_vmr['scalar']['observed_species']
             main_vmr['scalar']['atm_files'] += ',' + other_vmr['scalar']['atm_files']
@@ -237,15 +239,15 @@ def merge_vmr_files(vmr_in_dir, vmr_out_dir):
                 if k not in main_vmr['scalar']:
                     main_vmr['scalar'][k] = v
             for gas in other_species:
-                gas = gas.lower()
+                gas = gas
                 main_vmr['profile'][gas] = other_vmr['profile'][gas]
 
         # need to extract some of the values to pass back to the vmr writing function
-        main_vmr['scalar'].pop('ginput_version')
-        ztrop = main_vmr['scalar'].pop('ztrop_vmr')
-        date_vmr = mod_utils.decimal_year_to_date(main_vmr['scalar'].pop('date_vmr'))
-        lat_vmr = main_vmr['scalar'].pop('lat_vmr')
-        z_vmr = main_vmr['profile'].pop['altitude']
+        main_vmr['scalar'].pop('GINPUT_VERSION')
+        ztrop = main_vmr['scalar'].pop('ZTROP_VMR')
+        date_vmr = mod_utils.decimal_year_to_date(main_vmr['scalar'].pop('DATE_VMR'))
+        lat_vmr = main_vmr['scalar'].pop('LAT_VMR')
+        z_vmr = main_vmr['profile'].pop('Altitude')
         new_name = os.path.join(vmr_out_dir, os.path.basename(main_file))
         mod_utils.write_vmr_file(new_name, tropopause_alt=ztrop, profile_date=date_vmr, profile_lat=lat_vmr,
                                  profile_alt=z_vmr, profile_gases=main_vmr['profile'],
@@ -264,32 +266,38 @@ def merge_vmr_files(vmr_in_dir, vmr_out_dir):
         vmrs = mod_utils.read_vmr_file(f)
         vmr_date = mod_utils.find_datetime_substring(f, out_type=pd.Timestamp)
         vmr_species = vmrs['scalar']['observed_species'].split(',')
-        vmr_info[vmr_date] = {'file': f, 'species': vmr_species}
-        all_species.union(vmr_species)
+        site = mod_utils.find_lat_substring(f) + '_' + mod_utils.find_lon_substring(f)
+        vmr_info[vmr_date] = {'file': f, 'species': vmr_species, 'site': site}
+        all_species = all_species.union(vmr_species)
 
     # Convert into a dataframe - that way we can iterate over the lines
-    df_dict = {gas: False for gas in all_species}
+    df_dict = {gas: 0 for gas in all_species}
+    df_dict['site'] = ''
     df_dict['file'] = ''
-    df_dates = pd.DataFrame(list(vmr_info.keys()))
+    df_dates = list(vmr_info.keys())
     vmr_df = pd.DataFrame(df_dict, index=df_dates)
     for k, info in vmr_info.items():
         vmr_df.loc[k, 'file'] = info['file']
+        vmr_df.loc[k, 'site'] = info['site']
         for gas in info['species']:
-            vmr_df.loc[k, gas] = True
+            vmr_df.loc[k, gas] = 1
 
     # Now loop over each line, if there are no files within two geos timesteps, just copy the .vmr file to the output
     # directory. If there are two that don't share any species, merge. If there are two that share species, error.
-    for time in vmr_df.index:
-        start, stop = get_bdy_geos_times(time)
-        sub_df = vmr_df.loc[slice(start, stop), :]
-        if sub_df.shape[0] == 1:
-            shutil.copy2(sub_df['file'], vmr_out_dir)
-        elif (sub_df.sum(axis=0) > 1).any():
-            raise VmrMergeError('Multiple .vmr files with the same species found in the time range {} to {}'.format(
-                start, stop
-            ))
-        else:
-            merge_vmr_files(*sub_df['file'].to_numpy())
+    for site, site_df in vmr_df.groupby('site'):
+        for time in site_df.index:
+            start, stop = get_bdy_geos_times(time)
+            sub_df = site_df.loc[slice(start, stop), :]
+            if sub_df.shape[0] == 1:
+                shutil.copy2(sub_df['file'].item(), vmr_out_dir)
+            elif (sub_df.loc[:,all_species].sum(axis=0) > 1).any():
+                raise VmrMergeError('Multiple .vmr files with the same species found in the time range {} to {} at {}:\n'
+                                    ' * {}\nArchive the .atm file for one of the .vmr files, deleted the stitched .vmr '
+                                    'files, and rerun.'.format(
+                    start, stop, site.replace('_', ', '), '\n * '.join(sub_df['file'].to_numpy())
+                ))
+            else:
+                merge_vmr_files(*sub_df['file'].to_numpy())
 
 
 def add_strat_to_atm_files(obspack_in_dir, obspack_out_dir, vmr_dir):
@@ -301,15 +309,23 @@ def add_strat_to_atm_files(obspack_in_dir, obspack_out_dir, vmr_dir):
     def write_atm_file_simple(out_file, data_df, header_dict):
         # TODO: unify with aircraft_preprocessing writer
         with open(out_file, 'w') as wobj:
-            for key, value in header_dict:
+            header_dict = header_dict.copy()
+            header_dict['ginput_version'] = __version__
+            for key, value in header_dict.items():
                 if key == 'description':
                     wobj.write(value + '\n')
                 else:
                     wobj.write('{:30} {}\n'.format(key+':', value))
+            wobj.write('-' * 100 + '\n')
             wobj.write(','.join(data_df.columns) + '\n')
-            for row in data_df.iterrows():
+            for index, row in data_df.iterrows():
                 # can't use to_csv b/c want each column to have a specific format
-                wobj.write('{:.0f},{:.3e},{:.1f},{:.1f},{:.2f}'.format(*row.to_numpy()))
+                fmt = '{:.0f},{:.5g},{:.5g},{:.2f}'
+                if row.size > 4:
+                    # .atm files always have an H2O column but only have a fifth column
+                    # if there's a trace gas measurement.
+                    fmt += ',{:.2f}'
+                wobj.write(fmt.format(*row.to_numpy()) + '\n')
 
     # Loop through the .vmr files, for each one, read the corresponding .atm files, interpolate the corresponding gas to
     # the .atm grid, then save the new atm file in the output directory.
@@ -328,12 +344,13 @@ def add_strat_to_atm_files(obspack_in_dir, obspack_out_dir, vmr_dir):
             f_full = os.path.join(obspack_in_dir, f)
             atmdat, atmhead = butils.read_atm_file(f_full, keep_header_strings=True)
             atmz = atmdat.iloc[:, 0]
-            atm_ceiling = atmhead['aircraft_ceiling_m' if 'aircraft_ceiling_m' in atmhead else 'ceiling_m']
+            atm_ceiling = float(atmhead['aircraft_ceiling_m' if 'aircraft_ceiling_m' in atmhead else 'ceiling_m'])
             xx_replace = atmz > atm_ceiling
 
             # interpolate the prior to the stratospheric levels
-            vmr_scale = get_scale_factor(atmdat.columns[-1])
-            atmdat.iloc[xx_replace, -1] = np.interp(atmz[xx_replace], vmrz, vmr_scale*vmrdat['profile'][gas])
+            data_col = atmdat.columns[-1]
+            vmr_scale = get_scale_factor(data_col)
+            atmdat.loc[xx_replace, data_col] = np.interp(atmz[xx_replace], vmrz, vmr_scale*vmrdat['profile'][gas])
             write_atm_file_simple(os.path.join(obspack_out_dir, f), atmdat, atmhead)
 
 
