@@ -1152,7 +1152,10 @@ def _adjust_prof_to_overworld(prof_alts, prof, prof_theta, tropopause_alt, obs_c
     overworld_conc = prof[i_overworld]
 
     prof[i_obs_top:i_trop] = obs_top_conc
-    xx_middleworld = (prof_alts > tropopause_alt) & (prof_theta < 380)
+    # only want to interpolate in theta above the top of the observations. If the observations end in the middleworld,
+    # the prof_alts > tropopause_alt is not enough. Also need to limit to above the observations. This occurred for
+    # the Lamont aircore on 2012-01-14 at 20:54Z
+    xx_middleworld = (prof_alts > tropopause_alt) & (prof_alts > prof_alts[i_obs_top]) & (prof_theta < 380)
     prof[xx_middleworld] = np.interp(prof_theta[xx_middleworld], [trop_theta, overworld_theta], [obs_top_conc, overworld_conc])
 
     return prof
