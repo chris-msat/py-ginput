@@ -82,13 +82,15 @@ def make_mod_files(obspack_locations, save_dir, geos_dir, chm_dir=None, overwrit
             for d in dates:
                 for lon, lat, abbrev in zip(loc_lon, loc_lat, loc_abbrev):
                     mod_file = mod_utils.mod_file_name_for_priors(d, lat, lon, round_latlon=False)
-                    exists.append(os.path.join(save_dir, 'fpit', abbrev, 'vertical', mod_file))
+                    exists.append(os.path.exists(os.path.join(save_dir, 'fpit', abbrev, 'vertical', mod_file)))
             if all(exists):
                 print('.mod files for {}-{} already exist, not remaking'.format(*date_range))
                 continue
             elif any(exists):
                 print('{}/{} .mod files for {}-{} already exist, not remaking'.format(sum(exists), len(exists), *date_range))
                 continue
+            else:
+                print('Must make .mod files for {}-{}'.format(*date_range))
 
         mod_maker.driver(date_range=date_range, met_path=geos_dir, chem_path=chm_dir, save_path=save_dir,
                          keep_latlon_prec=True, lon=loc_lon, lat=loc_lat, alt=loc_alt, site_abbrv=loc_abbrev,
