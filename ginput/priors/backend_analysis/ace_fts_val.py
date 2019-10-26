@@ -4,6 +4,8 @@ from glob import glob
 import netCDF4 as ncdf
 import numpy as np
 import os
+import pandas as pd
+import xarray as xr
 
 from ...common_utils import mod_utils
 from . import backend_utils as butils
@@ -192,3 +194,50 @@ def get_matching_ace_profiles(lon, lat, date, ace_dir, specie, alt, ace_var=None
                                      ace_profiles, ace_prof_error, interp_to_alt=interp_to_alt)
 
 
+def quick_ace_co_check(ace_co_file, geos_chm_dir, save_file):
+    # 1. loop over ACE profiles
+    # 2. figure out which GEOS file we need
+    # 3. if present, interpolate CO to the ACE lat/lon/pres
+    with ncdf.Dataset(ace_co_file) as nh:
+        ace_dates = butils.read_ace_date(nh)
+        ace_qual = butils.read_ace_var(nh, 'quality_flag', None)
+        ace_co = butils.read_ace_var(nh, 'CO', ace_qual)
+        ace_pres = butils.read_ace_var(nh, 'pressure', ace_qual) * 1013.25  # convert atm -> hPa
+        ace_alt = butils.read_ace_var(nh, 'altitude', None)
+        ace_lon = butils.read_ace_var(nh, 'longitude', None)
+        ace_lat = butils.read_ace_var(nh, 'latitude', None)
+
+    ace_pres = xr.DataArray(ace_pres, coords=[ace_dates, ace_alt], dims=['time', 'altitude'])
+    ace_lon = xr.DataArray(ace_lon, coords=[ace_dates], dims=['time'])
+    ace_lat = xr.DataArray(ace_lat, coords=[ace_dates], dims=['time'])
+    ace_co = xr.DataArray(ace_co, dims=['time', 'altitude'],
+                          coords={'time': ace_dates, 'altitude': ace_alt, 'pressure': ace_pres,
+                                  'longitude': ace_lon, 'latitude': ace_lat})
+    geos_co = np.full(ace_co.shape, np.nan)
+
+    pbar = mod_utils.ProgressBar(ace_co.shape[0], style='counter')
+    for i, co_profile in enumerate(ace_co):
+        pbar.print_bar(i)
+        geos_time = pd.Timestamp(co_profile.time.item()).round('3H')
+        geos_file = mod_utils._format_geosfp_name('fpit', 'chm', 'Nv', geos_time, add_subdir=True)
+        geos_file = os.path.join(geos_chm_dir, geos_file)
+        if not os.path.isfile(geos_file):
+            print('{} not available, moving on'.format(geos_file))
+            continue
+
+        with xr.open_dataset(geos_file) as ds:
+            this_geos_co = ds['CO'][0]
+            delp = ds['DELP'][0]
+            this_geos_pres = mod_utils.convert_geos_eta_coord(delp)  # automatically converts Pa -> hPa
+            this_geos_pres = xr.DataArray(this_geos_pres, coords=this_geos_co.coords)
+
+        this_geos_co = this_geos_co.interp(lon=co_profile.longitude, lat=co_profile.latitude)
+        this_geos_pres = this_geos_pres.interp(lon=co_profile.longitude, lat=co_profile.latitude)
+        this_geos_co = np.interp(np.log(co_profile.pressure.data), np.log(this_geos_pres.data), np.log(this_geos_co.data))
+        geos_co[i, :] = np.exp(this_geos_co)
+
+    pbar.finish()
+
+    geos_co = xr.DataArray(geos_co, coords=ace_co.coords)
+    save_ds = xr.Dataset({'ace': ace_co, 'geos': geos_co})
+    save_ds.to_netcdf(save_file)
