@@ -4,6 +4,8 @@ from glob import glob
 import netCDF4 as ncdf
 import numpy as np
 import os
+import pandas as pd
+import xarray as xr
 
 from ...common_utils import mod_utils
 from . import backend_utils as butils
@@ -192,3 +194,192 @@ def get_matching_ace_profiles(lon, lat, date, ace_dir, specie, alt, ace_var=None
                                      ace_profiles, ace_prof_error, interp_to_alt=interp_to_alt)
 
 
+def standard_ace_geos_co_match(save_file, ace_co_file, geos_chm_dir, geos_met_dir):
+    """
+    Wrapper around :func:`match_ace_vars_to_geos` that builds the typical CO matched file.
+
+    :param save_file: the path to save the matched data, as a netCDF file
+    :type save_file: str
+
+    :param ace_co_file: the ACE CO file to read
+    :type ace_co_file: str
+
+    :param geos_chm_dir: the path to the GEOS-FPIT chemistry files, which contains an "Nv" subdirectory
+    :type geos_chm_dir: str
+
+    :param geos_met_dir: the path to the GEOS-FPIT meteorology files, which contains "Np" and "Nx" subdirectories
+    :type geos_met_dir: str
+    
+    :return: none, writes a netCDF file with the matched variables in it. All names will be lower case, ACE variables
+     will have "ace_" prepended and GEOS variables will have "geos_" prepended.
+    """
+    ace_vars = ('CO', 'pressure', 'temperature')
+    chm_3d_vars = ('CO',)
+    met_3d_vars = ('pressure', )
+    met_2d_vars = ('TROPPB', 'TROPT')
+    log_log_vars = ('CO',)
+    match_ace_vars_to_geos(save_file=save_file, ace_file=ace_co_file, ace_vars=ace_vars, geos_chm_dir=geos_chm_dir,
+                           geos_met_dir=geos_met_dir, chm_3d_vars=chm_3d_vars, met_3d_vars=met_3d_vars,
+                           met_2d_vars=met_2d_vars, log_log_interp_vars=log_log_vars)
+
+
+def match_ace_vars_to_geos(save_file, ace_file, ace_vars, geos_chm_dir=None, geos_met_dir=None,
+                           chm_3d_vars=tuple(), met_3d_vars=tuple(), met_2d_vars=tuple(), log_log_interp_vars=tuple()):
+    """
+    Match GEOS data to ACE profiles, linearly interpolating in lat/lon
+
+    :param save_file: the path to save the matched data, as a netCDF file
+    :type save_file: str
+
+    :param ace_file: the ACE file to read
+    :type ace_file: str
+
+    :param ace_vars: a list of the ACE variables to read
+    :type ace_vars: Sequence(str)
+
+    :param geos_chm_dir: the path to the GEOS-FPIT chemistry files, which contains an "Nv" subdirectory
+    :type geos_chm_dir: str
+
+    :param geos_met_dir: the path to the GEOS-FPIT meteorology files, which contains "Np" and "Nx" subdirectories
+    :type geos_met_dir: str
+
+    :param chm_3d_vars: a list of 3D GEOS chemistry variables to match. Must match the variable name in the GEOS files.
+    :type chm_3d_vars: Sequence(str)
+
+    :param met_3d_vars: a list of 3D GEOS met variables to match. Must match the variable name in the GEOS files.
+     A special case is "pressure" which is not a native variable, but will be converted from the DELP variable.
+    :type met_3d_vars: Sequence(str)
+
+    :param met_2d_vars: a list of 2D GEOS met variables to match. Must match the variable name in the GEOS files.
+    :type met_2d_vars: Sequence(str)
+
+    :param log_log_interp_vars: a list of 3D variables to use log-log interpolation in pressure space to interpolate the
+     GEOS variables to the ACE levels.
+    :type log_log_interp_vars: Sequence(str)
+
+    :return: none, writes a netCDF file with the matched variables in it. All names will be lower case, ACE variables
+     will have "ace_" prepended and GEOS variables will have "geos_" prepended.
+    """
+
+    # ---------------- #
+    # Helper functions #
+    # ---------------- #
+
+    def get_geos_data(geos_dir, geos_kind, geos_levels, geos_vars, geos_data_dict, geos_time, lon, lat, prof_idx,
+                      dir_var_name, vars_name):
+        if len(geos_vars) > 0 and geos_dir is None:
+            raise TypeError('Must provide the {} directory to load {} variables'.format(dir_var_name, vars_name))
+
+        geos_file = find_geos_file(geos_dir, geos_kind, geos_levels, geos_time)
+
+        for v in geos_vars:
+            if v == 'pressure':
+                # will be handled alongside other variables
+                continue
+
+            vname = 'geos_' + v.lower()
+            var_data, pres_data = match_geos_var_to_ace(geos_file, v, lon, lat)
+            geos_data_dict[vname][prof_idx] = var_data
+            if pres_data is not None and 'pressure' in geos_vars:
+                geos_data_dict['geos_pressure'][prof_idx] = pres_data
+
+    def find_geos_file(geos_dir, kind, levels, time):
+        geos_file_local = mod_utils._format_geosfp_name('fpit', kind, levels, time, add_subdir=True)
+        geos_file_local = os.path.join(geos_dir, geos_file_local)
+        if not os.path.isfile(geos_file_local):
+            raise IOError('Cannot find required GEOS-FPIT file: {}'.format(geos_file_local))
+        return geos_file_local
+
+    def match_geos_var_to_ace(geos_file_local, geos_var, lon, lat):
+        with xr.open_dataset(geos_file_local) as ds:
+            if 'lev' not in ds.coords:
+                # 2D file, no vertical coordinate
+                this_geos_pres = None
+            elif mod_utils.is_geos_on_native_grid(geos_file_local):
+                delp = ds['DELP'][0]
+                this_geos_pres = mod_utils.convert_geos_eta_coord(delp)  # automatically converts Pa -> hPa
+                this_geos_pres = xr.DataArray(this_geos_pres, coords=ds['DELP'][0].coords)
+            else:
+                raise NotImplementedError('Fixed pressure GEOS files not implemented')
+
+        this_geos_var = ds[geos_var][0]
+        this_geos_var = this_geos_var.interp(lon=lon, lat=lat)
+
+        if this_geos_pres is None:
+            # 2D file, no need for vertical interpolation
+            return this_geos_var, None
+
+        this_geos_pres = this_geos_pres.interp(lon=lon, lat=lat)
+        if geos_var in log_log_interp_vars:
+            this_geos_var = np.interp(np.log(this_geos_var.pressure.data), np.log(this_geos_pres.data), np.log(this_geos_var.data))
+            this_geos_var = np.exp(this_geos_var)
+        else:
+            this_geos_var = np.interp(this_geos_var.pressure.data, this_geos_pres.data, this_geos_var.data)
+
+        return this_geos_var, this_geos_pres.data
+
+    # --------- #
+    # Main code #
+    # --------- #
+
+    if len(met_2d_vars) == 0 and len(met_3d_vars) == 0 and len(chm_3d_vars) == 0:
+        raise ValueError('Provide at least one GEOS variable to match')
+
+    # 1. loop over ACE profiles
+    # 2. figure out which GEOS file we need
+    # 3. if present, interpolate CO to the ACE lat/lon/pres
+    ace_data_dict = dict()
+
+    # Convert ACE units. Pressure given in atms, convert to hPa
+    ace_scaling = {'pressure': 1013.25}
+    with ncdf.Dataset(ace_file) as nh:
+        ace_dates = butils.read_ace_date(nh)
+        ace_qual = butils.read_ace_var(nh, 'quality_flag', None)
+
+        ace_alt = butils.read_ace_var(nh, 'altitude', None)
+        ace_lon = butils.read_ace_var(nh, 'longitude', None)
+        ace_lat = butils.read_ace_var(nh, 'latitude', None)
+
+        for v in ace_vars:
+            vname = 'ace_' + v.lower()
+            scale = ace_scaling[v] if v in ace_scaling else 1
+            ace_data_dict[vname] = butils.read_ace_var(nh, v, ace_qual) * scale
+
+    ace_lon = xr.DataArray(ace_lon, coords=[ace_dates], dims=['time'])
+    ace_lat = xr.DataArray(ace_lat, coords=[ace_dates], dims=['time'])
+    ds_dims = ['time', 'altitude']
+    ds_coords = {'time': ace_dates, 'altitude': ace_alt, 'longitude': ace_lon, 'latitude': ace_lat}
+
+    ace_data_dict = {k: xr.DataArray(v, dims=ds_dims, coords=ds_coords) for k, v in ace_data_dict.items()}
+
+    nprof = ace_lon.size
+    nlev = ace_alt.size
+    geos_data = dict()
+    for v in chm_3d_vars:
+        geos_data['geos_{}'.format(v)] = np.full([nprof, nlev], np.nan)
+    for v in met_3d_vars:
+        geos_data['geos_{}'.format(v)] = np.full([nprof, nlev], np.nan)
+    for v in met_2d_vars:
+        geos_data['geos_{}'.format(v)] = np.full([nprof], np.nan)
+
+    pbar = mod_utils.ProgressBar(nprof, style='counter')
+    for i, (prof_time, prof_lon, prof_lat) in enumerate(zip(ace_dates, ace_lon, ace_lat)):
+        pbar.print_bar(i)
+        geos_time = pd.Timestamp(prof_time).round('3H')
+
+        get_geos_data(geos_dir=geos_met_dir, geos_kind='met', geos_levels='Nx', geos_vars=met_2d_vars,
+                      geos_data_dict=geos_data, geos_time=geos_time, lon=prof_lon, lat=prof_lat,
+                      prof_idx=i, dir_var_name='geos_met_dir', vars_name='met_2d_vars')
+        get_geos_data(geos_dir=geos_met_dir, geos_kind='met', geos_levels='Nv', geos_vars=met_3d_vars,
+                      geos_data_dict=geos_data, geos_time=geos_time, lon=prof_lon, lat=prof_lat,
+                      prof_idx=i, dir_var_name='geos_met_dir', vars_name='met_3d_vars')
+        get_geos_data(geos_dir=geos_chm_dir, geos_kind='chm', geos_levels='Nv', geos_vars=chm_3d_vars,
+                      geos_data_dict=geos_data, geos_time=geos_time, lon=prof_lon, lat=prof_lat,
+                      prof_idx=i, dir_var_name='geos_chm_dir', vars_name='met_3d_vars')
+
+    pbar.finish()
+
+    xr_dict = {v: xr.DataArray(v, dims=ds_dims, coords=ds_coords) for k, v in geos_data.items()}
+    xr_dict.update(ace_data_dict)
+    save_ds = xr.Dataset(xr_dict)
+    save_ds.to_netcdf(save_file)
