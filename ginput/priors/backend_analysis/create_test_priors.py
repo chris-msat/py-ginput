@@ -10,6 +10,7 @@ import re
 import shutil
 import sys
 
+from . import backend_utils as bu
 from .. import tccon_priors
 from ...mod_maker import mod_maker
 from ...common_utils import mod_utils
@@ -48,6 +49,25 @@ def _date_range_str_to_dates(drange_str):
     start_date = dtime.strptime(start_dstr, '%Y%m%d')
     end_date = dtime.strptime(end_dstr, '%Y%m%d')
     return start_date, end_date
+
+
+def make_lat_lon_list_for_atms(atm_files, list_file):
+    """
+    Create the list of locations to make priors for with the driver function
+
+    :param atm_files: sequence of paths to .atm files to read lats/lons/dates from
+    :param list_file: path to the file to write the lats/lons/dates to
+    :return: none, writes file
+    """
+    with open(list_file, 'w') as wobj:
+        wobj.write('DATE,LAT,LON,TCCON\n')
+        for f in atm_files:
+            data, header = bu.read_atm_file(f)
+            datestr = header['aircraft_floor_time_UTC'].strftime('%Y-%m-%d')
+            lon = header['TCCON_site_longitude_E']
+            lat = header['TCCON_site_latitude_N']
+            site = header['TCCON_site_name']
+            wobj.write('{date},{lat},{lon},{site}\n'.format(date=datestr, lon=lon, lat=lat, site=site))
 
 
 def read_info_file(info_filename):
@@ -312,7 +332,7 @@ def _prior_helper(ph_f, ph_out_dir, gas_rec, zgrid=None):
 
 
 def driver(check_geos, download, makemod, makepriors, site_file, geos_top_dir, geos_chm_top_dir,
-           mod_top_dir, prior_top_dir, gas_name, nprocs, dl_file_types, dl_levels, integral_file=None,
+           mod_top_dir, prior_top_dir, gas_name, nprocs=0, dl_file_types=None, dl_levels=None, integral_file=None,
            **_):
     if dl_file_types is None:
         dl_file_types = ('met', 'met', 'chm')
