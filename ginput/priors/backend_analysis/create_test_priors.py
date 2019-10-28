@@ -186,7 +186,7 @@ def download_geos(acdates, download_to_dir, chem_download_dir=None,
             get_GEOS5.driver(date_range, mode='FPIT', path=dl_path, filetypes=ftype, levels=ltype)
 
 
-def make_mod_files(acdates, aclons, aclats, geos_dir, out_dir, chem_dir=None, nprocs=0):
+def make_mod_files(acdates, aclons, aclats, geos_dir, out_dir, chem_dir=None, nprocs=0, geos_mode='fpit-eta'):
 
     if chem_dir is None:
         chem_dir = geos_dir
@@ -229,7 +229,7 @@ def make_mod_files(acdates, aclons, aclats, geos_dir, out_dir, chem_dir=None, np
         else:
             # The keys here must match the argument names of mm_helper_internal as the dict will be ** expanded.
             mm_args[key] = {'mm_lons': [lon], 'mm_lats': [lat], 'geos_dir': geos_dir, 'chem_dir': chem_dir,
-                            'out_dir': out_dir, 'nprocs': nprocs, 'date_range': key}
+                            'out_dir': out_dir, 'nprocs': nprocs, 'date_range': key, 'mode': geos_mode}
 
     if nprocs == 0:
         print('Making .mod files in serial mode')
@@ -246,12 +246,12 @@ def make_mod_files(acdates, aclons, aclats, geos_dir, out_dir, chem_dir=None, np
 
 
 def mm_helper(kwargs):
-    def mm_helper_internal(date_range, mm_lons, mm_lats, geos_dir, chem_dir, out_dir, nprocs):
+    def mm_helper_internal(date_range, mm_lons, mm_lats, geos_dir, chem_dir, out_dir, nprocs, mode):
         date_fmt = '%Y-%m-%d'
         # Duplicate
         print('Generating .mod files {} to {}'.format(date_range[0].strftime(date_fmt), date_range[1].strftime(date_fmt)))
         mod_maker.driver(date_range=date_range, met_path=geos_dir, chem_path=chem_dir, save_path=out_dir,
-                         include_chm=True, mode='fpit-eta', keep_latlon_prec=True, save_in_utc=True,
+                         include_chm=True, mode=mode, keep_latlon_prec=True, save_in_utc=True,
                          lon=mm_lons, lat=mm_lats, alt=0.0, muted=nprocs > 0)
 
     mm_helper_internal(**kwargs)
