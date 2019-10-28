@@ -1091,7 +1091,7 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None
         # normalize the weights
         weights /= weights.sum()
 
-        binned_prof[i] = np.sum(weights * obsprof)
+        binned_prof[i] = np.nansum(weights * obsprof)
 
     # If there are any NaNs left at the beginning (bottom) of the profile, replace them with the first non-NaN value.
     # This assumes that the .atm file already includes a surface measurement at the bottom and we just need to
