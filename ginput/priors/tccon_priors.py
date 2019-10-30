@@ -2114,8 +2114,6 @@ def get_trop_eq_lat(prof_theta, p_levels, obs_lat, obs_date, theta_wt=1.0, lat_w
     :return: the equivalent latitude derived from mid-tropospheric potential temperature
     :rtype: float
     """
-    return obs_lat
-
     def read_pres_range(nc_handle):
         range_str = nc_handle.theta_range  # it says theta range, its really the pressures theta is averaged over
         range_values = [float(s) for s in range_str.split('-')]
@@ -2205,17 +2203,26 @@ def get_trop_eq_lat(prof_theta, p_levels, obs_lat, obs_date, theta_wt=1.0, lat_w
     midtrop_theta = np.mean(prof_theta[zz])
 
     # Last we find the part on the lookup curve that has the same mid-tropospheric theta as our profile. We have to be
-    # careful because we will have the same theta in both the NH and SH. To handle this, we only allow the equivalent
-    # latitude to move by lat/3. This way, in the tropics (where the G. K.-A. relationship doesn't hold anyway), it can
-    # only move a few degrees, but this expands as we get into the midlatitudes.
+    # careful because we will have the same theta in both the NH and SH. The way we'll handle this is to require that we
+    # stay in the same hemisphere if we're in the extra tropics (|lat| > 20) and just use the geographic latitude in
+    # the tropics since this theta/latitude relationship doesn't hold.
+
+    # is_tropics doesn't actually use the age & doy arguments, they are just there for consistency with is_vortex, so
+    # we can pass them None.
+    if mod_utils.is_tropics(obs_lat, None, None):
+        return obs_lat
+    elif obs_lat > 0:
+        yy = this_lat_clim > 0.0
+    else:
+        yy = this_lat_clim < 0.0
+
+    this_lat_clim = this_lat_clim[yy]
+    this_theta_clim = this_theta_clim[yy]
 
     eqlat = find_closest_theta(this_theta_clim, this_lat_clim, midtrop_theta)
-    if eqlat < obs_lat:
-        min_lat = obs_lat - np.abs(obs_lat/2)
-        eqlat = max(eqlat, min_lat)
-    else:
-        max_lat = obs_lat + np.abs(obs_lat/2)
-        eqlat = min(eqlat, max_lat)
+    if np.abs(obs_lat) < 25:
+        wt = min((np.abs(obs_lat) - 20)/5.0, 1.0)
+        eqlat = (1 - wt) * obs_lat + wt * eqlat
 
     return eqlat
 
