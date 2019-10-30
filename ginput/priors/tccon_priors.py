@@ -2114,6 +2114,8 @@ def get_trop_eq_lat(prof_theta, p_levels, obs_lat, obs_date, theta_wt=1.0, lat_w
     :return: the equivalent latitude derived from mid-tropospheric potential temperature
     :rtype: float
     """
+    return obs_lat
+
     def read_pres_range(nc_handle):
         range_str = nc_handle.theta_range  # it says theta range, its really the pressures theta is averaged over
         range_values = [float(s) for s in range_str.split('-')]
