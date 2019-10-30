@@ -3174,7 +3174,7 @@ def cl_driver(date_range, mod_dir=None, mod_root_dir=None, save_dir=None, produc
     if len(missing_files) > 0:
         msg = 'Could not find the following .mod files required:\n'
         msg += '  * ' + '\n  * '.join(missing_files)
-        msg += 'Either correct the mod path or generate these files'
+        msg += '\nEither correct the mod path or generate these files'
         raise IOError(msg)
 
     # GO!

@@ -63,6 +63,7 @@ Most relevant functions are probably:
 from __future__ import print_function, division
 import argparse
 from glob import glob
+from itertools import product
 
 from .backend_utils import read_atm_file
 from matplotlib import pyplot as plt
@@ -243,8 +244,11 @@ def _get_subdirs_by_type(data_root, data_type, prof_type):
     return atm_dir, map_dir
 
 
-def _idl_maps_file(lon, ew, lat, ns, date_time):
-    subdir = 'maps_{lat:.2f}{ns}_{lon:.2f}{ew}'.format(lat=lat, ns=ns, lon=lon, ew=ew)
+def _idl_maps_file(lon, ew, lat, ns, date_time, precision=2, lat_change=0, lon_change=0):
+    lon = round(lon, precision) + lat_change
+    lat = round(lat, precision) + lon_change
+    fmt = 'maps_{lat:.2f}{ns}_{lon:.2f}{ew}'
+    subdir = fmt.format(lat=lat, ns=ns, lon=lon, ew=ew)
     filename = 'xx{}.map'.format(date_time.strftime('%Y%m%d'))
     return os.path.join(subdir, filename)
 
@@ -253,9 +257,11 @@ def py_map_file_subpath(lon, lat, date_time):
     return _py_maps_file(np.abs(lon), _lon_ew(lon), np.abs(lat), _lat_ns(lat), date_time)
 
 
-def _py_maps_file(lon, ew, lat, ns, date_time):
-    subdir = '{ymd}_{lon:.2f}{ew}_{lat:.2f}{ns}'.format(ymd=date_time.strftime('%Y%m%d'), lon=lon, ew=ew,
-                                                        lat=lat, ns=ns)
+def _py_maps_file(lon, ew, lat, ns, date_time, precision=2, lat_change=0, lon_change=0):
+    lon = round(lon, precision) + lon_change
+    lat = round(lat, precision) + lat_change
+    fmt = '{ymd}_{lon:.2f}{ew}_{lat:.2f}{ns}'
+    subdir = fmt.format(ymd=date_time.strftime('%Y%m%d'), lon=lon+lon_change, ew=ew, lat=lat, ns=ns)
     # the new files are given every three hours. Need to find the closest one in time
     hrs = np.arange(0, 24, 3)
     i_hr = np.argmin(np.abs(hrs - date_time.hour))
@@ -289,7 +295,7 @@ def _get_id_info_from_atm_file(atmf, as_abs=True):
         lat = np.abs(lat)
         lon = np.abs(lon)
 
-    date_time = header_info['flight_date']
+    date_time = header_info['flight_date' if 'flight_date' in header_info else 'aircraft_date']
 
     return lon, ew, lat, ns, date_time
 
@@ -392,14 +398,32 @@ def iter_matched_data(atm_dir, map_dir, years=None, months=None, skip_missing_ma
         elif months is not None and date_time.month not in months:
             continue
 
-        map_file = find_map_for_obs(atmf, map_dir, check_file_exists=False, map_file_fxn=map_file_fxn)
-        if not os.path.exists(map_file):
+        map_files = []
+        for delta_lat, delta_lon in product((0, +0.1, -0.1), (0, +0.1, -0.1)):
+            map_files.append(find_map_for_obs(atmf, map_dir, check_file_exists=False, map_file_fxn=map_file_fxn,
+                                              precision=1, lat_change=delta_lat, lon_change=delta_lon))
+
+        for delta_lat, delta_lon in product((0, +0.01, -0.01), (0, +0.01, -0.01)):
+            map_files.append(find_map_for_obs(atmf, map_dir, check_file_exists=False, map_file_fxn=map_file_fxn,
+                                              precision=2, lat_change=delta_lat, lon_change=delta_lon))
+
+        map_file = None
+        for mf in map_files:
+            if os.path.exists(mf):
+                map_file = mf
+                break
+
+        if map_file is None:
+            msg = 'Could not find map file corresponding to atm file {}. Tried: \n  * {}'.format(
+                atmf, '\n  * '.join(map_files)
+            )
+
             if skip_missing_map:
-                print('Could not find {} corresponding to atm file {}'.format(map_file, atmf))
+                print(msg)
                 missing += 1
                 continue
             else:
-                raise IOError('Could not find {} corresponding to atm file {}'.format(map_file, atmf))
+                raise IOError(msg)
         if ret_filenames:
             yield atmf, map_file
         else:
@@ -439,7 +463,8 @@ def find_map_for_obs_by_type(obs_file, data_type, prof_type, data_root=None, che
     return find_map_for_obs(obs_file, map_dir, check_file_exists=check_file_exists)
 
 
-def find_map_for_obs(obs_file, map_dir, check_file_exists=True, map_file_fxn=None):
+def find_map_for_obs(obs_file, map_dir, check_file_exists=True, map_file_fxn=None, precision=2,
+                     lat_change=0, lon_change=0):
     """
     Find a .map file that corresponds to a given observation .atm file
 
@@ -464,11 +489,14 @@ def find_map_for_obs(obs_file, map_dir, check_file_exists=True, map_file_fxn=Non
     :raises IOError: if ``check_file_exists`` is ``True`` and the .map file does not exist
     """
     lon, ew, lat, ns, date_time = _get_id_info_from_atm_file(obs_file)
+    #lat += lat_change
+    #lon += lon_change
     example_map_dir = glob(os.path.join(map_dir, '*'))[0]
     if map_file_fxn is None:
         map_file_fxn = _choose_map_file_function(os.path.basename(example_map_dir))
 
-    map_file = os.path.join(map_dir, map_file_fxn(lon, ew, lat, ns, date_time))
+    map_file = os.path.join(map_dir, map_file_fxn(lon, ew, lat, ns, date_time, precision=precision,
+                                                  lat_change=lat_change, lon_change=lon_change))
     if check_file_exists and not os.path.isfile(map_file):
         raise IOError('Could not find {} corresponding to atm file {}'.format(map_file, obs_file))
 

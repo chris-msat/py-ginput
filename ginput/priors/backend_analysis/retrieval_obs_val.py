@@ -4,9 +4,12 @@ from glob import glob
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
+import pandas as pd
 import os
 import re
+import shutil
 
+from ... import __version__
 from ...common_utils import mod_utils, sat_utils
 from ...mod_maker import mod_maker, tccon_sites
 from .. import tccon_priors
@@ -16,7 +19,16 @@ from . import backend_utils as butils
 _default_min_req_top_alt = 8.0
 
 
-def generate_obspack_base_vmrs(obspack_dir, zgrid, std_vmr_file, save_dir, geos_dir, chm_dir=None, make_mod=True, make_vmrs=True):
+class VmrMergeError(Exception):
+    pass
+
+
+class AtmStitchError(Exception):
+    pass
+
+
+def generate_obspack_base_vmrs(obspack_dir, zgrid, std_vmr_file, save_dir, geos_dir, chm_dir=None, make_mod=True,
+                               make_vmrs=True, overwrite=True):
     """
     Create the prior-only .vmr files for the times and locations of the .atm files in the given obspack directory
 
@@ -36,6 +48,9 @@ def generate_obspack_base_vmrs(obspack_dir, zgrid, std_vmr_file, save_dir, geos_
      the path to that directory. That directory must have a "Nv" subdirectory.
     :type chm_dir: str
 
+    :param overwrite: controls whether to overwrite existing files. Only currently implemented for .mod files
+    :type overwrite: bool
+
     :return: None. Writes .mod and .vmr files.
     """
     # For each .atm file, we will need to generate the corresponding .mod and .vmr files
@@ -46,17 +61,36 @@ def generate_obspack_base_vmrs(obspack_dir, zgrid, std_vmr_file, save_dir, geos_
     obspack_files = list_obspack_files(obspack_dir)
     obspack_locations = construct_profile_locs(obspack_files)
     if make_mod:
-        make_mod_files(obspack_locations=obspack_locations, save_dir=save_dir, geos_dir=geos_dir, chm_dir=chm_dir)
+        make_mod_files(obspack_locations=obspack_locations, save_dir=save_dir, geos_dir=geos_dir, chm_dir=chm_dir,
+                       overwrite=overwrite)
     if make_vmrs:
         make_vmr_files(obspack_locations=obspack_locations, save_root_dir=save_dir, zgrid=zgrid, std_vmr_file=std_vmr_file)
 
 
-def make_mod_files(obspack_locations, save_dir, geos_dir, chm_dir=None):
+def make_mod_files(obspack_locations, save_dir, geos_dir, chm_dir=None, overwrite=True):
     for date_range, loc_info in obspack_locations.items():
         loc_lon = loc_info['lon']
         loc_lat = loc_info['lat']
         loc_alt = [0.0 for x in loc_lon]
         loc_abbrev = loc_info['abbrev']
+
+        if not overwrite:
+            if len(loc_lat) != len(loc_lon) or len(loc_lat) != len(loc_abbrev):
+                raise NotImplementedError('lon, lat, and abbrevs all assumed to be the same length')
+            dates = pd.date_range(date_range[0], date_range[1], closed='left', freq='3H')
+            exists = []
+            for d in dates:
+                for lon, lat, abbrev in zip(loc_lon, loc_lat, loc_abbrev):
+                    mod_file = mod_utils.mod_file_name_for_priors(d, lat, lon, round_latlon=False)
+                    exists.append(os.path.exists(os.path.join(save_dir, 'fpit', abbrev, 'vertical', mod_file)))
+            if all(exists):
+                print('.mod files for {}-{} already exist, not remaking'.format(*date_range))
+                continue
+            elif any(exists):
+                print('{}/{} .mod files for {}-{} already exist, not remaking'.format(sum(exists), len(exists), *date_range))
+                continue
+            else:
+                print('Must make .mod files for {}-{}'.format(*date_range))
 
         mod_maker.driver(date_range=date_range, met_path=geos_dir, chem_path=chm_dir, save_path=save_dir,
                          keep_latlon_prec=True, lon=loc_lon, lat=loc_lat, alt=loc_alt, site_abbrv=loc_abbrev,
@@ -206,6 +240,141 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
         mod_utils.write_vmr_file(vmr_name, tropopause_alt=vmr_trop_alt, profile_date=atm_date,
                                  profile_lat=prof_lat, profile_alt=vmrz, profile_gases=vmrdat['profile'],
                                  extra_header_info=extra_header_info)
+
+
+def merge_vmr_files(vmr_in_dir, vmr_out_dir):
+    def get_bdy_geos_times(ts):
+        ts = pd.Timestamp(ts.year, ts.month, ts.day, ts.hour // 3 * 3)
+        start = ts - pd.Timedelta(hours=3)
+        end = ts + pd.Timedelta(hours=6)
+        return start, end
+
+    def merge_vmr_files(main_file, *additional_files):
+        print('Merging {} into {}'.format(', '.join([os.path.basename(f) for f in additional_files]), os.path.basename(main_file)))
+        main_vmr = mod_utils.read_vmr_file(main_file, lowercase_names=False)
+        for other_file in additional_files:
+            other_vmr = mod_utils.read_vmr_file(other_file, lowercase_names=False)
+            other_species = other_vmr['scalar']['observed_species'].split(',')
+            main_vmr['scalar']['observed_species'] += ',' + other_vmr['scalar']['observed_species']
+            main_vmr['scalar']['atm_files'] += ',' + other_vmr['scalar']['atm_files']
+            for k, v in other_vmr['scalar'].items():
+                # need to copy the new species ceiling and adjusted flag values
+                if k not in main_vmr['scalar']:
+                    main_vmr['scalar'][k] = v
+            for gas in other_species:
+                gas = gas
+                main_vmr['profile'][gas] = other_vmr['profile'][gas]
+
+        # need to extract some of the values to pass back to the vmr writing function
+        main_vmr['scalar'].pop('GINPUT_VERSION')
+        ztrop = main_vmr['scalar'].pop('ZTROP_VMR')
+        date_vmr = mod_utils.decimal_year_to_date(main_vmr['scalar'].pop('DATE_VMR'))
+        lat_vmr = main_vmr['scalar'].pop('LAT_VMR')
+        z_vmr = main_vmr['profile'].pop('Altitude')
+        new_name = os.path.join(vmr_out_dir, os.path.basename(main_file))
+        mod_utils.write_vmr_file(new_name, tropopause_alt=ztrop, profile_date=date_vmr, profile_lat=lat_vmr,
+                                 profile_alt=z_vmr, profile_gases=main_vmr['profile'],
+                                 extra_header_info=main_vmr['scalar'])
+
+    vmr_files = sorted(glob(os.path.join(vmr_in_dir, '*.vmr')))
+    # Loop through the vmr files. For each file, record its date and species from observation. Then go back through and
+    # merge files that are close enough in time to be considered simultaneous and which have different species. If we
+    # have two files that have the same species and going forward or backward two GEOS time steps would overlap, then
+    # error, because we can guarantee that the retrieval would use the right prior for all measurements we associate
+    # with that observation, i.e. if one is at 1400 and the other 1700, then the measurements at 1600-1630 that go with
+    # the 1700 observation would use the 1400 prior, because it should be linked to the 15Z file.
+    vmr_info = dict()
+    all_species = set()
+    for f in vmr_files:
+        vmrs = mod_utils.read_vmr_file(f)
+        vmr_date = mod_utils.find_datetime_substring(f, out_type=pd.Timestamp)
+        vmr_species = vmrs['scalar']['observed_species'].split(',')
+        site = mod_utils.find_lat_substring(f) + '_' + mod_utils.find_lon_substring(f)
+        vmr_info[vmr_date] = {'file': f, 'species': vmr_species, 'site': site}
+        all_species = all_species.union(vmr_species)
+
+    # Convert into a dataframe - that way we can iterate over the lines
+    df_dict = {gas: 0 for gas in all_species}
+    df_dict['site'] = ''
+    df_dict['file'] = ''
+    df_dates = list(vmr_info.keys())
+    vmr_df = pd.DataFrame(df_dict, index=df_dates)
+    for k, info in vmr_info.items():
+        vmr_df.loc[k, 'file'] = info['file']
+        vmr_df.loc[k, 'site'] = info['site']
+        for gas in info['species']:
+            vmr_df.loc[k, gas] = 1
+
+    # Now loop over each line, if there are no files within two geos timesteps, just copy the .vmr file to the output
+    # directory. If there are two that don't share any species, merge. If there are two that share species, error.
+    for site, site_df in vmr_df.groupby('site'):
+        for time in site_df.index:
+            start, stop = get_bdy_geos_times(time)
+            sub_df = site_df.loc[slice(start, stop), :]
+            if sub_df.shape[0] == 1:
+                shutil.copy2(sub_df['file'].item(), vmr_out_dir)
+            elif (sub_df.loc[:,all_species].sum(axis=0) > 1).any():
+                raise VmrMergeError('Multiple .vmr files with the same species found in the time range {} to {} at {}:\n'
+                                    ' * {}\nArchive the .atm file for one of the .vmr files, deleted the stitched .vmr '
+                                    'files, and rerun.'.format(
+                    start, stop, site.replace('_', ', '), '\n * '.join(sub_df['file'].to_numpy())
+                ))
+            else:
+                merge_vmr_files(*sub_df['file'].to_numpy())
+
+
+def add_strat_to_atm_files(obspack_in_dir, obspack_out_dir, vmr_dir):
+    def get_scale_factor(atm_colname):
+        scale_dict = {'ppm': 1e6, 'ppmv': 1e6, 'ppb': 1e9, 'ppbv': 1e9}
+        unit = atm_colname.split('_')[-1]
+        return scale_dict[unit]
+
+    def write_atm_file_simple(out_file, data_df, header_dict):
+        # TODO: unify with aircraft_preprocessing writer
+        with open(out_file, 'w') as wobj:
+            header_dict = header_dict.copy()
+            header_dict['ginput_version'] = __version__
+            for key, value in header_dict.items():
+                if key == 'description':
+                    wobj.write(value + '\n')
+                else:
+                    wobj.write('{:30} {}\n'.format(key+':', value))
+            wobj.write('-' * 100 + '\n')
+            wobj.write(','.join(data_df.columns) + '\n')
+            for index, row in data_df.iterrows():
+                # can't use to_csv b/c want each column to have a specific format
+                fmt = '{:.0f},{:.5g},{:.5g},{:.2f}'
+                if row.size > 4:
+                    # .atm files always have an H2O column but only have a fifth column
+                    # if there's a trace gas measurement.
+                    fmt += ',{:.2f}'
+                wobj.write(fmt.format(*row.to_numpy()) + '\n')
+
+    # Loop through the .vmr files, for each one, read the corresponding .atm files, interpolate the corresponding gas to
+    # the .atm grid, then save the new atm file in the output directory.
+    vmr_files = glob(os.path.join(vmr_dir, '*.vmr'))
+    completed_atm_files = set()
+    for this_vmr_file in vmr_files:
+        vmrdat = mod_utils.read_vmr_file(this_vmr_file)
+        vmrz = vmrdat['profile']['altitude'] * 1000  # atm file altitudes are in meters
+        species = vmrdat['scalar']['observed_species'].split(',')
+        atm_files = vmrdat['scalar']['atm_files'].split(',')
+        for gas, f in zip(species, atm_files):
+            gas = gas.lower()
+            if f in completed_atm_files:
+                raise AtmStitchError('{} seems to be referenced by multiple .vmr files'.format(f))
+            completed_atm_files.add(f)
+            f_full = os.path.join(obspack_in_dir, f)
+            atmdat, atmhead = butils.read_atm_file(f_full, keep_header_strings=True)
+            atmz = atmdat.iloc[:, 0]
+            atm_ceiling = float(atmhead['aircraft_ceiling_m' if 'aircraft_ceiling_m' in atmhead else 'ceiling_m'])
+            xx_replace = atmz > atm_ceiling
+
+            # interpolate the prior to the stratospheric levels
+            data_col = atmdat.columns[-1]
+            vmr_scale = get_scale_factor(data_col)
+            atmdat.loc[xx_replace, data_col] = np.interp(atmz[xx_replace], vmrz, vmr_scale*vmrdat['profile'][gas])
+            write_atm_file_simple(os.path.join(obspack_out_dir, f), atmdat, atmhead)
 
 
 def plot_vmr_comparison(obspack_dir, vmr_dirs, save_file, plot_if_not_measured=True, max_alt=100.0, log_scale_profs=None):
@@ -921,9 +1090,10 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None
         in_layer = (obsz >= vmralts[i]) & (obsz < vmralts[i+1])
         weights[in_layer] = (vmralts[i+1] - obsz[in_layer])/zdiff
 
-        # normalize the weights
+        # normalize the weights. if no values in this bin, this will result in weights all being NaN which is what
+        # we want. The following sum should NOT be a nansum because we want a NaN in that bin so it can get filled
+        # in later. If NaNs in the obs/prior profiles are problems, that needs to be dealt with before binning.
         weights /= weights.sum()
-
         binned_prof[i] = np.sum(weights * obsprof)
 
     # If there are any NaNs left at the beginning (bottom) of the profile, replace them with the first non-NaN value.
@@ -1023,7 +1193,10 @@ def _adjust_prof_to_overworld(prof_alts, prof, prof_theta, tropopause_alt, obs_c
     overworld_conc = prof[i_overworld]
 
     prof[i_obs_top:i_trop] = obs_top_conc
-    xx_middleworld = (prof_alts > tropopause_alt) & (prof_theta < 380)
+    # only want to interpolate in theta above the top of the observations. If the observations end in the middleworld,
+    # the prof_alts > tropopause_alt is not enough. Also need to limit to above the observations. This occurred for
+    # the Lamont aircore on 2012-01-14 at 20:54Z
+    xx_middleworld = (prof_alts > tropopause_alt) & (prof_alts > prof_alts[i_obs_top]) & (prof_theta < 380)
     prof[xx_middleworld] = np.interp(prof_theta[xx_middleworld], [trop_theta, overworld_theta], [obs_top_conc, overworld_conc])
 
     return prof

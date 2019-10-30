@@ -10,6 +10,7 @@ import re
 import shutil
 import sys
 
+from . import backend_utils as bu
 from .. import tccon_priors
 from ...mod_maker import mod_maker
 from ...common_utils import mod_utils
@@ -48,6 +49,25 @@ def _date_range_str_to_dates(drange_str):
     start_date = dtime.strptime(start_dstr, '%Y%m%d')
     end_date = dtime.strptime(end_dstr, '%Y%m%d')
     return start_date, end_date
+
+
+def make_lat_lon_list_for_atms(atm_files, list_file):
+    """
+    Create the list of locations to make priors for with the driver function
+
+    :param atm_files: sequence of paths to .atm files to read lats/lons/dates from
+    :param list_file: path to the file to write the lats/lons/dates to
+    :return: none, writes file
+    """
+    with open(list_file, 'w') as wobj:
+        wobj.write('DATE,LAT,LON,TCCON\n')
+        for f in atm_files:
+            data, header = bu.read_atm_file(f)
+            datestr = header['aircraft_floor_time_UTC'].strftime('%Y-%m-%d')
+            lon = header['TCCON_site_longitude_E']
+            lat = header['TCCON_site_latitude_N']
+            site = header['TCCON_site_name']
+            wobj.write('{date},{lat},{lon},{site}\n'.format(date=datestr, lon=lon, lat=lat, site=site))
 
 
 def read_info_file(info_filename):
@@ -166,7 +186,8 @@ def download_geos(acdates, download_to_dir, chem_download_dir=None,
             get_GEOS5.driver(date_range, mode='FPIT', path=dl_path, filetypes=ftype, levels=ltype)
 
 
-def make_mod_files(acdates, aclons, aclats, geos_dir, out_dir, chem_dir=None, nprocs=0):
+def make_mod_files(acdates, aclons, aclats, geos_dir, out_dir, chem_dir=None, include_chm=True, nprocs=0,
+                   geos_mode='fpit-eta'):
 
     if chem_dir is None:
         chem_dir = geos_dir
@@ -209,7 +230,8 @@ def make_mod_files(acdates, aclons, aclats, geos_dir, out_dir, chem_dir=None, np
         else:
             # The keys here must match the argument names of mm_helper_internal as the dict will be ** expanded.
             mm_args[key] = {'mm_lons': [lon], 'mm_lats': [lat], 'geos_dir': geos_dir, 'chem_dir': chem_dir,
-                            'out_dir': out_dir, 'nprocs': nprocs, 'date_range': key}
+                            'with_chm': include_chm, 'out_dir': out_dir, 'nprocs': nprocs, 'date_range': key,
+                            'mode': geos_mode}
 
     if nprocs == 0:
         print('Making .mod files in serial mode')
@@ -226,12 +248,12 @@ def make_mod_files(acdates, aclons, aclats, geos_dir, out_dir, chem_dir=None, np
 
 
 def mm_helper(kwargs):
-    def mm_helper_internal(date_range, mm_lons, mm_lats, geos_dir, chem_dir, out_dir, nprocs):
+    def mm_helper_internal(date_range, mm_lons, mm_lats, geos_dir, chem_dir, out_dir, nprocs, mode, with_chm):
         date_fmt = '%Y-%m-%d'
         # Duplicate
         print('Generating .mod files {} to {}'.format(date_range[0].strftime(date_fmt), date_range[1].strftime(date_fmt)))
         mod_maker.driver(date_range=date_range, met_path=geos_dir, chem_path=chem_dir, save_path=out_dir,
-                         include_chm=True, mode='fpit-eta', keep_latlon_prec=True, save_in_utc=True,
+                         include_chm=with_chm, mode=mode, keep_latlon_prec=True, save_in_utc=True,
                          lon=mm_lons, lat=mm_lats, alt=0.0, muted=nprocs > 0)
 
     mm_helper_internal(**kwargs)
@@ -312,7 +334,7 @@ def _prior_helper(ph_f, ph_out_dir, gas_rec, zgrid=None):
 
 
 def driver(check_geos, download, makemod, makepriors, site_file, geos_top_dir, geos_chm_top_dir,
-           mod_top_dir, prior_top_dir, gas_name, nprocs, dl_file_types, dl_levels, integral_file=None,
+           mod_top_dir, prior_top_dir, gas_name, nprocs=0, dl_file_types=None, dl_levels=None, integral_file=None,
            **_):
     if dl_file_types is None:
         dl_file_types = ('met', 'met', 'chm')
