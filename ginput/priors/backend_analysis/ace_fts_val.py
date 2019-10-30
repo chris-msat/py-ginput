@@ -215,9 +215,10 @@ def standard_ace_geos_co_match(save_file, ace_co_file, geos_chm_dir, geos_met_di
     """
     ace_vars = ('CO', 'pressure', 'temperature')
     chm_3d_vars = ('CO',)
-    met_3d_vars = ('pressure', )
+    met_3d_vars = ('pressure', 'T')
     met_2d_vars = ('TROPPB', 'TROPT')
     log_log_vars = ('CO',)
+    
     match_ace_vars_to_geos(save_file=save_file, ace_file=ace_co_file, ace_vars=ace_vars, geos_chm_dir=geos_chm_dir,
                            geos_met_dir=geos_met_dir, chm_3d_vars=chm_3d_vars, met_3d_vars=met_3d_vars,
                            met_2d_vars=met_2d_vars, log_log_interp_vars=log_log_vars)
@@ -265,23 +266,19 @@ def match_ace_vars_to_geos(save_file, ace_file, ace_vars, geos_chm_dir=None, geo
     # Helper functions #
     # ---------------- #
 
-    def get_geos_data(geos_dir, geos_kind, geos_levels, geos_vars, geos_data_dict, geos_time, lon, lat, prof_idx,
-                      dir_var_name, vars_name):
+    def get_geos_data(geos_dir, geos_kind, geos_levels, geos_vars, geos_data_dict, geos_attrs_dict, geos_time, 
+                      lon, lat, ace_pres_vec, prof_idx, dir_var_name, vars_name):
         if len(geos_vars) > 0 and geos_dir is None:
             raise TypeError('Must provide the {} directory to load {} variables'.format(dir_var_name, vars_name))
 
         geos_file = find_geos_file(geos_dir, geos_kind, geos_levels, geos_time)
 
         for v in geos_vars:
-            if v == 'pressure':
-                # will be handled alongside other variables
-                continue
 
             vname = 'geos_' + v.lower()
-            var_data, pres_data = match_geos_var_to_ace(geos_file, v, lon, lat)
+            var_data, attrs = match_geos_var_to_ace(geos_file, v, lon, lat, ace_pres_vec)
             geos_data_dict[vname][prof_idx] = var_data
-            if pres_data is not None and 'pressure' in geos_vars:
-                geos_data_dict['geos_pressure'][prof_idx] = pres_data
+            geos_attrs_dict[vname] = attrs
 
     def find_geos_file(geos_dir, kind, levels, time):
         geos_file_local = mod_utils._format_geosfp_name('fpit', kind, levels, time, add_subdir=True)
@@ -290,7 +287,7 @@ def match_ace_vars_to_geos(save_file, ace_file, ace_vars, geos_chm_dir=None, geo
             raise IOError('Cannot find required GEOS-FPIT file: {}'.format(geos_file_local))
         return geos_file_local
 
-    def match_geos_var_to_ace(geos_file_local, geos_var, lon, lat):
+    def match_geos_var_to_ace(geos_file_local, geos_var, lon, lat, ace_pres_vec):
         with xr.open_dataset(geos_file_local) as ds:
             if 'lev' not in ds.coords:
                 # 2D file, no vertical coordinate
@@ -302,21 +299,29 @@ def match_ace_vars_to_geos(save_file, ace_file, ace_vars, geos_chm_dir=None, geo
             else:
                 raise NotImplementedError('Fixed pressure GEOS files not implemented')
 
-        this_geos_var = ds[geos_var][0]
+            if geos_var == 'pressure':
+                this_geos_var = this_geos_pres
+                var_attrs = {'units': 'hPa', 'description': 'Pressure at level centers derived from DELP'}
+            else:
+                this_geos_var = ds[geos_var][0]
+                var_attrs = ds[geos_var].attrs
+
         this_geos_var = this_geos_var.interp(lon=lon, lat=lat)
 
         if this_geos_pres is None:
             # 2D file, no need for vertical interpolation
-            return this_geos_var, None
-
+            return this_geos_var, var_attrs
+        
         this_geos_pres = this_geos_pres.interp(lon=lon, lat=lat)
         if geos_var in log_log_interp_vars:
-            this_geos_var = np.interp(np.log(this_geos_var.pressure.data), np.log(this_geos_pres.data), np.log(this_geos_var.data))
+            this_geos_var = np.interp(np.log(ace_pres_vec.data), np.log(this_geos_pres.data), np.log(this_geos_var.data),
+                                      left=np.nan, right=np.nan)
             this_geos_var = np.exp(this_geos_var)
         else:
-            this_geos_var = np.interp(this_geos_var.pressure.data, this_geos_pres.data, this_geos_var.data)
+            this_geos_var = np.interp(ace_pres_vec.data, this_geos_pres.data, this_geos_var.data,
+                                      left=np.nan, right=np.nan)
 
-        return this_geos_var, this_geos_pres.data
+        return this_geos_var, var_attrs
 
     # --------- #
     # Main code #
@@ -329,9 +334,15 @@ def match_ace_vars_to_geos(save_file, ace_file, ace_vars, geos_chm_dir=None, geo
     # 2. figure out which GEOS file we need
     # 3. if present, interpolate CO to the ACE lat/lon/pres
     ace_data_dict = dict()
+    ace_attr_dict = dict()
 
-    # Convert ACE units. Pressure given in atms, convert to hPa
+    # Convert ACE units. Pressure given in atms, convert to hPa. Always need pressure 
+    # for interpolating GEOS data to ACE levels.
+    if 'pressure' not in ace_vars:
+        ace_vars = tuple(ace_vars) + ('pressure',)
+
     ace_scaling = {'pressure': 1013.25}
+    ace_scaled_units = {'pressure': 'hPa'}
     with ncdf.Dataset(ace_file) as nh:
         ace_dates = butils.read_ace_date(nh)
         ace_qual = butils.read_ace_var(nh, 'quality_flag', None)
@@ -342,44 +353,66 @@ def match_ace_vars_to_geos(save_file, ace_file, ace_vars, geos_chm_dir=None, geo
 
         for v in ace_vars:
             vname = 'ace_' + v.lower()
-            scale = ace_scaling[v] if v in ace_scaling else 1
+            if v in ace_scaling:
+                scale = ace_scaling[v]
+                new_unit = ace_scaled_units[v]
+            else:
+                scale = 1
+                new_unit = None
             ace_data_dict[vname] = butils.read_ace_var(nh, v, ace_qual) * scale
+            ace_attr_dict[vname] = nh.variables[v].__dict__
+
+            if new_unit is not None:
+                ace_attr_dict[vname]['units'] = new_unit
 
     ace_lon = xr.DataArray(ace_lon, coords=[ace_dates], dims=['time'])
     ace_lat = xr.DataArray(ace_lat, coords=[ace_dates], dims=['time'])
     ds_dims = ['time', 'altitude']
     ds_coords = {'time': ace_dates, 'altitude': ace_alt, 'longitude': ace_lon, 'latitude': ace_lat}
 
-    ace_data_dict = {k: xr.DataArray(v, dims=ds_dims, coords=ds_coords) for k, v in ace_data_dict.items()}
+    ace_data_dict = {k: xr.DataArray(v, dims=ds_dims, coords=ds_coords, attrs=ace_attr_dict[k]) for k, v in ace_data_dict.items()}
 
     nprof = ace_lon.size
     nlev = ace_alt.size
     geos_data = dict()
+    geos_attrs = dict()
+
     for v in chm_3d_vars:
-        geos_data['geos_{}'.format(v)] = np.full([nprof, nlev], np.nan)
+        geos_data['geos_{}'.format(v.lower())] = np.full([nprof, nlev], np.nan)
     for v in met_3d_vars:
-        geos_data['geos_{}'.format(v)] = np.full([nprof, nlev], np.nan)
+        geos_data['geos_{}'.format(v.lower())] = np.full([nprof, nlev], np.nan)
     for v in met_2d_vars:
-        geos_data['geos_{}'.format(v)] = np.full([nprof], np.nan)
+        geos_data['geos_{}'.format(v.lower())] = np.full([nprof], np.nan)
 
     pbar = mod_utils.ProgressBar(nprof, style='counter')
-    for i, (prof_time, prof_lon, prof_lat) in enumerate(zip(ace_dates, ace_lon, ace_lat)):
+    for i, pres_vector in enumerate(ace_data_dict['ace_pressure']):
         pbar.print_bar(i)
-        geos_time = pd.Timestamp(prof_time).round('3H')
+        prof_lon = pres_vector.longitude.item()
+        prof_lat = pres_vector.latitude.item()
+        geos_time = pd.Timestamp(pres_vector.time.item()).round('3H')
 
-        get_geos_data(geos_dir=geos_met_dir, geos_kind='met', geos_levels='Nx', geos_vars=met_2d_vars,
-                      geos_data_dict=geos_data, geos_time=geos_time, lon=prof_lon, lat=prof_lat,
-                      prof_idx=i, dir_var_name='geos_met_dir', vars_name='met_2d_vars')
-        get_geos_data(geos_dir=geos_met_dir, geos_kind='met', geos_levels='Nv', geos_vars=met_3d_vars,
-                      geos_data_dict=geos_data, geos_time=geos_time, lon=prof_lon, lat=prof_lat,
-                      prof_idx=i, dir_var_name='geos_met_dir', vars_name='met_3d_vars')
-        get_geos_data(geos_dir=geos_chm_dir, geos_kind='chm', geos_levels='Nv', geos_vars=chm_3d_vars,
-                      geos_data_dict=geos_data, geos_time=geos_time, lon=prof_lon, lat=prof_lat,
-                      prof_idx=i, dir_var_name='geos_chm_dir', vars_name='met_3d_vars')
+        get_geos_data(geos_dir=geos_met_dir, geos_kind='met', geos_levels='surf', geos_vars=met_2d_vars,
+                      geos_data_dict=geos_data, geos_attrs_dict=geos_attrs, geos_time=geos_time, lon=prof_lon, lat=prof_lat,
+                      ace_pres_vec=pres_vector, prof_idx=i, dir_var_name='geos_met_dir', vars_name='met_2d_vars')
+        get_geos_data(geos_dir=geos_met_dir, geos_kind='met', geos_levels='eta', geos_vars=met_3d_vars,
+                      geos_data_dict=geos_data, geos_attrs_dict=geos_attrs, geos_time=geos_time, lon=prof_lon, lat=prof_lat,
+                      ace_pres_vec=pres_vector, prof_idx=i, dir_var_name='geos_met_dir', vars_name='met_3d_vars')
+        get_geos_data(geos_dir=geos_chm_dir, geos_kind='chm', geos_levels='eta', geos_vars=chm_3d_vars,
+                      geos_data_dict=geos_data, geos_attrs_dict=geos_attrs, geos_time=geos_time, lon=prof_lon, lat=prof_lat,
+                      ace_pres_vec=pres_vector, prof_idx=i, dir_var_name='geos_chm_dir', vars_name='met_3d_vars')
 
     pbar.finish()
 
-    xr_dict = {v: xr.DataArray(v, dims=ds_dims, coords=ds_coords) for k, v in geos_data.items()}
+    xr_dict = dict()
+    coords_2d = ds_coords.copy()
+    coords_2d.pop('altitude')
+    dims_2d = ['time']
+
+    for k, v in geos_data.items():
+        if v.ndim == 1:
+            xr_dict[k] = xr.DataArray(v, dims=dims_2d, coords=coords_2d, attrs=geos_attrs[k])
+        else:
+            xr_dict[k] = xr.DataArray(v, dims=ds_dims, coords=ds_coords, attrs=geos_attrs[k])
     xr_dict.update(ace_data_dict)
     save_ds = xr.Dataset(xr_dict)
     save_ds.to_netcdf(save_file)
