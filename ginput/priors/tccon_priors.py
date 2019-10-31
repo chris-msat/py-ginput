@@ -1781,6 +1781,19 @@ class CH4TropicsRecord(MloSmoTraceGasRecord):
             # ~60 ppb at 80 deg N.
             return 0.75 * obs_lat
 
+    def add_strat_prior(self, prof_gas, retrieval_date, mod_data, **kwargs):
+        prof_gas, ancillary_dict = super(CH4TropicsRecord, self).add_strat_prior(prof_gas=prof_gas,
+                                                                                 retrieval_date=retrieval_date,
+                                                                                 mod_data=mod_data,
+                                                                                 **kwargs)
+        # we will sometimes get negative CH4 concentrations in the top level. Set those to 0 until the lookup table is
+        # fixed properly.
+        if np.any(prof_gas < 0):
+            inds = np.flatnonzero(prof_gas < 0)
+            logger.info('Replacing negative CH4 value(s) at level(s) {}'.format(', '.join(str(v) for v in inds)))
+            prof_gas[prof_gas < 0] = 0
+        return prof_gas, ancillary_dict
+
 
 class CORecord(TraceGasRecord):
     _gas_name = 'co'
