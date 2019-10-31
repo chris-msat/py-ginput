@@ -1787,6 +1787,66 @@ class CORecord(TraceGasRecord):
     _gas_unit = 'ppb'
     _gas_seas_cyc_coeff = 0.2
 
+    @classmethod
+    def compute_co_scale(cls, prof_pres, prof_theta, trop_pres, trop_theta):
+        """
+        Compute a level-dependent scaling factor for the GEOS CO profile
+
+        Comparison with ATom (1-3) and ACE-FTS shows biases in the CO profile throughout the troposphere and lower
+        stratosphere, separate from the descending mesospheric CO. To address this, we scale the GEOS CO profiles to
+        reduce the bias with ATom and ACE.
+
+        :param prof_pres: the pressure vector (in hPa) for the profile
+        :type prof_pres: array-like
+
+        :param prof_theta: the potential temperature vector (in K) for the profile
+        :type prof_theta: array-like
+
+        :param trop_pres: the blended tropopause pressure (in hPa) for the profile
+        :type trop_pres: float
+
+        :param trop_theta: the potential temperature at the tropopause (in K)
+        :type trop_theta: float
+
+        :return: a vector of scaling factors the same length as ``geos_theta``
+        :rtype: array-like
+        """
+
+        def ace_bias_fxn(pt, pt0=-24.065, a=0.8391, b=111.62, c=-0.67068):
+            """
+            A function that returns the relative bias to ACE for a given theta above the tropopause.
+
+            This was found by fitting the mean relative differences between ACE data and all co-located GEOS CO profiles
+            between 9 and 30 km altitude with the function below. The constants above are the result of
+            :func:`scipy.optimize.curve_fit` starting from an initial guess of pt0 = -25, a = 1, b = 150, and c = -0.8
+            determined by eye.
+
+            The specific work is in J. Laughner's notebook for 2019-10-30.
+            """
+            return a * np.exp(-(pt - pt0)/b) + c
+
+        # A robust fit of GEOS CO vs. ATOM CO through the origin produces a slope of 0.807. While this does seem to
+        # vary somewhat with latitude and season, we want to keep things simple for now.
+        atom_scale_fac = 1.23
+
+        # The relationship vs. ACE is more complicated, with GEOS becoming more negatively biased as we move above the
+        # tropopause, even below the altitude where mesospheric CO becomes important. This seems to asymptote about
+        # 500 K above the tropopause, so we represent this as an exponential decay w.r.t. theta. To smoothly blend
+        # between the fixed ATom-derived tropospheric factor and the stratospheric exponentially-shaped factor, linearly
+        # weight them across the middleworld, which is similar to how we treat the other gases.
+        xx_trop = prof_pres >= trop_pres
+        xx_over = prof_theta >= 380
+        xx_mid = (~xx_trop) & (~xx_over)
+
+        itrop = np.flatnonzero(xx_trop)[-1]
+
+        scale = 1/(ace_bias_fxn(prof_theta - trop_theta) + 1)
+        scale[xx_trop] = atom_scale_fac
+        mw_frac = (prof_theta[xx_mid] - prof_theta[itrop]) / (380 - prof_theta[itrop])
+        scale[xx_mid] = atom_scale_fac * (1 - mw_frac) + scale[xx_mid] * mw_frac
+
+        return scale
+
     def add_trop_prior(self, prof_gas, obs_date, obs_lat, mod_data, **kwargs):
         """
         Add tropospheric CO prior.
@@ -1809,18 +1869,17 @@ class CORecord(TraceGasRecord):
         :return: the modified gas profile and a dictionary on ancillary information (currently empty).
         """
         co = mod_data['profile']['CO'] * 1e9
+        pres = mod_data['profile']['Pressure']
+        theta = mod_data['profile']['PT']
+        trop_pres = mod_data['scalar']['TROPPB']
+        trop_theta = mod_utils.calculate_potential_temperature(trop_pres, mod_data['scalar']['TROPT'])
 
-        # Comparison with ATom showed a low bias so we multiply the CO profile by the correct factor to bring it in line
-        # with ATom. This assumes that the same scale factor applies throughout the profile, which is supported by the
-        # ATom data for the whole troposphere, and is to some extent irrelevant in the stratosphere since CO from
-        # mesospheric descent dominates there.
-        scale = 1.23
-        prof_gas[:] = co * scale
-        # Testing shows that the profiles at Caltech have too much CO in the PBL. To try to reduce this smoothly, we
-        # cut CO in excess of ~300 ppb with a power law. This should just accentuate the decrease toward the surface
-        # we'd expect in a well-mixed PBL
-        #prof_gas[prof_gas > 300] = 300 + (prof_gas[prof_gas > 300] - 300)**0.9
-        return prof_gas, {'scale': scale}
+        # Comparison with ATom and ACE-FTS showed a general low bias in the GEOS CO. We scale the CO by a
+        # level-dependent factor to bring it in line with those observations.
+        prof_gas[:] = co * self.compute_co_scale(prof_pres=pres, prof_theta=theta,
+                                                 trop_pres=trop_pres, trop_theta=trop_theta)
+
+        return prof_gas, dict()
 
     def add_strat_prior(self, prof_gas, retrieval_date, mod_data, **kwargs):
         """
