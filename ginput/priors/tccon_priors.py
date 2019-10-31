@@ -2752,8 +2752,7 @@ def generate_single_tccon_prior(mod_file_data, utc_offset, concentration_record,
                 'trop_age_of_air': aoa_prof_trop,
                 'strat_age_of_air': aoa_prof_strat,
                 'atm_stratum': stratum_flag,
-                'gas_date': gas_date_prof,  # TODO: eliminate duplicate
-                'gas_record_dates': gas_date_prof}
+                'gas_date': gas_date_prof}
 
     map_dict = mod_utils.interp_to_zgrid(map_dict, zgrid, gas_extrap_method='const' if gas_name == CORecord._gas_name else 'linear')
     concentration_record.add_extra_column(map_dict[gas_name], retrieval_date=obs_utc_date, mod_data=mod_file_data)
@@ -2773,8 +2772,7 @@ def generate_single_tccon_prior(mod_file_data, utc_offset, concentration_record,
                   'strat_age_of_air': 'yr',
                   'atm_stratum': 'flag',
                   'gas_date': 'yr',
-                  'gas_date_width': 'yr',
-                  'gas_record_dates': 'UTC date'}
+                  'gas_date_width': 'yr'}
 
     map_constants = {'site_lon': file_lon,
                      'site_lat': file_lat,
