@@ -8,10 +8,11 @@ setup(
     desciption='Python code that creates the .mod and .vmr files used in GGG',
     author='Joshua Laughner, Sebastien Roche, Matthaeus Kiel',
     author_email='jlaugh@caltech.edu',
-    version='1.0.0-rc1',
+    version='1.0.0-rc4.1',
     url='',
     install_requires=[
         'astropy>=3.1.2',
+        'cfunits>=3.0.0',
         'ephem>=3.7.6.0',
         'h5py>=2.9.0',
         'jplephem>=2.9',
