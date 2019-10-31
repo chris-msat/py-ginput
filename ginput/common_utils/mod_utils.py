@@ -30,7 +30,6 @@ import sys
 from . import mod_constants as const
 from .. import __version__ as _ginput_version
 from .mod_constants import days_per_year
-from .ggg_logging import logger
 from ..mod_maker.tccon_sites import site_dict
 
 _std_model_pres_levels = np.array([1000.0, 975.0, 950.0, 925.0, 900.0, 875.0, 850.0, 825.0, 800.0, 775.0, 750.0, 725.0,
@@ -189,31 +188,6 @@ def get_num_header_lines(filename):
     else:
         header = header_info.split()
     return int(header[0])
-
-
-def _write_header(fobj, header_lines, n_data_columns):
-    """
-    Write a standard header to a GGG file.
-
-    A typical header in a GGG file begins with a line with two numbers: the number of header lines and the number of
-    data columns. This automatically formats that line, then writes the given lines.
-
-    :param fobj: File handle (i.e. object returned by :func:`open`)
-    :type fobj: :class:`_io.TextIO`
-
-    :param header_lines: a list of header lines (after the first) to write. Should be strings, each may or may not end
-     in newlines (both cases are handled).
-    :type header_lines: list(str)
-
-    :param n_data_columns: number of data columns in the main part of the file
-    :type n_data_columns: int
-
-    :return: none, writes to the file object.
-    """
-    line1 = ' {} {}\n'.format(len(header_lines)+1, n_data_columns)
-    fobj.write(line1)
-    header_lines = [l if l.endswith('\n') else l + '\n' for l in header_lines]
-    fobj.writelines(header_lines)
 
 
 def read_mod_file(mod_file, as_dataframes=False):
@@ -422,133 +396,6 @@ def get_isotopes_file(isotopes_file=None, use_gggpath=False):
         return os.path.join(const.data_dir, 'isotopologs.dat')
 
 
-def map_file_name(site_abbrev, obs_lat, obs_date):
-    return '{}{}_{}.map'.format(site_abbrev, format_lat(obs_lat, prec=0), obs_date.strftime('%Y%m%d_%H%M'))
-
-
-def write_map_file(map_file, site_lat, trop_eqlat, prof_ref_lat, surface_alt, tropopause_alt, strat_used_eqlat,
-                   variables, units, var_order=None, req_all_vars=False, converters=None):
-    """
-    Create a .map file
-
-    :param map_file: the full name to save the map file as
-    :type map_file: str
-
-    :param site_lat: the geographic latitude of the site.
-    :type site_lat: float
-
-    :param trop_eqlat: the equivalent latitude, derived from the GEOS lat vs. theta climatology, used to create the
-     tropospheric part of the profiles.
-    :type trop_eqlat: float
-
-    :param prof_ref_lat: the constant reference latitude used for the tropospheric age of air and seasonal cycle
-     functions.
-    :type prof_ref_lat: float
-
-    :param surface_alt: the surface altitude from the .mod file in kilometers
-    :type surface_alt: float
-
-    :param tropopause_alt: the altitude of the tropopause for this profile (in kilometers).
-    :type tropopause_alt: float
-
-    :param strat_used_eqlat: whether or not the stratospheric part of the profile used PV-derived equivalent latitude.
-     ``False`` means that the geographic latitude of the site was used instead.
-    :type strat_used_eqlat: bool
-
-    :param variables: a dictionary where the keys will be used as the column names and the values should be 1D
-     array-like values to be written to the map file.
-    :type variables: dict(str: array-like)
-
-    :param units: a dictionary that must have the same keys as ``variables`` where the values define the units to print
-     in the line under the variable names in the .map file
-    :type units: dict(str: str)
-
-    :param var_order: optional, if given, a sequence of the keys in ``variables`` and ``units`` that defines what order
-     they are to be written to the .map file. If ``variables`` is an OrderedDict, then this is not necessary. May omit
-     keys from ``variables`` to skip writing those variables.
-    :type var_order: sequence(str)
-
-    :param req_all_vars: optional, set to ``True`` to require that all keys in ``variables`` are contained in
-     ``var_order``.
-    :type req_all_vars: bool
-
-    :param converters: optional, a dictionary defining converter functions for different inputs. The keys must be keys
-     in ``variables`` and the values functions that accept one input, which will be a single value from that variable
-     (not the whole vector), and return a scalar numeric output.
-    :type converters: dict
-
-    :return: None
-    """
-    def no_convert(val):
-        return val
-
-    # variables and units must have the same keys
-    if var_order is None:
-        var_order = list(variables.keys())
-    if req_all_vars and (set(var_order) != set(variables.keys()) or set(var_order) != set(units.keys())):
-        raise ValueError('variables and units must be dictionaries with the same keys, and both must match the '
-                         'keys in var_order (if given)')
-
-    k1 = var_order[0]
-    size_check = np.size(variables[k1])
-    for k, v in variables.items():
-        if np.ndim(v) != 1:
-            raise ValueError('All values in variables must be 1 dimensional. {} is not.'.format(k))
-        elif np.size(v) != size_check:
-            raise ValueError('All values in variables must have the same shape. {badvar} has a different shape '
-                             '({badshape}) than {chkvar} ({chkshape})'.format(badvar=k, badshape=np.shape(v),
-                                                                              chkvar=k1, chkshape=size_check))
-
-    converters = dict() if converters is None else converters
-    for k in var_order:
-        if k not in converters:
-            converters[k] = no_convert
-
-    header_lines = []
-    # Header line 2: file name (no path)
-    header_lines.append(os.path.basename(map_file))
-    # Header line 3: version info
-    hg_parent, hg_branch, hg_date = hg_commit_info()
-    header_lines.append('{pgrm:19} v{vers:12} {commit:14} ({branch:19}) {date} {author:10}'
-                        .format(pgrm='GINPUT', vers=_ginput_version, commit=hg_parent, branch=hg_branch, date=hg_date,
-                                author='SR, MK, JL')
-                        )
-    # Header line 4: wiki link
-    header_lines.append('Please see https://tccon-wiki.caltech.edu for a complete description of this file and its usage.')
-    # Header line 5 to (n-2): constants/site lat
-    header_lines.append('Avodagro (molecules/mole): {}'.format(const.avogadro))
-    header_lines.append('Mass_Dry_Air (kg/mole): {}'.format(const.mass_dry_air))
-    header_lines.append('Mass_H2O (kg/mole): {}'.format(const.mass_h2o))
-    header_lines.append('Latitude (degrees): {}'.format(site_lat))
-    header_lines.append('Trop. eqlat (degrees): {:.2f}'.format(trop_eqlat))
-    header_lines.append('Ref. lat (degrees): {}'.format(prof_ref_lat))
-    header_lines.append('Surface altitude (km): {}'.format(surface_alt))
-    header_lines.append('Tropopause (km): {}'.format(tropopause_alt))
-    header_lines.append('Stratosphere used eq lat: {}'.format(int(strat_used_eqlat)))
-
-    # Line 1: number of header lines and variable columns
-    # The number of header lines is however many we've made so far, plus this one, the column names, and the column
-    # units (3 extra)
-    header_lines.insert(0, '{} {}'.format(len(header_lines)+3, len(variables)))
-
-    # Go ahead and write the header to the file
-    with open(map_file, 'w') as mapf:
-        for line in header_lines:
-            mapf.write(line + '\n')
-
-        # Now we write the variable names, units, and values. Need to get a list of keys to make sure the order we
-        # iterate through them is the same
-        mapf.write(','.join(var_order) + '\n')
-        mapf.write(','.join(units[k] for k in var_order) + '\n')
-
-        # Finally write the values.
-        for i in range(size_check):
-            formatted_values = ['{:.6G}'.format(converters[k](variables[k][i])) for k in var_order]
-            mapf.write(','.join(formatted_values))
-            if i < size_check - 1:
-                mapf.write('\n')
-
-
 def vmr_output_subdir(top_dir, site_abbrev, product='fpit', slant=False):
     path_dir = 'vmrs-slant' if slant else 'vmrs-vertical'
     return os.path.join(top_dir, product, site_abbrev, path_dir)
@@ -581,97 +428,6 @@ def vmr_file_name(obs_date, lon, lat, keep_latlon_prec=False, date_fmt='%Y%m%d%H
     major_version = const.priors_version.split('.')[0]
     return 'JL{ver}_{date}{tz}_{lat}_{lon}.vmr'.format(ver=major_version, date=obs_date.strftime(date_fmt),
                                                        tz='Z' if in_utc else 'L', lat=lat, lon=lon)
-
-
-def write_vmr_file(vmr_file, tropopause_alt, profile_date, profile_lat, profile_alt, profile_gases, gas_name_order=None,
-                   extra_header_info=None):
-    """
-    Write a new-style .vmr file (without seasonal cycle, secular trends, and latitudinal gradients
-
-    :param vmr_file: the path to write the .vmr file ar
-    :type vmr_file: str
-
-    :param tropopause_alt: the altitude of the tropopause, in kilometers
-    :type tropopause_alt: float
-
-    :param profile_date: the date of the profile
-    :type profile_date: datetime-like
-
-    :param profile_lat: the latitude of the profile (south is negative)
-    :type profile_lat: float
-
-    :param profile_alt: the altitude levels that the profiles are defined on, in kilometers
-    :type profile_alt: array-like
-
-    :param profile_gases: a dictionary of the prior profiles to write to the .vmr file.
-    :type profile_gases: dict(array)
-
-    :param gas_name_order: optional, a list/tuple specifying what order the gases are to be written in. If not given,
-     they will be written in whatever order the iteration through ``profile_gases`` defaults to. If given, then an
-     error is raised if any of the gas names listed here are not present in ``profile_gases`` (comparison is case-
-     insensitive). Any gases not listed here that are in ``profile_gases`` are skipped.
-    :type gas_name_order: list(str)
-
-    :param extra_header_info: optional, if given, must be a dictionary or list of lines to include at the end of the
-     header in the .vmr. If a list, must be a list of strings. If a dict, each line will be formatted as "key: value"
-     and the keys/values may be any type.
-
-    :return: none, writes the .vmr file.
-    """
-
-    if np.ndim(profile_alt) != 1:
-        raise ValueError('profile_alt must be 1D')
-
-    if gas_name_order is None:
-        gas_name_order = [k for k in profile_gases.keys()]
-
-    if extra_header_info is None:
-        extra_header_info = []
-    elif isinstance(extra_header_info, dict):
-        extra_header_info = ['{}: {}'.format(k, v) for k, v in extra_header_info.items()]
-
-    gas_name_order_lower = [name.lower() for name in gas_name_order]
-    gas_name_mapping = {k: None for k in gas_name_order}
-
-    # Check that all the gases in the profile_gases dict are expected to be written.
-    for gas_name, gas_data in profile_gases.items():
-        if gas_name.lower() not in gas_name_order_lower:
-            logger.warning('Gas "{}" was not listed in the gas name order and will not be written to the .vmr '
-                           'file'.format(gas_name))
-        elif np.shape(gas_data) != np.shape(profile_alt):
-            raise ValueError('Gas "{}" has a different shape ({}) than the altitude data ({})'.format(
-                gas_name, np.shape(gas_data), np.shape(profile_alt)
-            ))
-        elif np.ndim(gas_data) != 1:
-            raise ValueError('Gas "{}" is not 1D'.format(gas_name))
-        else:
-            idx = gas_name_order_lower.index(gas_name.lower())
-            gas_name_mapping[gas_name_order[idx]] = gas_name
-
-    # Write the header, which starts with the number of header lines and data columns, then has the tropopause altitude,
-    # profile date as a decimal year, and profile latitude. I'm going to skip the secular trends, seasonal cycle, and
-    # latitude gradient because those are not necessary.
-    alt_fmt = '{:9.3f} '
-    gas_fmt = '{:.3E}  '
-    table_header = ['Altitude'] + ['{:10}'.format(name) for name in gas_name_order]
-    header_lines = [' GINPUT_VERSION: {}'.format(_ginput_version),
-                    ' ZTROP_VMR: {:.1f}'.format(tropopause_alt),
-                    ' DATE_VMR: {:.3f}'.format(date_to_decimal_year(profile_date)),
-                    ' LAT_VMR: {:.2f}'.format(profile_lat)] \
-                + [' ' + l for l in extra_header_info] \
-                + [' '.join(table_header)]
-
-    with open(vmr_file, 'w') as fobj:
-        _write_header(fobj, header_lines, len(gas_name_order) + 1)
-        for i in range(np.size(profile_alt)):
-            fobj.write(alt_fmt.format(profile_alt[i]))
-            for gas_name in gas_name_order:
-                if gas_name_mapping[gas_name] is not None:
-                    gas_conc = profile_gases[gas_name_mapping[gas_name]][i]
-                else:
-                    gas_conc = 0.0
-                fobj.write(gas_fmt.format(gas_conc))
-            fobj.write('\n')
 
 
 def read_vmr_file(vmr_file, as_dataframes=False, lowercase_names=True, style='new'):

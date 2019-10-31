@@ -434,6 +434,7 @@ def _list_map_files_matching_mod_files(map_dir, mod_files):
         mod_lat = mod_utils.find_lat_substring(modf, to_float=False)
 
         map_subdir = '{date}_{lon}_{lat}'.format(date=mod_datetime.strftime('%Y%m%d'), lon=mod_lon, lat=mod_lat)
+        raise NotImplementedError('This function has not been updated after the writer function cleanup')
         map_fname = mod_utils.map_file_name('xx', mod_utils.format_lat(mod_lat), mod_datetime)
         map_fullfile = os.path.join(map_dir, map_subdir, map_fname)
         if not os.path.isfile(map_fullfile):

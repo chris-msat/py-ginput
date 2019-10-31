@@ -4,7 +4,7 @@ import netCDF4 as ncdf
 import numpy as np
 import os
 
-
+from .ggg_logging import logger
 from . import mod_utils, mod_constants, ioutils
 from ..mod_maker import tccon_sites
 from .. import __version__
@@ -238,3 +238,119 @@ def _write_ncdf_map_file(mapdat, obs_lat, obs_date, file_lat, file_lon, obs_site
         wobj.constant_mass_dry_air_units = _cfunits('kg/mol')
         wobj.constant_mass_h2o = mod_constants.mass_h2o
         wobj.constant_mass_h2o_units = _cfunits('kg/mol')
+
+
+def write_vmr_file(vmr_file, tropopause_alt, profile_date, profile_lat, profile_alt, profile_gases, gas_name_order=None,
+                   extra_header_info=None):
+    """
+    Write a new-style .vmr file (without seasonal cycle, secular trends, and latitudinal gradients
+
+    :param vmr_file: the path to write the .vmr file ar
+    :type vmr_file: str
+
+    :param tropopause_alt: the altitude of the tropopause, in kilometers
+    :type tropopause_alt: float
+
+    :param profile_date: the date of the profile
+    :type profile_date: datetime-like
+
+    :param profile_lat: the latitude of the profile (south is negative)
+    :type profile_lat: float
+
+    :param profile_alt: the altitude levels that the profiles are defined on, in kilometers
+    :type profile_alt: array-like
+
+    :param profile_gases: a dictionary of the prior profiles to write to the .vmr file.
+    :type profile_gases: dict(array)
+
+    :param gas_name_order: optional, a list/tuple specifying what order the gases are to be written in. If not given,
+     they will be written in whatever order the iteration through ``profile_gases`` defaults to. If given, then an
+     error is raised if any of the gas names listed here are not present in ``profile_gases`` (comparison is case-
+     insensitive). Any gases not listed here that are in ``profile_gases`` are skipped.
+    :type gas_name_order: list(str)
+
+    :param extra_header_info: optional, if given, must be a dictionary or list of lines to include at the end of the
+     header in the .vmr. If a list, must be a list of strings. If a dict, each line will be formatted as "key: value"
+     and the keys/values may be any type.
+
+    :return: none, writes the .vmr file.
+    """
+
+    if np.ndim(profile_alt) != 1:
+        raise ValueError('profile_alt must be 1D')
+
+    if gas_name_order is None:
+        gas_name_order = [k for k in profile_gases.keys()]
+
+    if extra_header_info is None:
+        extra_header_info = []
+    elif isinstance(extra_header_info, dict):
+        extra_header_info = ['{}: {}'.format(k, v) for k, v in extra_header_info.items()]
+
+    gas_name_order_lower = [name.lower() for name in gas_name_order]
+    gas_name_mapping = {k: None for k in gas_name_order}
+
+    # Check that all the gases in the profile_gases dict are expected to be written.
+    for gas_name, gas_data in profile_gases.items():
+        if gas_name.lower() not in gas_name_order_lower:
+            logger.warning('Gas "{}" was not listed in the gas name order and will not be written to the .vmr '
+                           'file'.format(gas_name))
+        elif np.shape(gas_data) != np.shape(profile_alt):
+            raise ValueError('Gas "{}" has a different shape ({}) than the altitude data ({})'.format(
+                gas_name, np.shape(gas_data), np.shape(profile_alt)
+            ))
+        elif np.ndim(gas_data) != 1:
+            raise ValueError('Gas "{}" is not 1D'.format(gas_name))
+        else:
+            idx = gas_name_order_lower.index(gas_name.lower())
+            gas_name_mapping[gas_name_order[idx]] = gas_name
+
+    # Write the header, which starts with the number of header lines and data columns, then has the tropopause altitude,
+    # profile date as a decimal year, and profile latitude. I'm going to skip the secular trends, seasonal cycle, and
+    # latitude gradient because those are not necessary.
+    alt_fmt = '{:9.3f} '
+    gas_fmt = '{:.3E}  '
+    table_header = ['Altitude'] + ['{:10}'.format(name) for name in gas_name_order]
+    header_lines = [' GINPUT_VERSION: {}'.format(__version__),
+                    ' ZTROP_VMR: {:.1f}'.format(tropopause_alt),
+                    ' DATE_VMR: {:.3f}'.format(mod_utils.date_to_decimal_year(profile_date)),
+                    ' LAT_VMR: {:.2f}'.format(profile_lat)] \
+                + [' ' + l for l in extra_header_info] \
+                + [' '.join(table_header)]
+
+    with open(vmr_file, 'w') as fobj:
+        _write_header(fobj, header_lines, len(gas_name_order) + 1)
+        for i in range(np.size(profile_alt)):
+            fobj.write(alt_fmt.format(profile_alt[i]))
+            for gas_name in gas_name_order:
+                if gas_name_mapping[gas_name] is not None:
+                    gas_conc = profile_gases[gas_name_mapping[gas_name]][i]
+                else:
+                    gas_conc = 0.0
+                fobj.write(gas_fmt.format(gas_conc))
+            fobj.write('\n')
+
+
+def _write_header(fobj, header_lines, n_data_columns):
+    """
+    Write a standard header to a GGG file.
+
+    A typical header in a GGG file begins with a line with two numbers: the number of header lines and the number of
+    data columns. This automatically formats that line, then writes the given lines.
+
+    :param fobj: File handle (i.e. object returned by :func:`open`)
+    :type fobj: :class:`_io.TextIO`
+
+    :param header_lines: a list of header lines (after the first) to write. Should be strings, each may or may not end
+     in newlines (both cases are handled).
+    :type header_lines: list(str)
+
+    :param n_data_columns: number of data columns in the main part of the file
+    :type n_data_columns: int
+
+    :return: none, writes to the file object.
+    """
+    line1 = ' {} {}\n'.format(len(header_lines)+1, n_data_columns)
+    fobj.write(line1)
+    header_lines = [l if l.endswith('\n') else l + '\n' for l in header_lines]
+    fobj.writelines(header_lines)

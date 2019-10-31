@@ -11,7 +11,7 @@ import re
 import shutil
 
 from ... import __version__
-from ...common_utils import mod_utils, sat_utils
+from ...common_utils import mod_utils, sat_utils, writers
 from ...mod_maker import mod_maker, tccon_sites
 from .. import tccon_priors
 from . import backend_utils as butils
@@ -238,9 +238,9 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
         vmr_name = mod_utils.vmr_file_name(atm_date, lon=prof_lon, lat=prof_lat, date_fmt='%Y%m%d_%H%M',
                                            keep_latlon_prec=True, in_utc=True)
         vmr_name = os.path.join(save_dir, vmr_name)
-        mod_utils.write_vmr_file(vmr_name, tropopause_alt=vmr_trop_alt, profile_date=atm_date,
-                                 profile_lat=prof_lat, profile_alt=vmrz, profile_gases=vmrdat['profile'],
-                                 extra_header_info=extra_header_info)
+        writers.write_vmr_file(vmr_name, tropopause_alt=vmr_trop_alt, profile_date=atm_date,
+                                                   profile_lat=prof_lat, profile_alt=vmrz, profile_gases=vmrdat['profile'],
+                                                   extra_header_info=extra_header_info)
 
 
 def merge_vmr_files(vmr_in_dir, vmr_out_dir):
@@ -273,9 +273,9 @@ def merge_vmr_files(vmr_in_dir, vmr_out_dir):
         lat_vmr = main_vmr['scalar'].pop('LAT_VMR')
         z_vmr = main_vmr['profile'].pop('Altitude')
         new_name = os.path.join(vmr_out_dir, os.path.basename(main_file))
-        mod_utils.write_vmr_file(new_name, tropopause_alt=ztrop, profile_date=date_vmr, profile_lat=lat_vmr,
-                                 profile_alt=z_vmr, profile_gases=main_vmr['profile'],
-                                 extra_header_info=main_vmr['scalar'])
+        writers.write_vmr_file(new_name, tropopause_alt=ztrop, profile_date=date_vmr, profile_lat=lat_vmr,
+                                                   profile_alt=z_vmr, profile_gases=main_vmr['profile'],
+                                                   extra_header_info=main_vmr['scalar'])
 
     vmr_files = sorted(glob(os.path.join(vmr_in_dir, '*.vmr')))
     # Loop through the vmr files. For each file, record its date and species from observation. Then go back through and

@@ -329,6 +329,7 @@ def make_priors(prior_dir, mod_dir, gas_name, acdates, aclons, aclats, zgrid_fil
 def _prior_helper(ph_f, ph_out_dir, gas_rec, zgrid=None):
     _fbase = os.path.basename(ph_f)
     print('Processing {}, saving to {}'.format(_fbase, ph_out_dir))
+    raise NotImplementedError('This function has not been updated after the writer function cleanup')
     tccon_priors.generate_single_tccon_prior(ph_f, tdel(hours=0), gas_rec, write_map=ph_out_dir,
                                              use_eqlat_strat=True, zgrid=zgrid)
 
