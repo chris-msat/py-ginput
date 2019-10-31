@@ -1,5 +1,6 @@
 from __future__ import print_function, division
 
+import cftime
 import datetime as dt
 from hashlib import sha1
 import netCDF4 as ncdf
@@ -93,9 +94,10 @@ def make_nctimedim_helper(nc_handle, dim_name, dim_var, base_date=dt.datetime(19
     except TypeError:
         dim_var = [d.to_pydatetime() for d in dim_var]
         date_arr = ncdf.date2num(dim_var, units_str, calendar=calendar)
+    base_date = cftime.date2num(base_date, units_str, calendar=calendar)
+    attrs.update({'units': units_str, 'calendar': calendar, 'base_date': base_date})
     dim = make_ncdim_helper(nc_handle, dim_name, date_arr, **attrs)
-    time_info_dict = {'units': units_str, 'calendar': calendar, 'base_date': base_date}
-    return dim, time_info_dict
+    return dim
 
 
 def make_ncvar_helper(nc_handle, var_name, var_data, dims, **attrs):

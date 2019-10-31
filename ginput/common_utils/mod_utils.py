@@ -1836,8 +1836,8 @@ def number_density_air(p, t):
     :return: ideal dry number density in molec. cm^-3
     :rtype: float or :class:`numpy.ndarray`
     """
-    R = 8.314e4 # gas constant in cm^3 * hPa / (mol * K)
-    return p / (R*t) * 6.022e23
+    R = const.gas_const  # gas constant in cm^3 * hPa / (mol * K)
+    return p / (R*t) * const.avogadro
 
 
 def effective_vertical_path(z, p=None, t=None, nair=None):
@@ -2481,6 +2481,10 @@ def check_site_lat_lon_alt(abbrev, lat=None, lon=None, alt=None):
         raise ValueError('Longitude outside of valid range (-360, +360, exclusive) found')
 
     return vals['abbrev'], vals['lat'], vals['lon'], vals['alt']
+
+
+def dry2wet(dmf, h2o_dmf):
+    return dmf / (1 + h2o_dmf)
 
 
 def interp_to_zgrid(profile_dict, zgrid, gas_extrap_method='linear'):
