@@ -2750,7 +2750,7 @@ def generate_single_tccon_prior(mod_file_data, utc_offset, concentration_record,
                 'gas_date': gas_date_prof,  # TODO: eliminate duplicate
                 'gas_record_dates': gas_date_prof}
 
-    map_dict = mod_utils.interp_to_zgrid(map_dict, zgrid, gas_extrap_method='linear')
+    map_dict = mod_utils.interp_to_zgrid(map_dict, zgrid, gas_extrap_method='const' if gas_name == CORecord._gas_name else 'linear')
     concentration_record.add_extra_column(map_dict[gas_name], retrieval_date=obs_utc_date, mod_data=mod_file_data)
 
     # Finally prepare the output, writing a .map file if needed.
