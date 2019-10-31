@@ -1,6 +1,7 @@
 from collections import OrderedDict
 import datetime as dt
 from glob import glob
+
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
@@ -193,7 +194,7 @@ def generate_obspack_modified_vmrs(obspack_dir, vmr_dir, save_dir, combine_metho
             matched_mod_files = match_atm_vmr(obskey, mod_files)
             moddat = weighted_avg_mod_files(matched_mod_files[0], matched_mod_files[1], wt)
             # Must have the model data on the same altitude grid as the priors.
-            moddat = tccon_priors.interp_to_zgrid(moddat['profile'], vmrz)
+            moddat = mod_utils.interp_to_zgrid(moddat['profile'], vmrz)
             prof_theta = moddat['PT']
         else:
             prof_theta = None

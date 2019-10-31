@@ -13,6 +13,7 @@ from datetime import timedelta
 from glob import glob
 
 import numpy
+import xarray as xr
 from dateutil.relativedelta import relativedelta
 import netCDF4 as ncdf
 import numpy as np
@@ -2480,3 +2481,83 @@ def check_site_lat_lon_alt(abbrev, lat=None, lon=None, alt=None):
         raise ValueError('Longitude outside of valid range (-360, +360, exclusive) found')
 
     return vals['abbrev'], vals['lat'], vals['lon'], vals['alt']
+
+
+def interp_to_zgrid(profile_dict, zgrid, gas_extrap_method='linear'):
+    """
+    Interpolate the output profile variables to a desired altitude grid.
+
+    This mimics the behavior in `read_refvmrs` of the Fortran gsetup code. It interpolates the output variables linearly
+    with respect to altitude. It will extrapolate linearly towards the surface, but will raise an error if the profile
+    does not go high enough.
+
+    :param profile_dict: a dictionary of profile variables. Must include the altitude levels as the key "Height". The
+     keys "gas_record_dates" and "gas_date" are treated as dates for interpolation.
+    :type profile_dict: dict
+
+    :param zgrid: any specification of a fixed altitude grid accepted by :func:`_setup_zgrid`, i.e. ``None`` to do no
+     interpolation, a path to an integral file, or an array directly specifying the altitude grid.
+    :type zgrid: None, str, or :class:`numpy.ndarray`.
+
+    :return: the profile dictionary with its variables interpolated/extrapolated to the new altitude grid. It will
+     also have been modified in-place.
+    :rtype: dict
+    """
+    # Specify pairs of functions to convert and unconvert the values of the input arrays. Each key must match a key in
+    # the profile_dict, and the values must be two element tuples, where the first element is the function to use to
+    # convert the values in the dict to ones that can be interpolated and the second does the reverse process.
+    met_variables = ('Height', 'Temp', 'Pressure', 'PT', 'EqL')
+    dt_converters = (_datetime2float, _float2datetime)
+    converters = {'gas_record_dates': dt_converters,
+                  'gas_date': dt_converters}
+
+    zgrid = _setup_zgrid(zgrid)
+    if zgrid is None:
+        return profile_dict
+
+    profile_z = profile_dict['Height'].copy()
+    for k, v in profile_dict.items():
+        if k in converters:
+            v = converters[k][0](v)
+
+        v = xr.DataArray(v, coords=[profile_z], dims=['z'])
+        if gas_extrap_method == 'linear' or k in met_variables:
+            # we always want to linearly extrapolate the met variables, especially since they often act as vertical
+            # coordinates. If more met variables are added, you'll have to update the list.
+            fills = 'extrapolate'
+        elif gas_extrap_method in ('const', 'constant'):
+            fills = (v[0], v[-1])
+        else:
+            raise ValueError('extrap_method must be one of: "linear", "const", or "constant".')
+        v = v.interp(z=zgrid, method='linear', kwargs={'fill_value': fills})
+
+        if k in converters:
+            v = converters[k][1](v.data)
+        else:
+            v = v.data
+        profile_dict[k] = v
+
+    return profile_dict
+
+
+def _setup_zgrid(zgrid):
+    """
+    Setup a fixed altitude grid
+    :param zgrid:
+    :return:
+    """
+    if isinstance(zgrid, str):
+        int_info = read_integral_file(zgrid)
+        return int_info['Height']
+    elif not isinstance(zgrid, (type(None), np.ndarray, xr.DataArray)):
+        raise TypeError('zgrid must be a string, None, numpy array, or xarray DataArray')
+    else:
+        return zgrid
+
+
+def _datetime2float(dtarray):
+    return np.array([np.nan if d is None else to_unix_time(d) for d in dtarray])
+
+
+def _float2datetime(dtarray):
+    return np.array([None if np.isnan(d) else from_unix_time(d, pd.Timestamp) for d in dtarray])
