@@ -24,14 +24,14 @@ _map_standard_names = {'Height': 'altitude',
                        'Temp': 'air_temperature',
                        'Pressure': 'air_pressure',
                        'Density': 'air_number_density',
-                       'h2o': 'water_wet_mole_fraction',
-                       'hdo': 'heavy_water_wet_mole_fraction',
-                       'co2': 'carbon_dioxide_wet_mole_fraction',
-                       'n2o': 'nitrous_oxide_wet_mole_fraction',
-                       'co':  'carbon_monoxide_wet_mole_fraction',
-                       'ch4': 'methane_wet_mole_fraction',
-                       'hf':  'hydrofluoric_acid_wet_mole_fraction',
-                       'o2':  'oxygen_wet_mole_fraction',
+                       'h2o': 'water_{w_or_d}_mole_fraction',
+                       'hdo': 'heavy_water_{w_or_d}_mole_fraction',
+                       'co2': 'carbon_dioxide_{w_or_d}_mole_fraction',
+                       'n2o': 'nitrous_oxide_{w_or_d}_mole_fraction',
+                       'co':  'carbon_monoxide_{w_or_d}_mole_fraction',
+                       'ch4': 'methane_{w_or_d}_mole_fraction',
+                       'hf':  'hydrofluoric_acid_{w_or_d}_mole_fraction',
+                       'o2':  'oxygen_{w_or_d}_mole_fraction',
                        'gravity': 'gravitational_acceleration'}
 
 _map_var_mapping = {'Temperature': 'Temp'}
@@ -54,6 +54,12 @@ class CFUnitsError(Exception):
 
 
 def _cfunits(unit_string):
+    """
+    Convert a units string to a CF-compliant one.
+    :param unit_string: the unit string to convert
+    :return: the converted unit string
+    :raises CFUnitsError: if the string cannot be made CF-compliant
+    """
     units = Units(unit_string).formatted()
     if units is None:
         raise CFUnitsError(unit_string)
@@ -62,6 +68,18 @@ def _cfunits(unit_string):
 
 
 def write_map_from_vmr_mod(vmr_file, mod_file, map_output_dir, fmt='txt', wet_or_dry='wet', site_abbrev='xx'):
+    """
+    Create a .map file from a .vmr and .mod file
+
+    :param vmr_file: the path to the .vmr file to read the gas concentrations from
+    :param mod_file: the path to the .mod file to read the met variables from
+    :param map_output_dir: the directory to write the .map file to. It will automatically be given the correct name.
+    :param fmt: what format to write the .map files in, either "txt" for the original text files or "nc" for the new
+     netCDF files.
+    :param wet_or_dry: whether to write wet or dry mole fractions.
+    :param site_abbrev: the site abbreviation to go in the file name and netCDF attributes.
+    :return: none, writes .map or .map.nc file.
+    """
     if not os.path.isfile(vmr_file):
         raise OSError('vmr_file "{}" does not exist'.format(vmr_file))
     if not os.path.isdir(map_output_dir):
@@ -74,17 +92,17 @@ def write_map_from_vmr_mod(vmr_file, mod_file, map_output_dir, fmt='txt', wet_or
     if file_date != mod_date:
         raise RuntimeError('The .vmr and .mod files have different dates in their filenames!')
 
-    mapdat, obs_lat = _merge_and_convert_mod_vmr(vmr_file, mod_file)
+    mapdat, obs_lat = _merge_and_convert_mod_vmr(vmr_file, mod_file, wet_or_dry=wet_or_dry)
     map_name = '{site}{date}Z.map'.format(site=site_abbrev, date=file_date.strftime('%Y%m%d%H'))
     map_name = os.path.join(map_output_dir, map_name)
 
     if fmt == 'txt':
-        _write_text_map_file(mapdat=mapdat, obs_lat=obs_lat, map_file=map_name)
+        _write_text_map_file(mapdat=mapdat, obs_lat=obs_lat, map_file=map_name, wet_or_dry=wet_or_dry)
     elif fmt == 'nc':
         moddat = mod_utils.read_mod_file(mod_file)
         _write_ncdf_map_file(mapdat=mapdat, obs_lat=obs_lat, obs_date=moddat['file']['datetime'], obs_site=site_abbrev,
                              file_lat=moddat['file']['lat'], file_lon=moddat['file']['lon'],
-                             map_file=map_name+'.nc')
+                             map_file=map_name+'.nc', wet_or_dry=wet_or_dry)
 
 
 def _merge_and_convert_mod_vmr(vmr_file, mod_file, vmr_vars=('h2o', 'hdo', 'co2', 'n2o', 'co', 'ch4', 'hf', 'o2'),
@@ -116,12 +134,14 @@ def _merge_and_convert_mod_vmr(vmr_file, mod_file, vmr_vars=('h2o', 'hdo', 'co2'
     for vvar in vmr_vars:
         scale = _map_scale_factors[vvar] if vvar in _map_scale_factors else 1
         gas_dmf = vmrdat['profile'][vvar] * scale
-        mapdat[vvar] = mod_utils.dry2wet(gas_dmf, h2o_dmf)
+        if wet_or_dry == 'wet':
+            gas_dmf = mod_utils.dry2wet(gas_dmf, h2o_dmf)
+        mapdat[vvar] = gas_dmf
 
     return mapdat, obs_lat
 
 
-def _write_text_map_file(mapdat, obs_lat, map_file):
+def _write_text_map_file(mapdat, obs_lat, map_file, wet_or_dry):
     def iter_values_formats(irow):
         for varname in _map_var_order:
             yield mapdat[varname][irow], _map_var_formats[varname]
@@ -140,7 +160,8 @@ def _write_text_map_file(mapdat, obs_lat, map_file):
               'Please see https://tccon-wiki.caltech.edu for a complete description of this file and its usage.']
 
     # Usage and warnings
-    header += [line + '\n' for line in wmf_message]
+    if wet_or_dry == 'wet':
+        header += [line + '\n' for line in wmf_message]
 
     # Constants
     header.append('Avogadro (molecules/mole): {}'.format(mod_constants.avogadro))
@@ -164,7 +185,7 @@ def _write_text_map_file(mapdat, obs_lat, map_file):
             wobj.write(line + '\n')
 
 
-def _write_ncdf_map_file(mapdat, obs_lat, obs_date, file_lat, file_lon, obs_site, map_file):
+def _write_ncdf_map_file(mapdat, obs_lat, obs_date, file_lat, file_lon, obs_site, map_file, wet_or_dry):
     with ncdf.Dataset(map_file, 'w') as wobj:
         alt_human_units = _map_canonical_units['Height']
         alt_units = _cfunits(alt_human_units)
@@ -183,7 +204,7 @@ def _write_ncdf_map_file(mapdat, obs_lat, obs_date, file_lat, file_lon, obs_site
 
             human_units = _map_canonical_units[varname]
             cf_units = _cfunits(human_units)
-            std_name = _map_standard_names[varname]
+            std_name = _map_standard_names[varname].format(w_or_d=wet_or_dry)
             ioutils.make_ncvar_helper(wobj, varname.lower(), mapdat[varname], dims=[altdim],
                                       units=cf_units, full_units=human_units, long_name=std_name)
 
@@ -191,7 +212,8 @@ def _write_ncdf_map_file(mapdat, obs_lat, obs_date, file_lat, file_lon, obs_site
         # to include are "comment", "Conventions" (?), "history", "institution", "references", "source", and "title"
         wobj.comment_full_units = 'The full_units attribute provides a human-readable counterpart to the ' \
                                   'CF-compliant units attribute'
-        wobj.comment_wet_mole_fractions = ' '.join(wmf_message)
+        if wet_or_dry == 'wet':
+            wobj.comment_wet_mole_fractions = ' '.join(wmf_message)
         wobj.comment_file_lat_lon = 'These are the latitude/longitude recorded in the input .mod file name. They ' \
                                     'may be rounded to the nearest degree.'
         wobj.contact = 'Joshua Laughner (jlaugh@caltech.edu)'
