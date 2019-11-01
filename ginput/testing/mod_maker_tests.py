@@ -1,12 +1,13 @@
 from __future__ import print_function, division
 import datetime as dt
+
 from matplotlib import pyplot as plt
 import numpy as np
 import os
 import unittest
 
 from . import test_utils
-from ..common_utils import mod_utils
+from ..common_utils import mod_utils, readers
 from ..priors import tccon_priors
 from ..mod_maker.mod_maker import driver as mmdriver
 
@@ -34,11 +35,11 @@ class TestModMaker(unittest.TestCase):
                                                   )
 
     def test_mod_files(self):
-        self._comparison_helper(test_utils.iter_mod_file_pairs, mod_utils.read_mod_file,
+        self._comparison_helper(test_utils.iter_mod_file_pairs, readers.read_mod_file,
                                 test_utils.mod_input_dir, test_utils.mod_output_dir)
 
     def test_vmr_files(self):
-        self._comparison_helper(test_utils.iter_vmr_file_pairs, mod_utils.read_vmr_file,
+        self._comparison_helper(test_utils.iter_vmr_file_pairs, readers.read_vmr_file,
                                 test_utils.vmr_input_dir, test_utils.vmr_output_dir)
 
     def _comparison_helper(self, iter_fxn, read_fxn, input_dir, output_dir):

@@ -11,7 +11,7 @@ import re
 import shutil
 
 from ... import __version__
-from ...common_utils import mod_utils, sat_utils, writers
+from ...common_utils import mod_utils, sat_utils, readers, writers
 from ...mod_maker import mod_maker, tccon_sites
 from .. import tccon_priors
 from . import backend_utils as butils
@@ -252,9 +252,9 @@ def merge_vmr_files(vmr_in_dir, vmr_out_dir):
 
     def merge_vmr_files(main_file, *additional_files):
         print('Merging {} into {}'.format(', '.join([os.path.basename(f) for f in additional_files]), os.path.basename(main_file)))
-        main_vmr = mod_utils.read_vmr_file(main_file, lowercase_names=False)
+        main_vmr = readers.read_vmr_file(main_file, lowercase_names=False)
         for other_file in additional_files:
-            other_vmr = mod_utils.read_vmr_file(other_file, lowercase_names=False)
+            other_vmr = readers.read_vmr_file(other_file, lowercase_names=False)
             other_species = other_vmr['scalar']['observed_species'].split(',')
             main_vmr['scalar']['observed_species'] += ',' + other_vmr['scalar']['observed_species']
             main_vmr['scalar']['atm_files'] += ',' + other_vmr['scalar']['atm_files']
@@ -287,7 +287,7 @@ def merge_vmr_files(vmr_in_dir, vmr_out_dir):
     vmr_info = dict()
     all_species = set()
     for f in vmr_files:
-        vmrs = mod_utils.read_vmr_file(f)
+        vmrs = readers.read_vmr_file(f)
         vmr_date = mod_utils.find_datetime_substring(f, out_type=pd.Timestamp)
         vmr_species = vmrs['scalar']['observed_species'].split(',')
         site = mod_utils.find_lat_substring(f) + '_' + mod_utils.find_lon_substring(f)
@@ -356,7 +356,7 @@ def add_strat_to_atm_files(obspack_in_dir, obspack_out_dir, vmr_dir):
     vmr_files = glob(os.path.join(vmr_dir, '*.vmr'))
     completed_atm_files = set()
     for this_vmr_file in vmr_files:
-        vmrdat = mod_utils.read_vmr_file(this_vmr_file)
+        vmrdat = readers.read_vmr_file(this_vmr_file)
         vmrz = vmrdat['profile']['altitude'] * 1000  # atm file altitudes are in meters
         species = vmrdat['scalar']['observed_species'].split(',')
         atm_files = vmrdat['scalar']['atm_files'].split(',')
@@ -425,7 +425,7 @@ def plot_vmr_comparison(obspack_dir, vmr_dirs, save_file, plot_if_not_measured=T
             pbar.print_bar(fidx)
             this_atm_file = None
             basename = os.path.basename(fname)
-            vmr_info = mod_utils.read_vmr_file(fname)
+            vmr_info = readers.read_vmr_file(fname)
 
             matched_atm_files = _organize_atm_files_by_species(vmr_info['scalar']['atm_files'].split(','))
 
@@ -448,7 +448,7 @@ def plot_vmr_comparison(obspack_dir, vmr_dirs, save_file, plot_if_not_measured=T
                     ax.axhline(obsceil, 0.1, 0.9, color='k', linestyle=':', label='Obs. ceiling')
 
                 for i, (label, vdir) in enumerate(vmr_dirs.items()):
-                    vmrdat = mod_utils.read_vmr_file(os.path.join(vdir, basename), lowercase_names=True)
+                    vmrdat = readers.read_vmr_file(os.path.join(vdir, basename), lowercase_names=True)
                     vmrz, vmrprof = vmrdat['profile']['altitude'], vmrdat['profile'][gas.lower()]
                     zz = vmrz <= max_alt
                     ax.plot(vmrprof[zz]*scale, vmrz[zz], color=vmr_color[i], marker=vmr_marker[i], label=label)
@@ -814,14 +814,14 @@ def weighted_avg_vmr_files(vmr1, vmr2, wt):
     :return: the dictionary, as if reading the .vmr file, with the time average of the two files.
     :rtype: dict
     """
-    vmrdat1 = mod_utils.read_vmr_file(vmr1, lowercase_names=False)
-    vmrdat2 = mod_utils.read_vmr_file(vmr2, lowercase_names=False)
+    vmrdat1 = readers.read_vmr_file(vmr1, lowercase_names=False)
+    vmrdat2 = readers.read_vmr_file(vmr2, lowercase_names=False)
     return weighted_avg_dicts(vmrdat1, vmrdat2, wt)
 
 
 def weighted_avg_mod_files(mod1, mod2, wt):
     def load_mod_file(fname):
-        dat = mod_utils.read_mod_file(fname)
+        dat = readers.read_mod_file(fname)
         return dat
 
     moddat1 = load_mod_file(mod1)

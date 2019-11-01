@@ -1,5 +1,6 @@
 from datetime import datetime as dtime
 from glob import glob
+
 import numpy as np
 import os
 import pandas as pd
@@ -8,7 +9,7 @@ import re
 # Extra analysis package
 from sat_utils import mls
 
-from ginput.common_utils import mod_utils
+from ginput.common_utils import mod_utils, readers
 from ginput.priors.backend_analysis import backend_utils as butils
 
 
@@ -180,7 +181,7 @@ def match_mls_prior_profiles(mls_dir, priors_dirs, mls_list, mls_var, out_pres='
             raise RuntimeError('Failed to find the .map file for the right hour')
 
         map_file = map_file[0]
-        map_data = mod_utils.read_map_file(map_file, as_dataframes=False)['profile']
+        map_data = readers.read_map_file(map_file, as_dataframes=False)['profile']
 
         this_prior_prof = map_data[mls_var.lower()]
         this_prior_pres = map_data['Pressure']

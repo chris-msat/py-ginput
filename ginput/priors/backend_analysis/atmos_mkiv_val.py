@@ -1,10 +1,11 @@
 from datetime import datetime as dtime
+
 import numpy as np
 import os
 import pandas as pd
 
 
-from ginput.common_utils import mod_utils
+from ginput.common_utils import mod_utils, readers
 from ginput.priors.backend_analysis import aircraft_aircore_val as aav
 
 
@@ -83,7 +84,7 @@ def match_mkiv_to_priors(mkiv_file, list_file, map_dir, specie, max_error_ratio=
 
         prior_file = os.path.join(map_dir, aav.py_map_file_subpath(row.lon, row.lat, row.dates))
         try:
-            mapdat = mod_utils.read_map_file(prior_file)['profile']
+            mapdat = readers.read_map_file(prior_file)['profile']
         except FileNotFoundError:
             if allow_missing:
                 print('Could not find {}, skipping'.format(prior_file))

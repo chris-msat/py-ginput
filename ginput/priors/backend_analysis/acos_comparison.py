@@ -9,7 +9,7 @@ import os
 import re
 
 from .. import acos_interface as aci
-from ...common_utils import mod_utils
+from ...common_utils import mod_utils, readers
 
 _lon_re = re.compile(r'-?\d+\.\d+[WE]')
 _lat_re = re.compile(r'-?\d+\.\d+[NS]')
@@ -190,12 +190,12 @@ def match_acos_tccon_profiles(mod_dir, map_dir, acos_met_file, acos_prof_file):
     # Step 4
     acos_times = acos_met_data['datetime']
     tccon_met_data = read_tccon_data(first_files=first_mod_files, last_files=last_mod_files,
-                                     read_fxn=mod_utils.read_mod_file, var_ids=_tccon_met_var_mapping,
+                                     read_fxn=readers.read_mod_file, var_ids=_tccon_met_var_mapping,
                                      var_conversions=_tccon_var_conversions, acos_datetimes=acos_times,
                                      first_geos_time=first_geos_time, last_geos_time=last_geos_time)
     tccon_met_data['met_weights'] = tccon_met_data.pop('weights')
     tccon_prof_data = read_tccon_data(first_files=first_map_files, last_files=last_map_files,
-                                      read_fxn=mod_utils.read_map_file, var_ids=_tccon_prof_var_mapping,
+                                      read_fxn=readers.read_map_file, var_ids=_tccon_prof_var_mapping,
                                       var_conversions=_tccon_var_conversions, acos_datetimes=acos_times,
                                       first_geos_time=first_geos_time, last_geos_time=last_geos_time)
 
@@ -509,9 +509,9 @@ def make_mod_h5_file(h5file, mod_dir, last_geos_time=pd.Timestamp('2017-05-14 18
     file_number = -1
     for mfile in mod_files:
         file_number += 1
-        moddat18 = mod_utils.read_mod_file(mfile)
+        moddat18 = readers.read_mod_file(mfile)
         mfile21 = mfile.replace('1800Z', '2100Z')
-        moddat21 = mod_utils.read_mod_file(mfile21)
+        moddat21 = readers.read_mod_file(mfile21)
 
         w = sat_utils.time_weight_from_datetime(dates[file_number], last_geos_time, next_geos_time)
 

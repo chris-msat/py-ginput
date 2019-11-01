@@ -1,13 +1,14 @@
 from __future__ import print_function, division
 
 from glob import glob
+
 import netCDF4 as ncdf
 import numpy as np
 import os
 import pandas as pd
 import xarray as xr
 
-from ...common_utils import mod_utils
+from ...common_utils import mod_utils, readers
 from . import backend_utils as butils
 from .backend_utils import find_matching_val_profile, get_matching_val_profiles
 
@@ -48,7 +49,7 @@ def _read_prior_for_time(prior_dir, prior_hour, specie, prior_var=None, z_var=No
 
     prior_var = specie.lower() if prior_var is None else prior_var
 
-    prior_data = mod_utils.read_map_file(prior_file)
+    prior_data = readers.read_map_file(prior_file)
     prior_alt = prior_data['profile']['Height']
     prior_conc = prior_data['profile'][prior_var]
     if z_var is None:

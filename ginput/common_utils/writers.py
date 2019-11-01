@@ -5,7 +5,7 @@ import numpy as np
 import os
 
 from .ggg_logging import logger
-from . import mod_utils, mod_constants, ioutils
+from . import mod_utils, mod_constants, ioutils, readers
 from ..mod_maker import tccon_sites
 from .. import __version__
 
@@ -99,7 +99,7 @@ def write_map_from_vmr_mod(vmr_file, mod_file, map_output_dir, fmt='txt', wet_or
     if fmt == 'txt':
         _write_text_map_file(mapdat=mapdat, obs_lat=obs_lat, map_file=map_name, wet_or_dry=wet_or_dry)
     elif fmt == 'nc':
-        moddat = mod_utils.read_mod_file(mod_file)
+        moddat = readers.read_mod_file(mod_file)
         _write_ncdf_map_file(mapdat=mapdat, obs_lat=obs_lat, obs_date=moddat['file']['datetime'], obs_site=site_abbrev,
                              file_lat=moddat['file']['lat'], file_lon=moddat['file']['lon'],
                              map_file=map_name+'.nc', wet_or_dry=wet_or_dry)
@@ -107,8 +107,8 @@ def write_map_from_vmr_mod(vmr_file, mod_file, map_output_dir, fmt='txt', wet_or
 
 def _merge_and_convert_mod_vmr(vmr_file, mod_file, vmr_vars=('h2o', 'hdo', 'co2', 'n2o', 'co', 'ch4', 'hf', 'o2'),
                                mod_vars=('Height', 'Temperature', 'Pressure', 'Density', 'gravity'), wet_or_dry='wet'):
-    vmrdat = mod_utils.read_vmr_file(vmr_file)
-    moddat = mod_utils.read_mod_file(mod_file)
+    vmrdat = readers.read_vmr_file(vmr_file)
+    moddat = readers.read_mod_file(mod_file)
     mapdat = dict()
 
     # put the .mod variables (always on the GEOS native grid) on the same grid as the .vmr file (whatever that is).

@@ -71,7 +71,7 @@ from scipy.interpolate import LinearNDInterpolator
 import xarray as xr
 
 from ..mod_maker import tccon_sites
-from ..common_utils import mod_utils, ioutils, writers, mod_constants as const
+from ..common_utils import mod_utils, ioutils, readers, writers, mod_constants as const
 from ..common_utils.ggg_logging import logger
 
 GGGPathError = mod_utils.GGGPathError
@@ -1343,7 +1343,7 @@ class MidlatTraceGasRecord(TraceGasRecord):
         if vmr_file is None:
             vmr_file = self._std_vmr_file
 
-        vmr_info = mod_utils.read_vmr_file(vmr_file, as_dataframes=True, style='old')
+        vmr_info = readers.read_vmr_file(vmr_file, as_dataframes=True, style='old')
         if gas.lower() not in vmr_info['profile'].columns:
             raise ValueError('Gas "{}" not found in the .vmr file {}'.format(gas, vmr_file))
 
@@ -2689,7 +2689,7 @@ def generate_single_tccon_prior(mod_file_data, utc_offset, concentration_record,
     :rtype: dict, dict
     """
     if isinstance(mod_file_data, str):
-        mod_file_data = mod_utils.read_mod_file(mod_file_data)
+        mod_file_data = readers.read_mod_file(mod_file_data)
     elif not isinstance(mod_file_data, dict):
         raise TypeError('mod_file_data must be a string (path pointing to a .mod file) or a dictionary')
 
@@ -2860,7 +2860,7 @@ def generate_full_tccon_vmr_file(mod_data, utc_offsets, save_dir, std_vmr_file=N
 
     std_vmr_file = _get_std_vmr_file(std_vmr_file)
     if std_vmr_file:
-        std_vmr_gases = mod_utils.read_vmr_file(std_vmr_file, lowercase_names=False, style='old')
+        std_vmr_gases = readers.read_vmr_file(std_vmr_file, lowercase_names=False, style='old')
         std_vmr_gases = list(std_vmr_gases['profile'].keys())
         std_vmr_gases.remove('Altitude')
     else:

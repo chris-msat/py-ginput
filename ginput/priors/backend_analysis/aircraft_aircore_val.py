@@ -72,7 +72,7 @@ import re
 import os
 import sys
 
-from ...common_utils import mod_utils
+from ...common_utils import mod_utils, readers
 
 
 _mydir = os.path.dirname(__file__)
@@ -217,8 +217,8 @@ def iter_prior_pairs(prior_root_1, prior_root_2, return_type='dict'):
                 yield prior_file_1, prior_file_2
             elif return_type in ['dict', 'df', 'dataframe']:
                 as_df = return_type in ['df', 'dataframe']
-                prior_dat_1 = mod_utils.read_map_file(prior_file_1, as_dataframes=as_df)
-                prior_dat_2 = mod_utils.read_map_file(prior_file_2, as_dataframes=as_df)
+                prior_dat_1 = readers.read_map_file(prior_file_1, as_dataframes=as_df)
+                prior_dat_2 = readers.read_map_file(prior_file_2, as_dataframes=as_df)
                 yield prior_dat_1, prior_dat_2
 
 
@@ -428,7 +428,7 @@ def iter_matched_data(atm_dir, map_dir, years=None, months=None, skip_missing_ma
             yield atmf, map_file
         else:
             obs_data, _ = read_atm_file(atmf)
-            map_data = mod_utils.read_map_file(map_file, as_dataframes=True, skip_header=True)
+            map_data = readers.read_map_file(map_file, as_dataframes=True, skip_header=True)
             if include_filenames:
                 yield (obs_data, atmf), (map_data['profile'], map_file)
             else:
@@ -694,7 +694,7 @@ def interp_profile_to_obs(obsdat, mapdat, specie, ztype='pres', obs_file=None, m
         if obs_file is None or map_dir is None:
             raise TypeError('obs_file and map_dir are needed if limit_by_zsurf is True or ztype == "alt-trop"')
         py_map_file = find_map_for_obs(obs_file, map_dir)
-        full_py_mapdate = mod_utils.read_map_file(py_map_file)
+        full_py_mapdate = readers.read_map_file(py_map_file)
 
     if limit_by_zsurf:
         z_surf = full_py_mapdate['constants']['Surface altitude']
@@ -749,8 +749,8 @@ def plot_single_prof_comp(py_map_file, data_type, ax=None, ztype='pres'):
     if not found_it:
         raise RuntimeError('Did not find 2014 map file')
 
-    mapdat = mod_utils.read_map_file(py_map_file, as_dataframes=True)['profile']
-    mapdat14 = mod_utils.read_map_file(map_file_14, as_dataframes=True, skip_header=True)['profile']
+    mapdat = readers.read_map_file(py_map_file, as_dataframes=True)['profile']
+    mapdat14 = readers.read_map_file(map_file_14, as_dataframes=True, skip_header=True)['profile']
     obsdat, header_info = read_atm_file(obs_file)
 
     # Since the 2014 map files don't include surface altitude, right now I'm just not limiting the profiles to above
@@ -956,7 +956,7 @@ def plot_profiles_comparison(obs_file, data_roots, data_type, prof_type='py', zt
     obs_dat, _ = read_atm_file(obs_file)
     for i, root in enumerate(data_roots):
         map_file = find_map_for_obs_by_type(obs_file, data_type, prof_type, data_root=root)
-        map_dat = mod_utils.read_map_file(map_file, as_dataframes=True)['profile']
+        map_dat = readers.read_map_file(map_file, as_dataframes=True)['profile']
         obs_co2, this_co2, z = interp_profile_to_obs_by_type(obs_dat, map_dat, ztype=ztype, obs_file=obs_file, data_type=data_type)
         if i == 0:
             ax.plot(obs_co2, z, label='Obs.')
