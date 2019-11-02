@@ -17,269 +17,289 @@ If the instrument has moved enough so that the rounded lat and lon is different,
 the longitudes must be given in the range [0-360]
 """
 
+class TCCONSiteDefError(Exception):
+    pass
+
 
 class TCCONTimeSpanError(Exception):
     pass
 
 
+now = datetime.now()
+
 site_dict = {
     'pa': {
         'name': 'Park Falls',
         'loc': 'Wisconsin, USA',
-        'lat': 45.945,
-        'lon': 269.727,
-        'alt': 442
+        'time_spans': {
+            (datetime(2004, 5, 1), now): {'lat': 45.945, 'lon': 269.727, 'alt': 442}
+        }
     },
     'oc': {
         'name': 'Lamont',
         'loc': 'Oklahoma, USA',
-        'lat': 36.604,
-        'lon': 262.514,
-        'alt': 320
+        'time_spans': {
+            (datetime(2008, 7, 1), now): {'lat': 36.604, 'lon': 262.514, 'alt': 320}
+        }
     },
     'wg': {
         'name': 'Wollongong',
         'loc': 'Australia',
-        'lat': -34.406,
-        'lon': 150.879,
-        'alt': 30
+        'time_spans': {
+            (datetime(2008, 5, 1), now): {'lat': -34.406, 'lon': 150.879, 'alt': 30}
+        }
     },
     'db': {
         'name': 'Darwin',
         'loc': 'Australia',
         'time_spans': {
-            tuple([datetime(2005, 8, 1), datetime(2015, 7, 1)]): {'lat': -12.424, 'lon': 130.892, 'alt': 30},
-            tuple([datetime(2015, 7, 1), datetime.now()]):       {'lat': -12.456, 'lon': 130.92658, 'alt': 37}
+            (datetime(2005, 8, 1), datetime(2015, 7, 1)): {'lat': -12.424, 'lon': 130.892, 'alt': 30},
+            (datetime(2015, 7, 1), now):                  {'lat': -12.456, 'lon': 130.92658, 'alt': 37}
         }
     },
     'or': {
         'name': 'Orleans',
         'loc': 'France',
-        'lat': 47.97,
-        'lon': 2.113,
-        'alt': 130
+        'time_spans': {
+            (datetime(2009, 8, 1), now): {'lat': 47.97, 'lon': 2.113, 'alt': 130}
+        }
     },
     'bi': {
         'name': 'Bialystok',
         'loc': 'Poland',
-        'lat': 53.23,
-        'lon': 23.025,
-        'alt': 180
+        'time_spans': {
+            (datetime(2009, 3, 1), datetime(2018, 11, 1)): {'lat': 53.23, 'lon': 23.025, 'alt': 180}
+        }
     },
     'br': {
         'name': 'Bremen',
         'loc': 'Germany',
-        'lat': 53.10,
-        'lon': 8.85,
-        'alt': 30
+        'time_spans': {
+            (datetime(2004, 7, 1), now): {'lat': 53.10, 'lon': 8.85, 'alt': 30}
+        }
     },
     'jc': {
         'name': 'JPL 01',
         'loc': 'California, USA',
-        'lat': 34.202,
-        'lon': 241.825,
-        'alt': 390
+        'time_spans': {
+            (datetime(2007, 7, 1), datetime(2008, 7, 1)): {'lat': 34.202, 'lon': 241.825, 'alt': 390}
+        }
     },
     'jf': {
         'name': 'JPL 02',
         'loc': 'California, USA',
-        'lat': 34.202,
-        'lon': 241.825,
-        'alt': 390
+        'time_spans': {
+            (datetime(2011, 3, 1), datetime(2013, 8, 1)): {'lat': 34.202, 'lon': 241.825, 'alt': 390}
+        }
+    },
+    'jx': {
+        'name': 'JPL 03',
+        'loc': 'California, USA',
+        'time_spans': {
+            (datetime(2017, 6, 1), datetime(2018, 6, 1)): {'lat': 34.202, 'lon': 241.825, 'alt': 390}
+        }
     },
     'ra': {
         'name': 'Reunion Island',
         'loc': 'France',
-        'lat': -20.901,
-        'lon': 55.485,
-        'alt': 87
+        'time_spans': {
+            (datetime(2011, 9, 5), now): {'lat': -20.901, 'lon': 55.485, 'alt': 87}
+        }
     },
     'gm': {
         'name': 'Garmisch',
         'loc': 'Germany',
-        'lat': 47.476,
-        'lon': 11.063,
-        'alt': 743
+        'time_spans': {
+            (datetime(2007, 7, 1), now): {'lat': 47.476, 'lon': 11.063, 'alt': 743}
+        }
     },
     'lh': {
         'name': 'Lauder 01',
         'loc': 'New Zealand',
-        'lat': -45.038,
-        'lon': 169.684,
-        'alt': 370
+        'time_spans': {
+            (datetime(2004, 6, 1), datetime(2010, 2, 1)): {'lat': -45.038, 'lon': 169.684, 'alt': 370},
+        }
     },
     'll': {
         'name': 'Lauder 02',
         'loc': 'New Zealand',
-        'lat': -45.038,
-        'lon': 169.684,
-        'alt': 370
+        'time_spans': {
+            # this end date inferred from the OCO-2 targets, may be more overlap needed
+            (datetime(2010, 2, 1), datetime(2018, 10, 14)): {'lat': -45.038, 'lon': 169.684, 'alt': 370}
+        }
     },
     'lr': {
         'name': 'Lauder 03',
         'loc': 'New Zealand',
-        'lat': -45.038,
-        'lon': 169.684,
-        'alt': 370
+        'time_spans': {
+            # this start date inferred from the OCO-2 targets, may be more overlap needed
+            (datetime(2018, 10, 14), now): {'lat': -45.038, 'lon': 169.684, 'alt': 370}
+        }
     },
     'tk': {
         'name': 'Tsukuba 02',
         'loc': 'Japan',
-        'lat': 36.0513,
-        'lon': 140.1215,
-        'alt': 31
+        'time_spans': {
+            (datetime(2008, 12, 1), now): {'lat': 36.0513, 'lon': 140.1215, 'alt': 31}
+        }
     },
     'ka': {
         'name': 'Karlsruhe',
         'loc': 'Germany',
-        'lat': 49.100,
-        'lon': 8.439,
-        'alt': 119
+        'time_spans': {
+            (datetime(2009, 9, 1), now): {'lat': 49.100, 'lon': 8.439, 'alt': 119}
+        }
     },
     'ae': {
         'name': 'Ascension Island',
         'loc': 'United Kingdom',
-        'lat': -7.9165,
-        'lon': 345.6675,
-        'alt': 0
+        'time_spans': {
+            (datetime(2012, 5, 1), now): {'lat': -7.9165, 'lon': 345.6675, 'alt': 0}
+        }
     },
     'eu': {
         'name': 'Eureka',
         'loc': 'Canada',
-        'lat': 80.05,
-        'lon': 273.58,
-        'alt': 610},
+        'time_spans': {
+            (datetime(2006, 8, 1), now): {'lat': 80.05, 'lon': 273.58, 'alt': 610}
+        }
+    },
     'so': {
         'name': 'Sodankyla',
         'loc': 'Finland',
-        'lat': 67.3668,
-        'lon': 26.6310,
-        'alt': 188
+        'time_spans': {
+            (datetime(2009, 1, 1), now): {'lat': 67.3668, 'lon': 26.6310, 'alt': 188}
+        }
     },
     'iz': {
         'name': 'Izana',
         'loc': 'Spain',
-        'lat': 28.3,
-        'lon': 343.49,
-        'alt': 2370
+        'time_spans': {
+            (datetime(2007, 5, 1), now): {'lat': 28.3, 'lon': 343.49, 'alt': 2370}
+        }
     },
     'if': {
         'name': 'Indianapolis',
         'loc': 'Indiana, USA',
-        'lat': 39.861389,
-        'lon': 273.996389,
-        'alt': 270
+        'time_spans': {
+            (datetime(2012, 8, 1), datetime(2013, 1, 1)): {'lat': 39.861389, 'lon': 273.996389, 'alt': 270}
+        }
     },
     'df': {
         'name': 'Dryden',
         'loc': 'California, USA',
-        'lat': 34.958,
-        'lon': 242.118,
-        'alt': 700
+        'time_spans': {
+            (datetime(2013, 7, 1), now): {'lat': 34.958, 'lon': 242.118, 'alt': 700}
+        }
     },
     'js': {
         'name': 'Saga',
         'loc': 'Japan',
-        'lat': 33.240962,
-        'lon': 130.288239,
-        'alt': 7
+        'time_spans': {
+            (datetime(2011, 6, 1), now): {'lat': 33.240962, 'lon': 130.288239, 'alt': 7}
+        }
     },
     'fc': {
         'name': 'Four Corners',
         'loc': 'USA',
-        'lat': 36.79749,
-        'lon': 251.51991,
-        'alt': 1643
+        'time_spans': {
+            (datetime(2011, 3, 1), datetime(2013, 11, 1)): {'lat': 36.79749, 'lon': 251.51991, 'alt': 1643}
+        }
     },
     'ci': {
         'name': 'Pasadena',
         'loc': 'California, USA',
-        'lat': 34.136,
-        'lon': 241.873,
-        'alt': 230
+        'time_spans': {
+            (datetime(2012, 9, 1), now): {'lat': 34.136, 'lon': 241.873, 'alt': 230}
+        }
     },
     'rj': {
         'name': 'Rikubetsu',
         'loc': 'Japan',
-        'lat': 43.4567,
-        'lon': 143.7661,
-        'alt': 380
+        'time_spans': {
+            (datetime(2013, 11, 1), now): {'lat': 43.4567, 'lon': 143.7661, 'alt': 380}
+        }
     },
     'pr': {
         'name': 'Paris',
         'loc': 'France',
-        'lat': 48.846,
-        'lon': 2.356,
-        'alt': 60
+        'time_spans': {
+            (datetime(2014, 9, 1), now): {'lat': 48.846, 'lon': 2.356, 'alt': 60}
+        }
     },
     'ma': {
         'name': 'Manaus',
         'loc': 'Brazil',
-        'lat': -3.2133,
-        'lon': 299.4017,
-        'alt': 50
+        'time_spans': {
+            (datetime(2014, 10, 1), datetime(2015, 7, 1)): {'lat': -3.2133, 'lon': 299.4017, 'alt': 50}
+        }
     },
     'sp': {
         'name': 'Ny-Alesund',
         'loc': 'Norway',
-        'lat': 78.9,
-        'lon': 11.9,
-        'alt': 20
+        'time_spans': {
+            (datetime(2002, 4, 1), now): {'lat': 78.9, 'lon': 11.9, 'alt': 20}
+        }
     },
     'et': {
         'name': 'East Trout Lake',
         'loc': 'Canada',
-        'lat': 54.353738,
-        'lon': 255.013333,
-        'alt': 501.8
+        'time_spans': {
+            (datetime(2016, 10, 1), now): {'lat': 54.353738, 'lon': 255.013333, 'alt': 501.8}
+        }
     },
     'an': {
         'name': 'Anmyeondo',
         'loc': 'Korea',
-        'lat': 36.5382,
-        'lon': 126.3311,
-        'alt': 30
+        'time_spans': {
+            (datetime(2014, 8, 1), now): {'lat': 36.5382, 'lon': 126.3311, 'alt': 30}
+        }
     },
     'bu': {
         'name': 'Burgos',
         'loc': 'Philippines',
-        'lat': 18.533,
-        'lon': 120.650,
-        'alt': 35
+        'time_spans': {
+            (datetime(2017, 3, 1), now): {'lat': 18.533, 'lon': 120.650, 'alt': 35}
+        }
     },
     'we': {
         'name': 'Jena',
         'loc': 'Austria',
-        'lat': 50.91,
-        'lon': 11.57,
-        'alt': 211.6
+        'time_spans': {
+            # End date is date it started moving to Wollongong; start date unknown so set to earliest date of whole
+            # network
+            (datetime(2002, 4, 1), (datetime(2010, 4, 8))): {'lat': 50.91, 'lon': 11.57, 'alt': 211.6}
+        }
     },
     'ha': {
         'name': 'Harwell',
         'loc': 'UK',
-        'lat': 51.5713,
-        'lon': 358.6851,
-        'alt': 123
+        'time_spans': {
+            # start date presumed
+            (datetime(2020, 1, 1), now): {'lat': 51.5713, 'lon': 358.6851, 'alt': 123}
+        }
     },
     'he': {
         'name': 'Hefei',
         'loc': 'China',
-        'lat': 31.90,
-        'lon': 118.67,
-        'alt': 34.5},
+        'time_spans': {
+            (datetime(2014, 7, 1), now): {'lat': 31.90, 'lon': 118.67, 'alt': 34.5}
+        },
+    },
     'yk': {
         'name': 'Yekaterinburg',
         'loc': 'Russia',
-        'lat': 57.038,
-        'lon': 59.545,
-        'alt': 0  # needs alt update
+        'time_spans': {
+            (datetime(2010, 1, 1), now): {'lat': 57.038, 'lon': 59.545, 'alt': 0.3}
+        }
     },
     'zs': {
         'name': 'Zugspitze',
         'loc': 'Germany',
-        'lat': 47.42,
-        'lon': 10.98,
-        'alt': 34.5
+        'time_spans': {
+            # Near-IR measurements didn't start until 2012 but mid-IR began in 1995.
+            (datetime(1995, 1, 1), now): {'lat': 47.42, 'lon': 10.98, 'alt': 34.5}
+        }
     },
 }
 
@@ -301,17 +321,15 @@ def tccon_site_info(site_dict_in=None):
 
     for site in site_dict_in:
         # If the site has different time spans, handle each one's longitude
-        if 'time_spans' in site_dict_in[site].keys():
-            for time_span in site_dict_in[site]['time_spans']:
-                if site_dict_in[site]['time_spans'][time_span]['lon']>180:
-                    site_dict_in[site]['time_spans'][time_span]['lon_180'] = site_dict_in[site]['time_spans'][time_span]['lon'] - 360
-                else:
-                    site_dict_in[site]['time_spans'][time_span]['lon_180'] = site_dict_in[site]['time_spans'][time_span]['lon']
-        else:
-            if site_dict_in[site]['lon']>180:
-                site_dict_in[site]['lon_180'] = site_dict_in[site]['lon'] - 360
+        if 'time_spans' not in site_dict_in[site].keys():
+            raise TCCONSiteDefError('All sites must define the time spans they were operational')
+
+        for time_span in site_dict_in[site]['time_spans']:
+            if site_dict_in[site]['time_spans'][time_span]['lon']>180:
+                site_dict_in[site]['time_spans'][time_span]['lon_180'] = site_dict_in[site]['time_spans'][time_span]['lon'] - 360
             else:
-                site_dict_in[site]['lon_180'] = site_dict_in[site]['lon']
+                site_dict_in[site]['time_spans'][time_span]['lon_180'] = site_dict_in[site]['time_spans'][time_span]['lon']
+
 
     return OrderedDict(site_dict_in)
 
@@ -354,45 +372,47 @@ def tccon_site_info_for_date(date, site_abbrv=None, site_dict_in=None, use_close
         # If a site has the time spans defined, then we need to find the one that has the date we're interested in
         # Otherwise, we can just leave the entry for this site as-is and select the correct site at the end of the
         # function.
-        if 'time_spans' in info:
-            time_spans = info.pop('time_spans')
-            found_time = False
+        if 'time_spans' not in info:
+            raise TCCONSiteDefError('All sites must define the time spans they were operational')
 
-            # Loop through each time span. If we're in that span, add the span-specific information (usually lat/lon)
-            # to the main site info dict
-            first_date_range = None
-            last_date_range = None
-            for date_range, values in time_spans.items():
-                if date_range[0] <= date < date_range[1]:
-                    info.update(values)
-                    found_time = True
-                    break
-                else:
-                    # Keep track of which date range is first and last so that if we need to find the closest in time
-                    # we can
-                    if first_date_range is None or first_date_range[0] > date_range[0]:
-                        first_date_range = date_range
-                    if last_date_range is None or last_date_range[1] < date_range[1]:
-                        last_date_range = date_range
+        time_spans = info.pop('time_spans')
+        found_time = False
 
-            # Could not find one of the predefined time spans that match. Need to find the closest one. For now, we're
-            # assuming that the time spans cover a continuous range (no inner gaps) and match if we're before or after
-            # the whole range spanned.
-            if not found_time:
-                if not use_closest_in_time:
-                    raise TCCONTimeSpanError('Could not find information for {} for {}'.format(site, date))
+        # Loop through each time span. If we're in that span, add the span-specific information (usually lat/lon)
+        # to the main site info dict
+        first_date_range = None
+        last_date_range = None
+        for date_range, values in time_spans.items():
+            if date_range[0] <= date < date_range[1]:
+                info.update(values)
+                found_time = True
+                break
+            else:
+                # Keep track of which date range is first and last so that if we need to find the closest in time
+                # we can
+                if first_date_range is None or first_date_range[0] > date_range[0]:
+                    first_date_range = date_range
+                if last_date_range is None or last_date_range[1] < date_range[1]:
+                    last_date_range = date_range
 
-                if date < first_date_range[0]:
-                    date_range = first_date_range
-                elif date > last_date_range[1]:
-                    date_range = last_date_range
-                else:
-                    raise NotImplementedError('The date requested ({date}) is outside the available dates '
-                                              '({first}-{last}) for {site}. This case is not yet implemented'
-                                              .format(date=date, first=first_date_range, last=last_date_range,
-                                                      site=site))
+        # Could not find one of the predefined time spans that match. Need to find the closest one. For now, we're
+        # assuming that the time spans cover a continuous range (no inner gaps) and match if we're before or after
+        # the whole range spanned.
+        if not found_time:
+            if not use_closest_in_time:
+                raise TCCONTimeSpanError('Could not find information for {} for {}'.format(site, date))
 
-                info.update(time_spans[date_range])
+            if date < first_date_range[0]:
+                date_range = first_date_range
+            elif date > last_date_range[1]:
+                date_range = last_date_range
+            else:
+                raise NotImplementedError('The date requested ({date}) is outside the available dates '
+                                          '({first}-{last}) for {site}. This case is not yet implemented'
+                                          .format(date=date, first=first_date_range, last=last_date_range,
+                                                  site=site))
+
+            info.update(time_spans[date_range])
 
     if site_abbrv is None:
         return new_site_dict
