@@ -274,7 +274,7 @@ def format_lon(lon, prec=2, zero_pad=False):
     :rtype: str or float
     """
     def to_str(lon):
-        ew = 'E' if lon > 0 else 'W'
+        ew = 'E' if lon >= 0 else 'W'
         # In Python float format specification, "0X.Y" means to zero pad so that there's X total characters and Y after
         # the decimal point. We want lon zero padded to have three numbers before the decimal point, so the total width
         # needs to be the precision + 4 if there will be a decimal point otherwise just 3.
@@ -346,7 +346,7 @@ def format_lat(lat, prec=2, zero_pad=False):
     :rtype: str or float
     """
     def to_str(lat):
-        ns = 'N' if lat > 0 else 'S'
+        ns = 'N' if lat >= 0 else 'S'
         # In Python float format specification, "0X.Y" means to zero pad so that there's X total characters and Y after
         # the decimal point. We want lat zero padded to have two numbers before the decimal point, so the total width
         # needs to be the precision + 3 if there will be a decimal point otherwise just 2.

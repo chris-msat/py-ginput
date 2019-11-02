@@ -1913,12 +1913,12 @@ def mod_maker_new(start_date=None, end_date=None, func_dict=None, GEOS_path=None
                     os.makedirs(slant_mod_path)
 
             # directions for .mod file name
-            if site_lat > 0:
+            if site_lat >= 0:
                 ns = 'N'
             else:
                 ns = 'S'
 
-            if site_lon_180>0:
+            if site_lon_180 >= 0:
                 ew = 'E'
             else:
                 ew = 'W'
