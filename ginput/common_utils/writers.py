@@ -87,13 +87,22 @@ def write_map_from_vmr_mod(vmr_file, mod_file, map_output_dir, fmt='txt', wet_or
     if wet_or_dry not in ('wet', 'dry'):
         raise ValueError('wet_or_dry must be "wet" or "dry"')
 
-    file_date = mod_utils.find_datetime_substring(os.path.basename(vmr_file), out_type=dtime)
+    vmr_date = mod_utils.find_datetime_substring(os.path.basename(vmr_file), out_type=dtime)
     mod_date = mod_utils.find_datetime_substring(os.path.basename(mod_file), out_type=dtime)
-    if file_date != mod_date:
+    if vmr_date != mod_date:
         raise RuntimeError('The .vmr and .mod files have different dates in their filenames!')
+    vmr_lonstr = mod_utils.find_lon_substring(os.path.basename(vmr_file))
+    mod_lonstr = mod_utils.find_lon_substring(os.path.basename(mod_file))
+    if vmr_lonstr != mod_lonstr:
+        raise RuntimeError('The .vmr and .mod files have different longitudes in their filenames!')
+    vmr_latstr = mod_utils.find_lat_substring(os.path.basename(vmr_file))
+    mod_latstr = mod_utils.find_lat_substring(os.path.basename(mod_file))
+    if vmr_latstr != mod_latstr:
+        raise RuntimeError('The .vmr and .mod files have different latitudes in their filenames!')
 
     mapdat, obs_lat = _merge_and_convert_mod_vmr(vmr_file, mod_file, wet_or_dry=wet_or_dry)
-    map_name = '{site}{date}Z.map'.format(site=site_abbrev, date=file_date.strftime('%Y%m%d%H'))
+    map_name = '{site}_{lat}_{lon}_{date}Z.map'.format(site=site_abbrev, lat=vmr_latstr, lon=vmr_lonstr,
+                                                       date=vmr_date.strftime('%Y%m%d%H'))
     map_name = os.path.join(map_output_dir, map_name)
 
     if fmt == 'txt':
@@ -116,8 +125,8 @@ def _merge_and_convert_mod_vmr(vmr_file, mod_file, vmr_vars=('h2o', 'hdo', 'co2'
     zgrid = vmrdat['profile']['altitude']
     for mvar in mod_vars:
         if mvar == 'gravity':
-            lat = np.broadcast_to([obs_lat], zgrid.shape)
-            mapdat['gravity'], _ = mod_utils.gravity(lat, zgrid)
+            lat = np.broadcast_to([obs_lat], moddat['profile']['Height'].shape)
+            mapdat['gravity'], _ = mod_utils.gravity(lat, moddat['profile']['Height'])
         elif mvar == 'Density':
             mapdat['Density'] = mod_utils.number_density_air(moddat['profile']['Pressure'], moddat['profile']['Temperature'])
         else:
