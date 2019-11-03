@@ -358,8 +358,8 @@ def tccon_site_info_for_date(date, site_abbrv=None, site_dict_in=None, use_close
      Darwin's information before 1 Aug 2005, it's technically undefined because the site did not exist. When this
      parameter is ``True`` (default) the nearest time period will be used, so in this example, requesting Darwin's
      information before 1 Aug 2005 will return its first location. Setting this to ``False`` will cause a
-     TCCONTimeSpanError to be raised if you request a time outside those defined for a site. Note that this only affects
-     sites like Darwin that have moved.
+     TCCONTimeSpanError to be raised if you request a time outside those defined for a site. The string ``"nullify"``
+     will cause sites not established in that time period to have None as the value, rather than a sub-dict.
 
     :return: dictionary defining the name, loc (location), lat, lon, and alt of the site requested. If ``site_abbrv``
      is ``None``, then it will be a dictionary of dictionaries, with the top dictionary having the site IDs as keys.
@@ -399,7 +399,11 @@ def tccon_site_info_for_date(date, site_abbrv=None, site_dict_in=None, use_close
         # assuming that the time spans cover a continuous range (no inner gaps) and match if we're before or after
         # the whole range spanned.
         if not found_time:
-            if not use_closest_in_time:
+            if use_closest_in_time == 'nullify':
+                # don't want to modify a dict while iterating over it
+                new_site_dict[site] = None
+                continue
+            elif not use_closest_in_time:
                 raise TCCONTimeSpanError('Could not find information for {} for {}'.format(site, date))
 
             if date < first_date_range[0]:
