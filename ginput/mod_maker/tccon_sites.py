@@ -46,7 +46,9 @@ site_dict = {
         'name': 'Wollongong',
         'loc': 'Australia',
         'time_spans': {
-            (datetime(2008, 5, 1), now): {'lat': -34.406, 'lon': 150.879, 'alt': 30}
+            # longitude moved east to minimize influence of the mountains while still keeping the .mod/.vmr file name
+            # the same. True longitude is 150.8793.
+            (datetime(2008, 5, 1), now): {'lat': -34.4061, 'lon': 151.250, 'alt': 30}
         }
     },
     'db': {
@@ -54,28 +56,28 @@ site_dict = {
         'loc': 'Australia',
         'time_spans': {
             (datetime(2005, 8, 1), datetime(2015, 7, 1)): {'lat': -12.424, 'lon': 130.892, 'alt': 30},
-            (datetime(2015, 7, 1), now):                  {'lat': -12.456, 'lon': 130.92658, 'alt': 37}
+            (datetime(2015, 7, 1), now):                  {'lat': -12.4561, 'lon': 130.9266, 'alt': 37}
         }
     },
     'or': {
         'name': 'Orleans',
         'loc': 'France',
         'time_spans': {
-            (datetime(2009, 8, 1), now): {'lat': 47.97, 'lon': 2.113, 'alt': 130}
+            (datetime(2009, 8, 1), now): {'lat': 47.9650, 'lon': 2.1130, 'alt': 130}
         }
     },
     'bi': {
         'name': 'Bialystok',
         'loc': 'Poland',
         'time_spans': {
-            (datetime(2009, 3, 1), datetime(2018, 11, 1)): {'lat': 53.23, 'lon': 23.025, 'alt': 180}
+            (datetime(2009, 3, 1), datetime(2018, 11, 1)): {'lat': 53.2304, 'lon': 23.0246, 'alt': 180}
         }
     },
     'br': {
         'name': 'Bremen',
         'loc': 'Germany',
         'time_spans': {
-            (datetime(2004, 7, 1), now): {'lat': 53.10, 'lon': 8.85, 'alt': 30}
+            (datetime(2004, 7, 1), now): {'lat': 53.1036, 'lon': 8.8495, 'alt': 30}
         }
     },
     'jc': {
@@ -103,14 +105,14 @@ site_dict = {
         'name': 'Reunion Island',
         'loc': 'France',
         'time_spans': {
-            (datetime(2011, 9, 5), now): {'lat': -20.901, 'lon': 55.485, 'alt': 87}
+            (datetime(2011, 9, 5), now): {'lat': -20.9010, 'lon': 55.4850, 'alt': 87}
         }
     },
     'gm': {
         'name': 'Garmisch',
         'loc': 'Germany',
         'time_spans': {
-            (datetime(2007, 7, 1), now): {'lat': 47.476, 'lon': 11.063, 'alt': 743}
+            (datetime(2007, 7, 1), now): {'lat': 47.4760, 'lon': 11.0627, 'alt': 743}
         }
     },
     'lh': {
@@ -161,7 +163,7 @@ site_dict = {
         'name': 'Eureka',
         'loc': 'Canada',
         'time_spans': {
-            (datetime(2006, 8, 1), now): {'lat': 80.05, 'lon': 273.58, 'alt': 610}
+            (datetime(2006, 8, 1), now): {'lat': 80.0531, 'lon': 273.5833, 'alt': 610}
         }
     },
     'so': {
@@ -175,7 +177,7 @@ site_dict = {
         'name': 'Izana',
         'loc': 'Spain',
         'time_spans': {
-            (datetime(2007, 5, 1), now): {'lat': 28.3, 'lon': 343.49, 'alt': 2370}
+            (datetime(2007, 5, 1), now): {'lat': 28.3093, 'lon': 343.5009, 'alt': 2370}
         }
     },
     'if': {
@@ -210,7 +212,9 @@ site_dict = {
         'name': 'Pasadena',
         'loc': 'California, USA',
         'time_spans': {
-            (datetime(2012, 9, 1), now): {'lat': 34.136, 'lon': 241.873, 'alt': 230}
+            # latitude moved south (original value 34.136) to extend the profiles down to the observation altitude,
+            # at the true latitude, the GEOS data stops about 50 hPa too far up.
+            (datetime(2012, 9, 1), now): {'lat': 33.940, 'lon': 241.873, 'alt': 230}
         }
     },
     'rj': {
@@ -224,7 +228,7 @@ site_dict = {
         'name': 'Paris',
         'loc': 'France',
         'time_spans': {
-            (datetime(2014, 9, 1), now): {'lat': 48.846, 'lon': 2.356, 'alt': 60}
+            (datetime(2014, 9, 1), now): {'lat': 48.8463, 'lon': 2.3560, 'alt': 60}
         }
     },
     'ma': {
@@ -234,18 +238,18 @@ site_dict = {
             (datetime(2014, 10, 1), datetime(2015, 7, 1)): {'lat': -3.2133, 'lon': 299.4017, 'alt': 50}
         }
     },
-    'sp': {
+    'ny': {
         'name': 'Ny-Alesund',
         'loc': 'Norway',
         'time_spans': {
-            (datetime(2002, 4, 1), now): {'lat': 78.9, 'lon': 11.9, 'alt': 20}
+            (datetime(2002, 4, 1), now): {'lat': 78.9232, 'lon': 11.9229, 'alt': 20}
         }
     },
     'et': {
         'name': 'East Trout Lake',
         'loc': 'Canada',
         'time_spans': {
-            (datetime(2016, 10, 1), now): {'lat': 54.353738, 'lon': 255.013333, 'alt': 501.8}
+            (datetime(2016, 10, 1), now): {'lat': 54.3537, 'lon': 255.0133, 'alt': 501.8}
         }
     },
     'an': {
@@ -259,7 +263,7 @@ site_dict = {
         'name': 'Burgos',
         'loc': 'Philippines',
         'time_spans': {
-            (datetime(2017, 3, 1), now): {'lat': 18.533, 'lon': 120.650, 'alt': 35}
+            (datetime(2017, 3, 1), now): {'lat': 18.5325, 'lon': 120.6496, 'alt': 35}
         }
     },
     'we': {
@@ -276,7 +280,7 @@ site_dict = {
         'loc': 'UK',
         'time_spans': {
             # start date presumed
-            (datetime(2020, 1, 1), now): {'lat': 51.5713, 'lon': 358.6851, 'alt': 123}
+            (datetime(2020, 1, 1), now): {'lat': 51.5713, 'lon': 358.6852, 'alt': 123}
         }
     },
     'he': {
@@ -298,7 +302,7 @@ site_dict = {
         'loc': 'Germany',
         'time_spans': {
             # Near-IR measurements didn't start until 2012 but mid-IR began in 1995.
-            (datetime(1995, 1, 1), now): {'lat': 47.42, 'lon': 10.98, 'alt': 34.5}
+            (datetime(1995, 1, 1), now): {'lat': 47.4211, 'lon': 10.9858, 'alt': 34.5}
         }
     },
 }
