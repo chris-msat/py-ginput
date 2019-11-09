@@ -461,8 +461,20 @@ def driver(check_geos, download, makemod, makepriors, site_file, geos_top_dir, g
         print('Not making priors')
 
 
-def parse_args():
-    parser = argparse.ArgumentParser('Run priors for a set of dates, lats, and lons')
+def run_main(**args):
+    info_file = args.pop('info_file')
+    if info_file == 'format':
+        print_config_help()
+        sys.exit(0)
+    else:
+        info_dict = read_info_file(info_file)
+
+    args.update(info_dict)
+    driver(**args)
+
+
+def parse_run_args(parser):
+    parser.description = 'Generate priors for a given set of dates, lats, and lons'
     parser.add_argument('info_file', help='The file that defines the configuration variables. Pass "format" as this '
                                           'argument for more details on the format.')
     parser.add_argument('--check-geos', action='store_true', help='Check if the required GEOS files are already downloaded')
@@ -475,7 +487,25 @@ def parse_args():
                         help='Which GEOS file types to download with --download (no effect if --download not specified).')
     parser.add_argument('--dl-levels', default=None, choices=get_GEOS5._level_types,
                         help='Which GEOS levels to download with --download (no effect if --download not specified).')
+    parser.set_defaults(driver_fxn=run_main)
 
+
+def parse_make_info_args(parser: argparse.ArgumentParser):
+    parser.description = 'Make the list of dates, lats, and lons required to generate priors'
+    parser.add_argument('list_file', help='Name to give the information file created')
+    parser.add_argument('atm_files', nargs='+', help='.atm files to generate priors for')
+    parser.set_defaults(driver_fxn=make_lat_lon_list_for_atms)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser('Tools for creating priors to test against observed profiles from .atm files')
+    subp = parser.add_subparsers()
+
+    runp = subp.add_parser('run', help='Download GEOS data, generate .mod files, and/or generate priors')
+    parse_run_args(runp)
+
+    listp = subp.add_parser('make-list', help='Make a list of dates, lats, and lons to generate priors for')
+    parse_make_info_args(listp)
     return vars(parser.parse_args())
 
 
@@ -501,15 +531,8 @@ location of the info file.""".format(paths=', '.join(_req_info_ispath))
 
 def main():
     args = parse_args()
-    info_file = args.pop('info_file')
-    if info_file == 'format':
-        print_config_help()
-        sys.exit(0)
-    else:
-        info_dict = read_info_file(info_file)
-
-    args.update(info_dict)
-    driver(**args)
+    main_fxn = args.pop('driver_fxn')
+    main_fxn(**args)
 
 
 if __name__ == '__main__':
