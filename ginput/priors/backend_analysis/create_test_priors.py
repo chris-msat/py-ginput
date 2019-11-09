@@ -2,6 +2,7 @@ from __future__ import print_function
 import argparse
 from datetime import datetime as dtime, timedelta as tdel
 from glob import glob
+import h5py
 from multiprocessing import Pool
 
 import numpy as np
@@ -17,8 +18,8 @@ from ...common_utils import mod_utils
 from ...download import get_GEOS5
 
 # These should match the arg names in driver()
-_req_info_keys = ('gas_name', 'site_file', 'geos_top_dir', 'geos_chm_top_dir', 'mod_top_dir', 'prior_top_dir')
-_req_info_ispath = ('site_file', 'geos_top_dir', 'mod_top_dir', 'prior_top_dir')
+_req_info_keys = ('gas_name', 'site_file', 'geos_top_dir', 'geos_chm_top_dir', 'mod_top_dir', 'prior_save_file')
+_req_info_ispath = ('site_file', 'geos_top_dir', 'mod_top_dir', 'prior_save_file')
 _req_info_help = {'gas_name': 'The name of the gas to generate priors for.',
                   'site_file': 'A CSV file containing the header DATES,LATS,LONS and the date, latitude, and longitude '
                                'of each desired prior (one per line)',
@@ -28,8 +29,7 @@ _req_info_help = {'gas_name': 'The name of the gas to generate priors for.',
                   'mod_top_dir': 'The top directory to save .mod files to or read them from. Must contain '
                                  'subdirectories "fpit/xx/vertical" to read from, these will be automatically created '
                                  'if writing .mod files.',
-                  'prior_top_dir': 'The directory to save the .mod files to. Will be organized into subdirectories by '
-                                   'date, lat, and lon automatically.'}
+                  'prior_save_file': 'The filename to give the HDF5 file the priors will be saved in.'}
 
 _opt_info_keys = ('integral_file', 'base_vmr_file')
 _opt_info_ispath = ('integral_file', 'base_vmr_file')
@@ -39,6 +39,7 @@ _opt_info_help = {'integral_file': 'A path to an integral.gnd file that specifie
                                    'If not given, the .vmr files will only include the primary gases.'}
 
 _default_file_types = ('2dmet', '3dmet')
+
 
 def unfmt_lon(lonstr):
     mod_utils.format_lon(lonstr)
@@ -259,8 +260,8 @@ def mm_helper(kwargs):
     mm_helper_internal(**kwargs)
 
 
-def make_priors(prior_dir, mod_dir, gas_name, acdates, aclons, aclats, zgrid_file=None, nprocs=0):
-    print('Will save to', prior_dir)
+def make_priors(prior_save_file, mod_dir, gas_name, acdates, aclons, aclats, zgrid_file=None, nprocs=0):
+    print('Will save to', prior_save_file)
     # Find all the .mod files, get unique date/lat/lon (should be 8 files per)
     # and make an output directory for that
     mod_files = glob(os.path.join(mod_dir, '*.mod'))
@@ -289,7 +290,7 @@ def make_priors(prior_dir, mod_dir, gas_name, acdates, aclons, aclats, zgrid_fil
                 grouped_mod_files[keystr].append(f)
             else:
                 grouped_mod_files[keystr] = [f]
-                this_out_dir = os.path.join(prior_dir, keystr)
+                this_out_dir = os.path.join(prior_save_file, keystr)
                 if os.path.isdir(this_out_dir):
                     shutil.rmtree(this_out_dir)
                 os.makedirs(this_out_dir)
@@ -297,45 +298,87 @@ def make_priors(prior_dir, mod_dir, gas_name, acdates, aclons, aclats, zgrid_fil
             print(f, 'is not for one of the profiles listed in the lat/lon file; skipping')
 
     print('Instantiating {} record'.format(gas_name))
-    if gas_name.lower() == 'co2':
-        gas_rec = tccon_priors.CO2TropicsRecord()
-    elif gas_name.lower() == 'n2o':
-        gas_rec = tccon_priors.N2OTropicsRecord()
-    elif gas_name.lower() == 'ch4':
-        gas_rec = tccon_priors.CH4TropicsRecord()
-    elif gas_name.lower() == 'hf':
-        gas_rec = tccon_priors.HFTropicsRecord()
-    elif gas_name.lower() == 'co':
-        gas_rec = tccon_priors.CORecord()
-    else:
+    try:
+        gas_rec = tccon_priors.gas_records[gas_name.lower()]()
+    except KeyError:
         raise RuntimeError('No record defined for gas_name = "{}"'.format(gas_name))
 
     prior_args = []
 
     for k, files in grouped_mod_files.items():
-        this_out_dir = os.path.join(prior_dir, k)
         for f in files:
-            these_args = (f, this_out_dir, gas_rec, zgrid_file)
+            these_args = (f, gas_rec, zgrid_file)
             prior_args.append(these_args)
 
+    import pdb; pdb.set_trace()
     if nprocs == 0:
+        results = []
         for args in prior_args:
-            _prior_helper(*args)
+            results.append(_prior_helper(*args))
     else:
         with Pool(processes=nprocs) as pool:
-            pool.starmap(_prior_helper, prior_args)
+            results = pool.starmap(_prior_helper, prior_args)
+
+    _write_priors_h5(prior_save_file, results, [a[0] for a in prior_args])
 
 
-def _prior_helper(ph_f, ph_out_dir, gas_rec, zgrid=None):
+def _prior_helper(ph_f, gas_rec, zgrid=None):
     _fbase = os.path.basename(ph_f)
-    print('Processing {}, saving to {}'.format(_fbase, ph_out_dir))
-    raise NotImplementedError('This function has not been updated after the writer function cleanup')
-    tccon_priors.generate_single_tccon_prior(ph_f, tdel(hours=0), gas_rec, write_map=ph_out_dir,
-                                             use_eqlat_strat=True, zgrid=zgrid)
+    print('Processing {}'.format(_fbase))
+    return tccon_priors.generate_single_tccon_prior(ph_f, tdel(hours=0), gas_rec, use_eqlat_strat=True, zgrid=zgrid)
+
+
+def _write_priors_h5(save_file, prior_results, mod_files):
+    def make_h5_array(data_list, data_key):
+        axis = np.ndim(data_list[0][data_key])
+        data_list = [el[data_key] for el in data_list]
+        return np.stack(data_list, axis=axis).T
+
+    def convert_h5_array_type(var_array):
+        if np.issubdtype(var_array.dtype, np.number):
+            attrs = dict()
+            fill_val = -999999
+        elif np.issubdtype(var_array.dtype, np.string_):
+            shape = var_array.shape
+            var_array = np.array([s.encode('utf8') for s in var_array.flat])
+            var_array = var_array.reshape(shape)
+            attrs = dict()
+            fill_val = b'N/A'
+        elif np.issubdtype(var_array.dtype, np.bool_):
+            attrs = dict()
+            fill_val = None
+        elif var_array.dtype == np.object_:
+            if hasattr(var_array.flatten()[0], 'strftime'):
+                # probably some kind of date
+                var_array = var_array.astype('datetime64[s]').astype('int')
+                attrs = {'units': 'seconds since 1970-01-01'}
+                fill_val = -999999
+            else:
+                obj_type = type(var_array.flatten()[0]).__name__
+                raise NotImplementedError('Converting objects of type "{}" not implemented'.format(obj_type))
+        else:
+            raise NotImplementedError('Arrays with datatype "{}" not implemented'.format(var_array.dtype))
+        return var_array, attrs, fill_val
+
+    with h5py.File(save_file, 'w') as wobj:
+        profiles, units, scalars = zip(*prior_results)
+
+        prof_grp = wobj.create_group('Profiles')
+        for key in profiles[0].keys():
+            prof_array, prof_attrs, this_fill_val = convert_h5_array_type(make_h5_array(profiles, key))
+            prof_attrs['units'] = units[0][key]  # assume the units are the same for all profiles
+            dset = prof_grp.create_dataset(key, data=prof_array, fillvalue=this_fill_val)
+            dset.attrs.update(prof_attrs)
+
+        scalar_grp = wobj.create_group('Scalars')
+        for key in scalars[0].keys():
+            scalar_array, scalar_attrs, this_fill_val = convert_h5_array_type(make_h5_array(scalars, key))
+            dset = scalar_grp.create_dataset(key, data=scalar_array, fillvalue=this_fill_val)
+            dset.attrs.update(scalar_attrs)
 
 
 def driver(check_geos, download, makemod, makepriors, site_file, geos_top_dir, geos_chm_top_dir,
-           mod_top_dir, prior_top_dir, gas_name, nprocs=0, dl_file_types=None, dl_levels=None, integral_file=None,
+           mod_top_dir, prior_save_file, gas_name, nprocs=0, dl_file_types=None, dl_levels=None, integral_file=None,
            **_):
     if dl_file_types is None:
         dl_file_types = ('met', 'met', 'chm')
@@ -359,7 +402,7 @@ def driver(check_geos, download, makemod, makepriors, site_file, geos_top_dir, g
         print('Not making .mod files')
 
     if makepriors:
-        make_priors(prior_top_dir, make_full_mod_dir(mod_top_dir, 'fpit'), gas_name,
+        make_priors(prior_save_file, make_full_mod_dir(mod_top_dir, 'fpit'), gas_name,
                     acdates=acdates, aclons=aclons, aclats=aclats, nprocs=nprocs, zgrid_file=integral_file)
     else:
         print('Not making priors')
