@@ -15,7 +15,7 @@ import sys
 from . import backend_utils as bu
 from .. import tccon_priors
 from ...mod_maker import mod_maker
-from ...common_utils import mod_utils
+from ...common_utils import mod_utils, readers
 from ...download import get_GEOS5
 
 numeric_h5_fill = -999999
@@ -354,8 +354,9 @@ def make_priors(prior_save_file, mod_dir, gas_name, acdates, aclons, aclats, acf
             results = pool.starmap(_prior_helper, prior_args)
 
     atm_files_by_mod = _make_mod_atm_map(acdates=acdates, aclons=aclons, aclats=aclats, acfiles=acfiles)
-    atm_files = [atm_files_by_mod[args[0]] for args in prior_args]
-    _write_priors_h5(prior_save_file, results, atm_files)
+    mod_files_in_order = [args[0] for args in prior_args]
+    atm_files = [atm_files_by_mod[os.path.basename(f)] for f in mod_files_in_order]
+    _write_priors_h5(prior_save_file, results, atm_files, mod_files_in_order)
 
 
 def _prior_helper(ph_f, gas_rec, zgrid=None):
@@ -364,7 +365,7 @@ def _prior_helper(ph_f, gas_rec, zgrid=None):
     return tccon_priors.generate_single_tccon_prior(ph_f, tdel(hours=0), gas_rec, use_eqlat_strat=True, zgrid=zgrid)
 
 
-def _write_priors_h5(save_file, prior_results, atm_files):
+def _write_priors_h5(save_file, prior_results, atm_files, mod_files=None):
     def make_h5_array(data_list, data_key):
         axis = np.ndim(data_list[0][data_key])
         data_list = [el[data_key] for el in data_list]
@@ -408,26 +409,51 @@ def _write_priors_h5(save_file, prior_results, atm_files):
     with h5py.File(save_file, 'w') as wobj:
         profiles, units, scalars = zip(*prior_results)
 
-        prof_grp = wobj.create_group('Profiles')
-        for key in profiles[0].keys():
-            prof_array, prof_attrs, this_fill_val = convert_h5_array_type(make_h5_array(profiles, key))
-            prof_attrs['units'] = units[0][key]  # assume the units are the same for all profiles
-            dset = prof_grp.create_dataset(key, data=prof_array, fillvalue=this_fill_val)
-            dset.attrs.update(prof_attrs)
-
-        scalar_grp = wobj.create_group('Scalars')
-        for key in scalars[0].keys():
-            scalar_array, scalar_attrs, this_fill_val = convert_h5_array_type(make_h5_array(scalars, key))
-            dset = scalar_grp.create_dataset(key, data=scalar_array, fillvalue=this_fill_val)
-            dset.attrs.update(scalar_attrs)
-
-        # Lastly record the .atm files that correspond to each profile. Allow for the possibility that we might have
+        # First record the .atm files that correspond to each profile. Allow for the possibility that we might have
         # multiple atm files corresponding to a profile by making the array be nprofiles-by-nfiles. Fill values will
         # fill out rows that don't have the max number of files.
         atm_files = expand_atm_lists(atm_files)
         atm_file_array, atm_attrs, atm_fill_val = convert_h5_array_type(atm_files)
         dset = wobj.create_dataset('atm_files', data=atm_file_array, fillvalue=atm_fill_val)
         dset.attrs.update(atm_attrs)
+
+        prior_grp = wobj.create_group('Priors')
+        prof_grp = prior_grp.create_group('Profiles')
+        for key in profiles[0].keys():
+            prof_array, prof_attrs, this_fill_val = convert_h5_array_type(make_h5_array(profiles, key))
+            prof_attrs['units'] = units[0][key]  # assume the units are the same for all profiles
+            dset = prof_grp.create_dataset(key, data=prof_array, fillvalue=this_fill_val)
+            dset.attrs.update(prof_attrs)
+
+        scalar_grp = prior_grp.create_group('Scalars')
+        for key in scalars[0].keys():
+            scalar_array, scalar_attrs, this_fill_val = convert_h5_array_type(make_h5_array(scalars, key))
+            dset = scalar_grp.create_dataset(key, data=scalar_array, fillvalue=this_fill_val)
+            dset.attrs.update(scalar_attrs)
+
+        # Lastly, if mod files were given, read them in and pack their data into the .h5 file as well so that if we
+        # need to look at a met variable we can
+        if mod_files is not None:
+            raw_mod_dat = [readers.read_mod_file(f) for f in mod_files]
+            mod_profiles = [dat['profile'] for dat in raw_mod_dat]
+            mod_scalars = [dat['scalar'] for dat in raw_mod_dat]
+
+            mod_grp = wobj.create_group('Models')
+            mod_file_array, mod_file_attrs, mod_file_fill = convert_h5_array_type(np.array([os.path.basename(f) for f in mod_files]))
+            dset = mod_grp.create_dataset('mod_files', data=mod_file_array, fillvalue=mod_file_fill)
+            dset.attrs.update(mod_file_attrs)
+
+            mod_prof_grp = mod_grp.create_group('Profiles')
+            for key in mod_profiles[0].keys():
+                prof_array, prof_attrs, this_fill_val = convert_h5_array_type(make_h5_array(mod_profiles, key))
+                dset = mod_prof_grp.create_dataset(key, data=prof_array, fillvalue=this_fill_val)
+                dset.attrs.update(prof_attrs)
+
+            mod_scalar_grp = mod_grp.create_group('Scalars')
+            for key in mod_scalars[0].keys():
+                scalar_array, scalar_attrs, this_fill_val = convert_h5_array_type(make_h5_array(mod_scalars, key))
+                dset = mod_scalar_grp.create_dataset(key, data=scalar_array, fillvalue=this_fill_val)
+                dset.attrs.update(scalar_attrs)
 
 
 def driver(check_geos, download, makemod, makepriors, site_file, geos_top_dir, geos_chm_top_dir,
