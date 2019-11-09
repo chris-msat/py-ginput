@@ -4,6 +4,7 @@ from datetime import datetime as dtime, timedelta as tdel
 from glob import glob
 import h5py
 from multiprocessing import Pool
+from pandas import date_range
 
 import numpy as np
 import os
@@ -16,6 +17,9 @@ from .. import tccon_priors
 from ...mod_maker import mod_maker
 from ...common_utils import mod_utils
 from ...download import get_GEOS5
+
+numeric_h5_fill = -999999
+string_h5_fill = b'N/A'
 
 # These should match the arg names in driver()
 _req_info_keys = ('gas_name', 'site_file', 'geos_top_dir', 'geos_chm_top_dir', 'mod_top_dir', 'prior_save_file')
@@ -61,14 +65,15 @@ def make_lat_lon_list_for_atms(atm_files, list_file):
     :return: none, writes file
     """
     with open(list_file, 'w') as wobj:
-        wobj.write('DATE,LAT,LON,TCCON\n')
+        wobj.write('DATE,LAT,LON,ATMFILE,TCCON\n')
         for f in atm_files:
             data, header = bu.read_atm_file(f)
             datestr = header['aircraft_floor_time_UTC'].strftime('%Y-%m-%d')
             lon = header['TCCON_site_longitude_E']
             lat = header['TCCON_site_latitude_N']
             site = header['TCCON_site_name']
-            wobj.write('{date},{lat},{lon},{site}\n'.format(date=datestr, lon=lon, lat=lat, site=site))
+            wobj.write('{date},{lat},{lon},{file},{site}\n'.format(date=datestr, lon=lon, lat=lat,
+                                                                   file=os.path.basename(f), site=site))
 
 
 def read_info_file(info_filename):
@@ -119,11 +124,17 @@ def read_info_file(info_filename):
 
 def read_date_lat_lon_file(acinfo_filename, date_fmt='str'):
     with open(acinfo_filename, 'r') as acfile:
-        # Skip line 1 - header
-        acfile.readline()
+        # Check that the header matches what is expected
+        header_parts = acfile.readline().split(',')
+        expected_header_parts = ('DATE', 'LAT', 'LON', 'ATMFILE')
+        if any(a != b for a, b in zip(header_parts, expected_header_parts)):
+            raise IOError('The first {ncol} columns in the info file ({infofile}) do not match what is expected: '
+                          '{expected}'.format(ncol=len(expected_header_parts), infofile=acinfo_filename,
+                                              expected=', '.join(expected_header_parts)))
         acdates = []
         aclats = []
         aclons = []
+        atmfiles = []
         for line in acfile:
             if line.startswith('#'):
                 continue
@@ -142,8 +153,9 @@ def read_date_lat_lon_file(acinfo_filename, date_fmt='str'):
 
             aclats.append(float(line_parts[1]))
             aclons.append(float(line_parts[2]))
+            atmfiles.append(line_parts[2])
 
-    return aclons, aclats, acdates
+    return aclons, aclats, acdates, atmfiles
 
 
 def make_full_mod_dir(top_dir, product):
@@ -187,6 +199,32 @@ def download_geos(acdates, download_to_dir, chem_download_dir=None,
             get_GEOS5.driver(date_range, mode='FPIT', path=dl_path, filetypes=ftype, levels=ltype)
 
 
+def _make_mod_atm_map(acdates, aclons, aclats, acfiles):
+    atm_mod_map = dict()
+
+    for dates, lon, lat, atmfile in zip(acdates, aclons, aclats, acfiles):
+        start_date, end_date = [dtime.strptime(d, '%Y%m%d') for d in dates.split('-')]
+        mod_files = _list_mod_files_required(start_date, end_date, lon, lat)
+
+        for modf in mod_files:
+            if modf in atm_mod_map:
+                atm_mod_map[modf].append(atmfile)
+            else:
+                atm_mod_map[modf] = [atmfile]
+
+    return atm_mod_map
+
+
+def _list_mod_files_required(start_date, end_date, lon, lat):
+    mod_files = []
+
+    for date in date_range(start_date, end_date, freq='3H', closed='left'):
+        modf = mod_utils.mod_file_name_for_priors(datetime=date, site_lat=lat, site_lon_180=lon, round_latlon=False, in_utc=True)
+        mod_files.append(modf)
+
+    return mod_files
+
+
 def make_mod_files(acdates, aclons, aclats, geos_dir, out_dir, chem_dir=None, include_chm=True, nprocs=0,
                    geos_mode='fpit-eta'):
 
@@ -209,12 +247,9 @@ def make_mod_files(acdates, aclons, aclats, geos_dir, out_dir, chem_dir=None, in
         if start_date not in geos_dates or start_date not in geos_chm_dates:
             print('Cannot run {}, missing either met or chem GEOS data'.format(start_date))
             continue
-        files_complete = []
-        for hr in range(0, 24, 3):
-            date = start_date.replace(hour=hr)
-            mod_file = mod_utils.mod_file_name('FPIT', date, tdel(hours=3), lat, lon, 'E' if lon > 0 else 'W',
-                                               'N' if lat > 0 else 'S', out_dir, round_latlon=False, in_utc=True)
-            files_complete.append(os.path.isfile(os.path.join(mod_dir, mod_file)))
+        req_mod_files = _list_mod_files_required(start_date, end_date, lon, lat)
+        files_complete = [os.path.exists(os.path.join(mod_dir, f)) for f in req_mod_files]
+
         if all(files_complete) and len(files_complete) == 8:
             print('All files for {} at {}/{} complete, skipping'.format(dates, lon, lat))
             continue
@@ -260,7 +295,7 @@ def mm_helper(kwargs):
     mm_helper_internal(**kwargs)
 
 
-def make_priors(prior_save_file, mod_dir, gas_name, acdates, aclons, aclats, zgrid_file=None, nprocs=0):
+def make_priors(prior_save_file, mod_dir, gas_name, acdates, aclons, aclats, acfiles, zgrid_file=None, nprocs=0):
     print('Will save to', prior_save_file)
     # Find all the .mod files, get unique date/lat/lon (should be 8 files per)
     # and make an output directory for that
@@ -310,7 +345,6 @@ def make_priors(prior_save_file, mod_dir, gas_name, acdates, aclons, aclats, zgr
             these_args = (f, gas_rec, zgrid_file)
             prior_args.append(these_args)
 
-    import pdb; pdb.set_trace()
     if nprocs == 0:
         results = []
         for args in prior_args:
@@ -319,7 +353,9 @@ def make_priors(prior_save_file, mod_dir, gas_name, acdates, aclons, aclats, zgr
         with Pool(processes=nprocs) as pool:
             results = pool.starmap(_prior_helper, prior_args)
 
-    _write_priors_h5(prior_save_file, results, [a[0] for a in prior_args])
+    atm_files_by_mod = _make_mod_atm_map(acdates=acdates, aclons=aclons, aclats=aclats, acfiles=acfiles)
+    atm_files = [atm_files_by_mod[args[0]] for args in prior_args]
+    _write_priors_h5(prior_save_file, results, atm_files)
 
 
 def _prior_helper(ph_f, gas_rec, zgrid=None):
@@ -328,7 +364,7 @@ def _prior_helper(ph_f, gas_rec, zgrid=None):
     return tccon_priors.generate_single_tccon_prior(ph_f, tdel(hours=0), gas_rec, use_eqlat_strat=True, zgrid=zgrid)
 
 
-def _write_priors_h5(save_file, prior_results, mod_files):
+def _write_priors_h5(save_file, prior_results, atm_files):
     def make_h5_array(data_list, data_key):
         axis = np.ndim(data_list[0][data_key])
         data_list = [el[data_key] for el in data_list]
@@ -337,13 +373,13 @@ def _write_priors_h5(save_file, prior_results, mod_files):
     def convert_h5_array_type(var_array):
         if np.issubdtype(var_array.dtype, np.number):
             attrs = dict()
-            fill_val = -999999
-        elif np.issubdtype(var_array.dtype, np.string_):
+            fill_val = numeric_h5_fill
+        elif np.issubdtype(var_array.dtype, np.string_) or np.issubdtype(var_array.dtype, np.unicode_):
             shape = var_array.shape
             var_array = np.array([s.encode('utf8') for s in var_array.flat])
             var_array = var_array.reshape(shape)
             attrs = dict()
-            fill_val = b'N/A'
+            fill_val = string_h5_fill
         elif np.issubdtype(var_array.dtype, np.bool_):
             attrs = dict()
             fill_val = None
@@ -352,13 +388,22 @@ def _write_priors_h5(save_file, prior_results, mod_files):
                 # probably some kind of date
                 var_array = var_array.astype('datetime64[s]').astype('int')
                 attrs = {'units': 'seconds since 1970-01-01'}
-                fill_val = -999999
+                fill_val = numeric_h5_fill
             else:
                 obj_type = type(var_array.flatten()[0]).__name__
                 raise NotImplementedError('Converting objects of type "{}" not implemented'.format(obj_type))
         else:
             raise NotImplementedError('Arrays with datatype "{}" not implemented'.format(var_array.dtype))
         return var_array, attrs, fill_val
+
+    def expand_atm_lists(atm_files_local):
+        maxf = max(len(files) for files in atm_files_local)
+        atm_files_out = []
+        for files in atm_files_local:
+            n = len(files)
+            files += [string_h5_fill] * (maxf - n)
+            atm_files_out.append(files)
+        return np.array(atm_files_out)
 
     with h5py.File(save_file, 'w') as wobj:
         profiles, units, scalars = zip(*prior_results)
@@ -376,6 +421,14 @@ def _write_priors_h5(save_file, prior_results, mod_files):
             dset = scalar_grp.create_dataset(key, data=scalar_array, fillvalue=this_fill_val)
             dset.attrs.update(scalar_attrs)
 
+        # Lastly record the .atm files that correspond to each profile. Allow for the possibility that we might have
+        # multiple atm files corresponding to a profile by making the array be nprofiles-by-nfiles. Fill values will
+        # fill out rows that don't have the max number of files.
+        atm_files = expand_atm_lists(atm_files)
+        atm_file_array, atm_attrs, atm_fill_val = convert_h5_array_type(atm_files)
+        dset = wobj.create_dataset('atm_files', data=atm_file_array, fillvalue=atm_fill_val)
+        dset.attrs.update(atm_attrs)
+
 
 def driver(check_geos, download, makemod, makepriors, site_file, geos_top_dir, geos_chm_top_dir,
            mod_top_dir, prior_save_file, gas_name, nprocs=0, dl_file_types=None, dl_levels=None, integral_file=None,
@@ -385,7 +438,7 @@ def driver(check_geos, download, makemod, makepriors, site_file, geos_top_dir, g
     if dl_levels is None:
         dl_levels = ('surf', 'eta', 'eta')
 
-    aclons, aclats, acdates = read_date_lat_lon_file(site_file)
+    aclons, aclats, acdates, acfiles = read_date_lat_lon_file(site_file)
     if check_geos:
         check_geos_files(acdates, geos_top_dir, chem_download_dir=geos_chm_top_dir,
                          file_type=dl_file_types, levels=dl_levels)
