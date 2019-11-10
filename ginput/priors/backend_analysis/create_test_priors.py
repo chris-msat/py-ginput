@@ -18,7 +18,8 @@ from ...mod_maker import mod_maker
 from ...common_utils import mod_utils, readers
 from ...download import get_GEOS5
 
-numeric_h5_fill = -999999
+float_h5_fill = np.nan
+int_h5_fill = -999999
 string_h5_fill = b'N/A'
 
 # These should match the arg names in driver()
@@ -153,7 +154,7 @@ def read_date_lat_lon_file(acinfo_filename, date_fmt='str'):
 
             aclats.append(float(line_parts[1]))
             aclons.append(float(line_parts[2]))
-            atmfiles.append(line_parts[2])
+            atmfiles.append(line_parts[3])
 
     return aclons, aclats, acdates, atmfiles
 
@@ -301,6 +302,7 @@ def make_priors(prior_save_file, mod_dir, gas_name, acdates, aclons, aclats, acf
     # and make an output directory for that
     mod_files = glob(os.path.join(mod_dir, '*.mod'))
     grouped_mod_files = dict()
+    acdate_strings = acdates
     acdates = [dtime.strptime(d.split('-')[0], '%Y%m%d').date() for d in acdates]
     aclons = np.array(aclons)
     aclats = np.array(aclats)
@@ -325,10 +327,6 @@ def make_priors(prior_save_file, mod_dir, gas_name, acdates, aclons, aclats, acf
                 grouped_mod_files[keystr].append(f)
             else:
                 grouped_mod_files[keystr] = [f]
-                this_out_dir = os.path.join(prior_save_file, keystr)
-                if os.path.isdir(this_out_dir):
-                    shutil.rmtree(this_out_dir)
-                os.makedirs(this_out_dir)
         else:
             print(f, 'is not for one of the profiles listed in the lat/lon file; skipping')
 
@@ -353,7 +351,7 @@ def make_priors(prior_save_file, mod_dir, gas_name, acdates, aclons, aclats, acf
         with Pool(processes=nprocs) as pool:
             results = pool.starmap(_prior_helper, prior_args)
 
-    atm_files_by_mod = _make_mod_atm_map(acdates=acdates, aclons=aclons, aclats=aclats, acfiles=acfiles)
+    atm_files_by_mod = _make_mod_atm_map(acdates=acdate_strings, aclons=aclons, aclats=aclats, acfiles=acfiles)
     mod_files_in_order = [args[0] for args in prior_args]
     atm_files = [atm_files_by_mod[os.path.basename(f)] for f in mod_files_in_order]
     _write_priors_h5(prior_save_file, results, atm_files, mod_files_in_order)
@@ -372,9 +370,12 @@ def _write_priors_h5(save_file, prior_results, atm_files, mod_files=None):
         return np.stack(data_list, axis=axis).T
 
     def convert_h5_array_type(var_array):
-        if np.issubdtype(var_array.dtype, np.number):
+        if np.issubdtype(var_array.dtype, np.floating):
             attrs = dict()
-            fill_val = numeric_h5_fill
+            fill_val = float_h5_fill
+        elif np.issubdtype(var_array.dtype, np.integer):
+            attrs = dict()
+            fill_val = int_h5_fill
         elif np.issubdtype(var_array.dtype, np.string_) or np.issubdtype(var_array.dtype, np.unicode_):
             shape = var_array.shape
             var_array = np.array([s.encode('utf8') for s in var_array.flat])
@@ -388,8 +389,9 @@ def _write_priors_h5(save_file, prior_results, atm_files, mod_files=None):
             if hasattr(var_array.flatten()[0], 'strftime'):
                 # probably some kind of date
                 var_array = var_array.astype('datetime64[s]').astype('int')
+                var_array[var_array < 0] = int_h5_fill
                 attrs = {'units': 'seconds since 1970-01-01'}
-                fill_val = numeric_h5_fill
+                fill_val = int_h5_fill
             else:
                 obj_type = type(var_array.flatten()[0]).__name__
                 raise NotImplementedError('Converting objects of type "{}" not implemented'.format(obj_type))
@@ -482,7 +484,8 @@ def driver(check_geos, download, makemod, makepriors, site_file, geos_top_dir, g
 
     if makepriors:
         make_priors(prior_save_file, make_full_mod_dir(mod_top_dir, 'fpit'), gas_name,
-                    acdates=acdates, aclons=aclons, aclats=aclats, nprocs=nprocs, zgrid_file=integral_file)
+                    acdates=acdates, aclons=aclons, aclats=aclats, acfiles=acfiles, nprocs=nprocs, 
+                    zgrid_file=integral_file)
     else:
         print('Not making priors')
 
