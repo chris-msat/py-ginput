@@ -26,8 +26,8 @@ string_h5_fill = b'N/A'
 _req_info_keys = ('gas_name', 'site_file', 'geos_top_dir', 'geos_chm_top_dir', 'mod_top_dir', 'prior_save_file')
 _req_info_ispath = ('site_file', 'geos_top_dir', 'mod_top_dir', 'prior_save_file')
 _req_info_help = {'gas_name': 'The name of the gas to generate priors for.',
-                  'site_file': 'A CSV file containing the header DATES,LATS,LONS and the date, latitude, and longitude '
-                               'of each desired prior (one per line)',
+                  'site_file': 'A CSV file containing the header DATES,LATS,LONS,ATMFILES and the date, latitude, '
+                               'longitude, and corresponding .atm file of each desired prior (one per line)',
                   'geos_top_dir': 'The directory containing the GEOS FP-IT data in subdirectories Np, Nx, and Nv. '
                                   'This is where it will be downloaded to, if --download is one of the actions.',
                   'geos_chm_top_dir': 'The directory containing the GEOS FP-IT chemistry data in an Nv subdirectory. ',
@@ -51,6 +51,14 @@ def unfmt_lon(lonstr):
 
 
 def _date_range_str_to_dates(drange_str):
+    """
+    Convert a date range string to two datetime objects
+    :param drange_str: the string to convert, in the format YYYYMMDD-YYYYMMDD
+    :type drange_str: str
+    
+    :return: start and end dates
+    :rtype: :class:`datetime.datetime`, :class:`datetime.datetime`  
+    """
     start_dstr, end_dstr = drange_str.split('-')
     start_date = dtime.strptime(start_dstr, '%Y%m%d')
     end_date = dtime.strptime(end_dstr, '%Y%m%d')
@@ -124,6 +132,18 @@ def read_info_file(info_filename):
 
 
 def read_date_lat_lon_file(acinfo_filename, date_fmt='str'):
+    """
+    Read the .csv file containing the date, latitudes, and longitudes to generate priors for
+    
+    :param acinfo_filename: the path to the file to read
+    :type acinfo_filename: str
+     
+    :param date_fmt: how to format the dates read. "str" will return string date ranges (the date in the file to one
+     day later), while "datetime" will just return the date in the file as a datetime object.
+    :type date_fmt: str
+     
+    :return: the longitudes, latitudes, dates, and .atm files as lists. 
+    """
     with open(acinfo_filename, 'r') as acfile:
         # Check that the header matches what is expected
         header_parts = acfile.readline().split(',')
@@ -160,11 +180,47 @@ def read_date_lat_lon_file(acinfo_filename, date_fmt='str'):
 
 
 def make_full_mod_dir(top_dir, product):
+    """
+    Provide the full path to the directory containing the .mod file
+    
+    :param top_dir: the directory that mod_maker was told to save the .mod files in
+    :type top_dir: str
+     
+    :param product: which GEOS product ("fp" or "fpit") was created.
+    :type product: str
+     
+    :return: the path to the directory containing the .mod files
+    :rtype: str 
+    """
     return os.path.join(top_dir, product.lower(), 'xx', 'vertical')
 
 
 def check_geos_files(acdates, download_to_dir, chem_download_dir=None, file_type=get_GEOS5._default_file_type,
                      levels=get_GEOS5._default_level_type):
+    """
+    Check that all the requires GEOS files are present.
+    
+    :param acdates: the list of dates required, as string date ranges
+    :type acdates: list(str)
+     
+    :param download_to_dir: directory that the GEOS data was downloaded to. This should have "Nv", "Nx", and/or "Np" 
+     sub-directories.
+    :type download_to_dir: str
+     
+    :param chem_download_dir: where the chemistry files were downloaded to. Not needed if they were downloaded to the 
+     same location as the met files.
+    :type chem_download_dir: str or None
+     
+    :param file_type: which file type ("met" or "chm") to check for. May also be a sequence of types. If "chm", then 
+     ``chem_download_dir`` must be given *if* the chemistry files are not in ``download_to_dir``.
+    :type file_type: str or list(str)
+    
+    :param levels: which file levels ("surf", "p" or "eta") to check for, or a sequence of levels. If a sequence, then
+     both this and ``file_type`` must have the same number of elements.
+    :type levels: str or list(str)
+     
+    :return: none, prints to screen the missing files 
+    """
     acdates = [dtime.strptime(d.split('-')[0], '%Y%m%d') for d in acdates]
     file_type, levels = get_GEOS5.check_types_levels(file_type, levels)
 
@@ -192,6 +248,30 @@ def check_geos_files(acdates, download_to_dir, chem_download_dir=None, file_type
 
 def download_geos(acdates, download_to_dir, chem_download_dir=None,
                   file_type=get_GEOS5._default_file_type, levels=get_GEOS5._default_level_type):
+    """
+    Download GEOS files needed for a set of priors
+    
+    :param acdates: the list of dates required, as string date ranges
+    :type acdates: list(str)
+     
+    :param download_to_dir: directory to download the GEOS data to. Subdirectories Nv, Np, or Nx will be created as
+     necessary.
+    :type download_to_dir: str
+     
+    :param chem_download_dir: where the chemistry files should be downloaded to. Not needed if they are to be downloaded
+     to the same location as the met files.
+    :type chem_download_dir: str or None
+     
+    :param file_type: which file type ("met" or "chm") to download. May also be a sequence of types. If "chm", then 
+     ``chem_download_dir`` must be given *if* the chemistry files are not in ``download_to_dir``.
+    :type file_type: str or list(str)
+    
+    :param levels: which file levels ("surf", "p" or "eta") to download, or a sequence of levels. If a sequence, then
+     both this and ``file_type`` must have the same number of elements.
+    :type levels: str or list(str):param acdates: 
+
+    :return: none, downloads files.
+    """
     file_type, levels = get_GEOS5.check_types_levels(file_type, levels)
     for ftype, ltype in zip(file_type, levels):
         dl_path = chem_download_dir if ftype == 'chm' and chem_download_dir is not None else download_to_dir
@@ -201,10 +281,29 @@ def download_geos(acdates, download_to_dir, chem_download_dir=None,
 
 
 def _make_mod_atm_map(acdates, aclons, aclats, acfiles):
+    """
+    Make a dictionary mapping .mod files to the .atm files they were created for.
+    
+    :param acdates: list of string date ranges the .mod files were created for.
+    :type acdates: list(str)
+     
+    :param aclons: list of longitudes the .mod files were created for 
+    :type aclons: list(float)
+     
+    :param aclats: list of latitudes the .mod files were created for
+    :type aclats: list(float)
+     
+    :param acfiles: list of .atm files corresponding to the dates, lats, and lons in the first three arguments.
+    :type acfiles: list(str)
+     
+    :return: a dictionary with .mod file names as keys and .atm files as values. Both will just be the basenames, not
+     full paths.
+    :rtype: dict
+    """
     atm_mod_map = dict()
 
     for dates, lon, lat, atmfile in zip(acdates, aclons, aclats, acfiles):
-        start_date, end_date = [dtime.strptime(d, '%Y%m%d') for d in dates.split('-')]
+        start_date, end_date = _date_range_str_to_dates(dates)
         mod_files = _list_mod_files_required(start_date, end_date, lon, lat)
 
         for modf in mod_files:
@@ -217,6 +316,24 @@ def _make_mod_atm_map(acdates, aclons, aclats, acfiles):
 
 
 def _list_mod_files_required(start_date, end_date, lon, lat):
+    """
+    List the .mod files required for a date/lat/lon
+    
+    :param start_date: the start of the time period requested
+    :type start_date: :class:`datetime.datetime`
+     
+    :param end_date: the end of the time period requested (exclusive)
+    :type end_date: :class:`datetime.datetime`
+     
+    :param lon: the longitude requested
+    :type lon: float
+     
+    :param lat: the latitude requested
+    :type lat: float
+     
+    :return: the list of .mod files required (basenames only)
+    :rtype: list(str) 
+    """
     mod_files = []
 
     for date in date_range(start_date, end_date, freq='3H', closed='left'):
@@ -228,7 +345,42 @@ def _list_mod_files_required(start_date, end_date, lon, lat):
 
 def make_mod_files(acdates, aclons, aclats, geos_dir, out_dir, chem_dir=None, include_chm=True, nprocs=0,
                    geos_mode='fpit-eta'):
-
+    """
+    Make the .mod files required for a set of test priors
+    
+    :param acdates: list of string date ranges the .mod files were created for.
+    :type acdates: list(str)
+     
+    :param aclons: list of longitudes the .mod files were created for 
+    :type aclons: list(float)
+     
+    :param aclats: list of latitudes the .mod files were created for
+    :type aclats: list(float)
+    
+    :param geos_dir: directory that the GEOS data was downloaded to. This should have "Nv", "Nx", and/or "Np" 
+     sub-directories.
+    :type geos_dir: str
+     
+    :param out_dir: directory to save the .mod files to. The :file:`<product>/xx/vertical` subdirectory tree will be 
+     automatically created.
+    :type out_dir: str
+      
+    :param chem_dir: where the chemistry files were downloaded to. Not needed if they were downloaded to the 
+     same location as the met files.
+    :type chem_dir: str
+     
+    :param include_chm: whether to include the chemistry variables (CO currently) in the .mod files. If ``True``, then
+     the chemistry files must be supplied.
+    :type include_chm: bool
+      
+    :param nprocs: number of processors to use to generate the .mod files
+    :type nprocs: int
+     
+    :param geos_mode: mode argument to :func:`ginput.mod_maker.mod_maker.driver, usually "fpit" or "fpit-eta".
+    :type geos_mode: str
+     
+    :return: none, writes .mod files 
+    """
     if chem_dir is None:
         chem_dir = geos_dir
     print('Will save to', out_dir)
@@ -285,6 +437,17 @@ def make_mod_files(acdates, aclons, aclats, geos_dir, out_dir, chem_dir=None, in
 
 
 def mm_helper(kwargs):
+    """
+    Helper function used to run mod_maker consistently whether running in serial or parallel mode.
+    
+    :param kwargs: keyword arguments: ``date_range`` - the start and end dates, as a list, for mod_maker. ``mm_lons`` 
+     and ``mm_lats`` - the lists of longitudes and latitudes to make. ``geos_dir`` and ``chem_dir`` - the directories
+     for the met and chem data. ``nprocs`` - number of processors used (determines whether the prints to the screen are
+     muted or not). ``mode`` - the mod_maker mode (usually "fpit-eta"). ``with_chm`` - whether to include chemistry
+     variables.
+     
+    :return: none. 
+    """
     def mm_helper_internal(date_range, mm_lons, mm_lats, geos_dir, chem_dir, out_dir, nprocs, mode, with_chm):
         date_fmt = '%Y-%m-%d'
         # Duplicate
@@ -297,6 +460,40 @@ def mm_helper(kwargs):
 
 
 def make_priors(prior_save_file, mod_dir, gas_name, acdates, aclons, aclats, acfiles, zgrid_file=None, nprocs=0):
+    """
+    Make the priors, saving them to an .h5 file
+    
+    :param prior_save_file: the path to the .h5 file
+    :type prior_save_file: str
+     
+    :param mod_dir: the directory containing the .mod files. (That is the directory that actually has the .mod files in
+     it, not the "top" directory with fpit/xx/vertical subdirectories.)
+    :type mod_dir: str
+     
+    :param gas_name: which gas to create priors for. Must be a key of ``tccon_priors.gas_records``.
+    :type gas_name: str
+    
+    :param acdates: list of string date ranges the .mod files were created for.
+    :type acdates: list(str)
+     
+    :param aclons: list of longitudes the .mod files were created for 
+    :type aclons: list(float)
+     
+    :param aclats: list of latitudes the .mod files were created for
+    :type aclats: list(float)
+
+    :param acfiles: list of .atm files that correspond to the above dates, lats, and lons.
+    :type acfiles: list(str)
+
+    :param zgrid_file: levels file from GGG that specifies the levels to write the priors on (optional). If omitted, the
+     priors will be written on the standard GEOS grid.
+    :type zgrid_file: str or None
+
+    :param nprocs: number of processors to use to run the priors.
+    :type nprocs: int
+
+    :return: none, writes HDF5 file.
+    """
     print('Will save to', prior_save_file)
     # Find all the .mod files, get unique date/lat/lon (should be 8 files per)
     # and make an output directory for that
@@ -357,13 +554,49 @@ def make_priors(prior_save_file, mod_dir, gas_name, acdates, aclons, aclats, acf
     _write_priors_h5(prior_save_file, results, atm_files, mod_files_in_order)
 
 
-def _prior_helper(ph_f, gas_rec, zgrid=None):
-    _fbase = os.path.basename(ph_f)
+def _prior_helper(mod_file, gas_rec, zgrid=None):
+    """
+    Helper function to run the priors consistently in either serial or parallel mode
+
+    :param mod_file: the path to the mod file to generate a prior for
+    :type mod_file: str
+
+    :param gas_rec: the :class:`~ginput.priors.tccon_priors.TraceGasRecord` subclass that specifies which gas to
+     generate the priors for.
+    :type gas_rec: :class:`~ginput.priors.tccon_priors.TraceGasRecord`
+
+    :param zgrid: the levels file specifying what altitude levels to interpolate the priors to, or None to leave them
+     on the GEOS grid.
+    :type zgrid: str
+
+    :return: the output of :func:`~ginput.priors.tccon_priors.generate_single_tccon_prior`
+    """
+    _fbase = os.path.basename(mod_file)
     print('Processing {}'.format(_fbase))
-    return tccon_priors.generate_single_tccon_prior(ph_f, tdel(hours=0), gas_rec, use_eqlat_strat=True, zgrid=zgrid)
+    return tccon_priors.generate_single_tccon_prior(mod_file, tdel(hours=0), gas_rec, use_eqlat_strat=True, zgrid=zgrid)
 
 
 def _write_priors_h5(save_file, prior_results, atm_files, mod_files=None):
+    """
+    Write the output HDF5 file for the priors
+
+    :param save_file: the file name to create
+    :type save_file: str
+
+    :param prior_results: the list of results from :func:`~ginput.priors.tccon_priors.generate_single_tccon_prior`, i.e.
+     each element should be one tuple of dicts returned by that function.
+    :type prior_results: list
+
+    :param atm_files: the list of .atm files, one per element of ``prior_results``. Each element should correspond to
+     the results in the same index of ``prior_results``.
+    :type atm_files: list(str)
+
+    :param mod_files: the list of .mod files corresponding to the prior results. If not given, then the .mod data will
+     not be written into the .h5 file. These must be full paths to the .mod files.
+    :type mod_files: list(str)
+
+    :return: none, writes HDF5 file
+    """
     def make_h5_array(data_list, data_key):
         axis = np.ndim(data_list[0][data_key])
         data_list = [el[data_key] for el in data_list]
