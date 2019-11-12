@@ -24,6 +24,10 @@ class AtmUnitError(Exception):
     pass
 
 
+def datenum_to_timestamps(timestamps):
+    return pd.DatetimeIndex(timestamps.astype('datetime64[s]'))
+
+
 def find_ace_file(ace_dir, ace_specie):
     ace_files = glob(os.path.join(ace_dir, '*.nc'))
     matching_files = [f for f in ace_files if f.lower().endswith('{}.nc'.format(ace_specie.lower()))]
