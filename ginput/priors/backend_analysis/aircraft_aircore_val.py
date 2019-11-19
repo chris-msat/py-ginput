@@ -1002,10 +1002,10 @@ def plot_bias_spaghetti(obs_profiles, prior_profiles, z, ax=None, color=None, me
     elif mean_color is None:
         mean_color = color
 
-    diff = (obs_profiles - prior_profiles).T
+    diff = (prior_profiles - obs_profiles).T
     ax.plot(diff, z, color=color, linewidth=0.5)
     ax.plot(np.nanmean(diff, axis=1), z, color=mean_color, linewidth=2)
-    ax.set_xlabel('Observations - priors')
+    ax.set_xlabel('Priors - observations')
     ax.grid()
 
     return fig, ax
@@ -1076,8 +1076,7 @@ def plot_profiles_comparison(obs_file, data_roots, data_type, prof_type='py', zt
     return fig, ax
 
 
-def plot_lat_bias(atm_dir, priors, specie, unit, pbl_top=None):
-    fancy_specie = re.sub(r'(\d+)', r'$_\1$', specie).upper()
+def _load_lat_binned_data(atm_dir, priors, specie, pbl_top):
     aircraft, priors, z, prof_info = load_binned_array(atm_dir, priors, specie)
 
     diffs = priors - aircraft
@@ -1085,6 +1084,7 @@ def plot_lat_bias(atm_dir, priors, specie, unit, pbl_top=None):
         diffs = diffs[:, z > pbl_top]
         priors = priors[:, z > pbl_top]
         aircraft = aircraft[:, z > pbl_top]
+
     lats = prof_info['lat']
     lats = np.broadcast_to(lats.reshape(-1, 1), diffs.shape)
 
@@ -1095,29 +1095,73 @@ def plot_lat_bias(atm_dir, priors, specie, unit, pbl_top=None):
 
     lat_bin_edges = np.arange(-90, 91, 20.)
 
-    mean_diffs, lat_bins = jstats.bin_1d(diffs_flat, lats_flat, lat_bin_edges, ret_bins='centers', op=np.nanmean)
-    std_diffs = jstats.bin_1d(diffs_flat, lats_flat, lat_bin_edges, op=np.nanstd)
-    mean_priors = jstats.bin_1d(priors_flat, lats_flat, lat_bin_edges, op=np.nanmean)
-    std_priors = jstats.bin_1d(priors_flat, lats_flat, lat_bin_edges, op=np.nanstd)
-    mean_obs = jstats.bin_1d(obs_flat, lats_flat, lat_bin_edges, op=np.nanmean)
-    std_obs = jstats.bin_1d(obs_flat, lats_flat, lat_bin_edges, op=np.nanstd)
+    data_dict = dict()
+    data_dict['mean_diffs'], lat_bins = jstats.bin_1d(diffs_flat, lats_flat, lat_bin_edges, ret_bins='centers', op=np.nanmean)
+    data_dict['std_diffs'] = jstats.bin_1d(diffs_flat, lats_flat, lat_bin_edges, op=np.nanstd)
+    data_dict['mean_priors'] = jstats.bin_1d(priors_flat, lats_flat, lat_bin_edges, op=np.nanmean)
+    data_dict['std_priors'] = jstats.bin_1d(priors_flat, lats_flat, lat_bin_edges, op=np.nanstd)
+    data_dict['mean_obs'] = jstats.bin_1d(obs_flat, lats_flat, lat_bin_edges, op=np.nanmean)
+    data_dict['std_obs'] = jstats.bin_1d(obs_flat, lats_flat, lat_bin_edges, op=np.nanstd)
 
-    fig, axs = plt.subplots(1, 2, figsize=(12, 5))
+    raw_dict = dict()
+    raw_dict['diffs'] = diffs
+    raw_dict['priors'] = priors
+    raw_dict['aircraft'] = aircraft
 
-    axs[0].plot(lat_bins, mean_priors, color='b', label='Priors')
-    jplots.plot_error_bar(axs[0], lat_bins, mean_priors, std_priors, color='b', linewidth=2)
-    axs[0].plot(lat_bins, mean_obs, color='r', label='Obs')
-    jplots.plot_error_bar(axs[0], lat_bins, mean_obs, std_obs, color='r', linewidth=2)
-    axs[0].legend()
-    axs[0].set_ylabel(r'Mean [{}] below 800 hPa ({})'.format(fancy_specie, unit))
-    axs[0].set_xlabel('Latitude')
-    axs[0].grid()
+    return data_dict, raw_dict, lat_bins
 
-    axs[1].plot(lat_bins, mean_diffs, color='k')
-    jplots.plot_error_bar(axs[1], lat_bins, mean_diffs, std_diffs, color='k', linewidth=2)
-    axs[1].set_xlabel('Latitude')
-    axs[1].set_ylabel(r'Mean $\Delta$[{}] below 800 hPa ({})'.format(fancy_specie, unit))
-    axs[1].grid()
+
+def plot_lat_bias(atm_dir, prior_file, specie, unit, pbl_top=None, data_ax=True, diff_ax=True):
+    are_bools = [isinstance(data_ax, bool), isinstance(diff_ax, bool)]
+    are_true = [data_ax is True, diff_ax is True]
+    if any(are_true) and not all(are_bools):
+        raise TypeError('Cannot create axes and have axes passed in the same call')
+    elif any(are_true):
+        make_axes = True
+    else:
+        make_axes = False
+
+    fancy_specie = re.sub(r'(\d+)', r'$_\1$', specie).upper()
+    aircraft, priors, z, prof_info = load_binned_array(atm_dir, prior_file, specie)
+
+    if pbl_top is not None:
+        priors = priors[:, z > pbl_top]
+        ylabel_z = 'below {} hPa '.format(pbl_top)
+    else:
+        ylabel_z = ''
+
+    lat_binned_dict, _, lat_bins = _load_lat_binned_data(atm_dir, prior_file, specie, pbl_top)
+
+    if make_axes:
+        nplots = data_ax + diff_ax
+        fig = plt.figure(figsize=(6*nplots, 5))
+
+    iplot = 1
+    if data_ax:
+        if make_axes:
+            data_ax = fig.add_subplot(1, nplots, iplot)
+            iplot += 1
+        data_ax.plot(lat_bins, lat_binned_dict['mean_priors'], color='b', label='Priors')
+        jplots.plot_error_bar(data_ax, lat_bins, lat_binned_dict['mean_priors'], lat_binned_dict['std_priors'],
+                              color='b', linewidth=2)
+        data_ax.plot(lat_bins, lat_binned_dict['mean_obs'], color='r', label='Obs')
+        jplots.plot_error_bar(data_ax, lat_bins, lat_binned_dict['mean_obs'], lat_binned_dict['std_obs'],
+                              color='r', linewidth=2)
+        data_ax.legend()
+        data_ax.set_ylabel(r'Mean [{specie}] {vertical}({unit})'.format(specie=fancy_specie, vertical=ylabel_z, unit=unit))
+        data_ax.set_xlabel('Latitude')
+        data_ax.grid()
+
+    if diff_ax:
+        if make_axes:
+            diff_ax = fig.add_subplot(1, nplots, iplot)
+            iplot += 1
+        diff_ax.plot(lat_bins, lat_binned_dict['mean_diffs'], color='k')
+        jplots.plot_error_bar(diff_ax, lat_bins, lat_binned_dict['mean_diffs'], lat_binned_dict['std_diffs'],
+                              color='k', linewidth=2)
+        diff_ax.set_xlabel('Latitude')
+        diff_ax.set_ylabel(r'Mean $\Delta$[{specie}] {vertical}({unit})'.format(specie=fancy_specie, vertical=ylabel_z, unit=unit))
+        diff_ax.grid()
 
 
 def _get_std_bins(ztype, bin_edges=None, bin_centers=None):
