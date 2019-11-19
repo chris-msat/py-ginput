@@ -1557,7 +1557,15 @@ class HFTropicsRecord(MloSmoTraceGasRecord):
     @classmethod
     def _load_ch4_hf_slopes(cls):
         with xr.open_dataset(cls.ch4_hf_slopes_file) as nch:
-            bin_names = [''.join(row) for row in nch.variables['bin_names'][:].T.data]
+            try:
+                bin_names = [''.join(row) for row in nch.variables['bin_names'][:].T.data]
+            except TypeError:
+                # For some reason, some version of xarray read this variable properly as a 2D array of string
+                # objects, others (ostensibly with the same version) read it as a 2D array of 0D arrays, which
+                # contain the strings. In the latter case we need to extract the strings from the 0D arrays
+                # before we can join them.
+                bin_names = [''.join(el.item() for el in row) for row in nch.variables['bin_names'][:].T.data]
+
             slopes = nch['ch4_hf_slopes']
             fit_params = nch['slope_fit_params']
         return bin_names, slopes, fit_params
