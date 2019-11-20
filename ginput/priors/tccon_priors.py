@@ -3055,7 +3055,7 @@ def parse_args(parser=None):
     parser.add_argument('date_range', type=mod_utils.parse_date_range,
                         help='The range of dates to generate .vmr files for. May be given as YYYYMMDD-YYYYMMDD, or '
                              'YYYYMMDD_HH-YYYYMMDD_HH, where the ending date is exclusive. A single date may be given, '
-                             'in which case the ending date is assumed to be one day later.')
+                             '(YYYYMMDD) in which case the ending date is assumed to be one day later.')
     parser.add_argument('mod_dir', nargs='?', default=None,
                         help='Directory to read .mod files from. Note that the .mod files must be in this directory, '
                              'not a subdirectory. If you wish to specify a root directory for files organized by '
@@ -3072,7 +3072,8 @@ def parse_args(parser=None):
     parser.add_argument('-p', '--primary-gases-only', action='store_false', dest='std_vmr_file',
                         help='Write the VMRs only for the primary gases (CO2, N2O, CH4, HF, CO, H2O, and O3). The other '
                              'gases will not be included. This removes the need for a base .vmr file.')
-    parser.add_argument('-s', '--save-dir', help='Path to save .vmr files to. If not given, defaults to $GGGPATH/vmrs/gnd')
+    parser.add_argument('-s', '--save-path', dest='save_dir',
+                        help='Path to save .vmr files to. If not given, defaults to $GGGPATH/vmrs/gnd')
     parser.add_argument('--site', default='xx', choices=valid_site_ids, dest='site_abbrev',
                         help='Which site to generate priors for. Used to set the lat/lon looked for in the file name. '
                              'If an explicit lat and lon are given, those override this.')
