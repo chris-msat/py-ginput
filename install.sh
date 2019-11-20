@@ -1,89 +1,69 @@
 #!/bin/bash
+set -e
 
 # Installs ginput into a new Conda environment. Usage: ./install.sh [env_name]. If env_name is not specified,
 # then tries to install in the active Python environment. 
 
 if [[ $# == 0 ]] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
 cat << EOF
-usage: $0 [ ENVNAME|--user|--active ]
+usage: $0 ENVNAME
 
-Calling $0 with --active tries to install ginput and its dependencies
-into your current Python environment using Pip. Adding the --user flag
-will instead install into your user location (the same location as
-pip install --user). 
+Installs ginput and its dependencies into a conda environment.
 
-Alternatively, giving an environment name will create an environment with
-that name to install into. Conda environments are preferred, but require
-the conda executable be installed and on your PATH. If conda cannot be 
-found, the Python venv module is used instead to create an environment
-in the folder ./\$envname-env. 
+Creates a conda environment with the name ENVNAME and installs the
+packages listed in environment.yml into it, then installs ginput
+in develop mode. Alternatively, if the given environment already
+exists, update it with the requirements in environment.yml.
 
 Upon successful completion, a run_ginput.py script is created in this
 directory. Executing this script as ./run_ginput.py will always use
 the Python that ginput was installed with.
 
-Examples:
-
-# install into current python
-$0 --active
-
-# install into user directory
-$0 --user
-
-# install into "ginput" environment
-$0 ginput
+Example: install into "ginput-py3" environment
+$0 ginput-py3
 EOF
 
 exit 0
 fi
 
 envname="$1"
-if [[ $envname == --active ]]; then
-    pyexe=`which python`
-    if [[ $pyexe == /usr/* ]]; then
-        read -p "You are installing ginput into your system python. This is NOT recommended. Continue? [yn]: " answer
-        case $answer in
-            [yY])
-                echo "Proceeding..."
-                ;;
-            *)
-                echo "Aborting installation"
-                exit 1
-                ;;
-        esac
-    fi
-    # install into current python
-    pip install -e .
-elif [[ $envname == --user ]]; then
-    # install into user directory
-    pip install --user -e .
-else
-    # Does conda exist
-    which conda >& /dev/null
-    if [[ $? != 0 ]]; then
-        echo "Cannot create a conda environment for ginput because 'conda' is not on your PATH. Falling back on venv."
-        which python3 >& /dev/null
-        if [[ $? != 0 ]]; then
-            echo "No Python 3 installation detected! ginput requires Python 3"
-            exit 1
-        fi
-        envdir="${envname}-env"
-        echo "Creating virtualenv at $envdir"
-        python3 -m venv "$envdir"
-        source "$envdir"/bin/activate
-    else
-        conda env create --name "$envname" --file environment.yml
-        # the next two lines are needed to allow "conda activate" to work in a non-interactive shell
-        conda_base=$(conda info --base)
-        source "$conda_base"/etc/profile.d/conda.sh
-        conda activate "$envname"
-    fi
 
-    # If we installed a conda environment, the this will just install ginput in develop mode so that it can be
-    # referenced whenever that environment is active. If we created a pip environment, then this will also install
-    # the dependencies via the setup.py script.
-    pip install -e .
+# Does conda exist
+which conda >& /dev/null
+if [[ $? != 0 ]]; then
+    echo "Cannot create a conda environment for ginput because 'conda' is not on your PATH."
+    echo "Install Anaconda (https://www.anaconda.com/distribution/) or ensure that 'conda' is on your PATH."
+    exit 1
 fi
+
+# Does the environment already exist
+# Make an array of env names
+conda_envs=($(conda env list | grep -v '^#' | awk '{print $1}'))
+env_exists=false
+for e in ${conda_envs[*]}; do
+    if [[ $e == $envname ]]; then
+        env_exists=true
+        break
+    fi
+done
+
+if $env_exists; then
+    echo "$envname already exists, will update installed packages"
+    conda env update --name "$envname" --file environment.yml
+else
+    echo "Will create conda environment '$envname'"
+    conda env create --name "$envname" --file environment.yml
+fi
+
+
+# the next two lines are needed to allow "conda activate" to work in a non-interactive shell
+conda_base=$(conda info --base)
+source "$conda_base"/etc/profile.d/conda.sh
+conda activate "$envname"
+
+# If we installed a conda environment, the this will just install ginput in develop mode so that it can be
+# referenced whenever that environment is active.
+pip install -e .
 
 # After installation, create a version of run_ginput set up to use the environment
 # Have the makefile call this with a default environment name, allow that to be overridden as a setting
