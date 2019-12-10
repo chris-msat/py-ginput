@@ -326,13 +326,21 @@ def tccon_site_info(site_dict_in=None):
     for site in site_dict_in:
         # If the site has different time spans, handle each one's longitude
         if 'time_spans' not in site_dict_in[site].keys():
-            raise TCCONSiteDefError('All sites must define the time spans they were operational')
-
-        for time_span in site_dict_in[site]['time_spans']:
-            if site_dict_in[site]['time_spans'][time_span]['lon']>180:
-                site_dict_in[site]['time_spans'][time_span]['lon_180'] = site_dict_in[site]['time_spans'][time_span]['lon'] - 360
+            if site_dict_in is None:
+                raise TCCONSiteDefError('All sites must define the time spans they were operational')
             else:
-                site_dict_in[site]['time_spans'][time_span]['lon_180'] = site_dict_in[site]['time_spans'][time_span]['lon']
+                info = site_dict_in[site]
+                if info['lon'] > 180:
+                    info['lon_180'] = info['lon'] - 360
+                else:
+                    info['lon_180'] = info['lon']
+
+        else:
+            for time_span in site_dict_in[site]['time_spans']:
+                if site_dict_in[site]['time_spans'][time_span]['lon']>180:
+                    site_dict_in[site]['time_spans'][time_span]['lon_180'] = site_dict_in[site]['time_spans'][time_span]['lon'] - 360
+                else:
+                    site_dict_in[site]['time_spans'][time_span]['lon_180'] = site_dict_in[site]['time_spans'][time_span]['lon']
 
 
     return OrderedDict(site_dict_in)
@@ -377,7 +385,18 @@ def tccon_site_info_for_date(date, site_abbrv=None, site_dict_in=None, use_close
         # Otherwise, we can just leave the entry for this site as-is and select the correct site at the end of the
         # function.
         if 'time_spans' not in info:
-            raise TCCONSiteDefError('All sites must define the time spans they were operational')
+            if site_dict_in is None:
+                # Require that any standard sites defined must specify a time period they were operational - 
+                # necessary for the mod/vmr automation        
+                raise TCCONSiteDefError('All sites must define the time spans they were operational')
+            else:
+                # if we were given a site then we shouldn't require it to specify a time period
+                lon = info['lon']
+                if lon > 180:
+                    info['lon_180'] = lon - 360
+                else:
+                    info['lon_180'] = lon
+                continue
 
         time_spans = info.pop('time_spans')
         found_time = False
