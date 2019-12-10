@@ -1,8 +1,18 @@
-from cfunits import Units
 from datetime import datetime as dtime
 import netCDF4 as ncdf
 import numpy as np
 import os
+from warnings import warn
+
+# Have trouble with CFUnits when calling from a Jupyter notebook. This allows the module to at least be imported if that
+# happens - the problem seems to be an issue interacting with the C library.
+try:
+    from cfunits import Units
+except AssertionError:
+    warn('Could not import cfunits due to an assertion error. Will not be able to enforce CF units conventions.')
+    cfunits_imported = False
+else:
+    cfunits_imported = True
 
 from .ggg_logging import logger
 from . import mod_utils, mod_constants, ioutils, readers
@@ -53,13 +63,22 @@ class CFUnitsError(Exception):
         super(CFUnitsError, self).__init__(msg)
 
 
-def _cfunits(unit_string):
+def _cfunits(unit_string, no_cfunits=False):
     """
     Convert a units string to a CF-compliant one.
     :param unit_string: the unit string to convert
+    :param no_cfunits: if True, then will not format unit strings if CFUnits failed to import. Has no effect if CFUnits
+     did import successfully.
     :return: the converted unit string
     :raises CFUnitsError: if the string cannot be made CF-compliant
     """
+    if not cfunits_imported:
+        if no_cfunits:
+            return unit_string
+        else:
+            raise ImportError('cfunits.Unit was not successfully imported. Use the no_cfunits keyword to ignore that '
+                              'problem and skip making the units CF compliant.')
+
     units = Units(unit_string).formatted()
     if units is None:
         raise CFUnitsError(unit_string)
@@ -67,7 +86,8 @@ def _cfunits(unit_string):
         return units
 
 
-def write_map_from_vmr_mod(vmr_file, mod_file, map_output_dir, fmt='txt', wet_or_dry='wet', site_abbrev='xx'):
+def write_map_from_vmr_mod(vmr_file, mod_file, map_output_dir, fmt='txt', wet_or_dry='wet', site_abbrev='xx',
+                           no_cfunits=False):
     """
     Create a .map file from a .vmr and .mod file
 
@@ -78,6 +98,8 @@ def write_map_from_vmr_mod(vmr_file, mod_file, map_output_dir, fmt='txt', wet_or
      netCDF files.
     :param wet_or_dry: whether to write wet or dry mole fractions.
     :param site_abbrev: the site abbreviation to go in the file name and netCDF attributes.
+    :param no_cfunits: if True, then will not format unit strings if CFUnits failed to import. Has no effect if CFUnits
+     did import successfully.
     :return: none, writes .map or .map.nc file.
     """
     if not os.path.isfile(vmr_file):
@@ -194,10 +216,11 @@ def _write_text_map_file(mapdat, obs_lat, map_file, wet_or_dry):
             wobj.write(line + '\n')
 
 
-def _write_ncdf_map_file(mapdat, obs_lat, obs_date, file_lat, file_lon, obs_site, map_file, wet_or_dry):
+def _write_ncdf_map_file(mapdat, obs_lat, obs_date, file_lat, file_lon, obs_site, map_file, wet_or_dry,
+                         no_cfunits=False):
     with ncdf.Dataset(map_file, 'w') as wobj:
         alt_human_units = _map_canonical_units['Height']
-        alt_units = _cfunits(alt_human_units)
+        alt_units = _cfunits(alt_human_units, no_cfunits=no_cfunits)
         altdim = ioutils.make_ncdim_helper(wobj, 'altitude', mapdat['Height'],
                                            units=alt_units, full_units=alt_human_units, long_name='altitude',
                                            tccon_name='height')
@@ -212,7 +235,7 @@ def _write_ncdf_map_file(mapdat, obs_lat, obs_date, file_lat, file_lon, obs_site
                 continue
 
             human_units = _map_canonical_units[varname]
-            cf_units = _cfunits(human_units)
+            cf_units = _cfunits(human_units, no_cfunits=no_cfunits)
             std_name = _map_standard_names[varname].format(w_or_d=wet_or_dry)
             ioutils.make_ncvar_helper(wobj, varname.lower(), mapdat[varname], dims=[altdim],
                                       units=cf_units, full_units=human_units, long_name=std_name)
@@ -244,9 +267,9 @@ def _write_ncdf_map_file(mapdat, obs_lat, obs_date, file_lat, file_lon, obs_site
         wobj.constant_avogadros_number = mod_constants.avogadro
         wobj.constant_avogadros_number_units = 'molecules.mole-1'  # CF convention would be '1.66053878316273e-24 1' which is just ugly
         wobj.constant_mass_dry_air = mod_constants.mass_dry_air
-        wobj.constant_mass_dry_air_units = _cfunits('kg/mol')
+        wobj.constant_mass_dry_air_units = _cfunits('kg/mol', no_cfunits=no_cfunits)
         wobj.constant_mass_h2o = mod_constants.mass_h2o
-        wobj.constant_mass_h2o_units = _cfunits('kg/mol')
+        wobj.constant_mass_h2o_units = _cfunits('kg/mol', no_cfunits=no_cfunits)
 
 
 def write_vmr_file(vmr_file, tropopause_alt, profile_date, profile_lat, profile_alt, profile_gases, gas_name_order=None,

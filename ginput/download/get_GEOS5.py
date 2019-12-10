@@ -55,8 +55,15 @@ def URLlist_FP(start, end, timestep=timedelta(hours=3), outpath='', filetype=_de
             fmt = "https://portal.nccs.nasa.gov/datashare/gmao_ops/pub/fp/das/Y{}/M{:0>2}/D{:0>2}/GEOS.fp.asm.inst3_2d_asm_Nx.{}_{:0>2}00.V01.nc4\n"
         elif levels == 'p':
             fmt = "https://portal.nccs.nasa.gov/datashare/gmao_ops/pub/fp/das/Y{}/M{:0>2}/D{:0>2}/GEOS.fp.asm.inst3_3d_asm_Np.{}_{:0>2}00.V01.nc4\n"
+        elif levels == 'eta':
+            fmt = "https://portal.nccs.nasa.gov/datashare/gmao_ops/pub/fp/das/Y{}/M{:0>2}/D{:0>2}/GEOS.fp.asm.inst3_3d_asm_Nv.{}_{:0>2}00.V01.nc4\n"
         else:
             raise ValueError('No FP URL format defined for filetype == {} and levels == {}'.format(filetype, levels))
+    elif filetype == 'chm':
+        if levels == 'eta':
+            fmt = "https://portal.nccs.nasa.gov/datashare/gmao_ops/pub/fp/das/Y{}/M{:0>2}/D{:0>2}/GEOS.fp.asm.inst3_3d_chm_Nv.{}_{:0>2}00.V01.nc4\n"
+        else:
+            raise ValueError('Chemistry files only available on eta levels')
     else:
         raise ValueError('No FP URL format defined for filetype == {}'.format(filetype))
 
@@ -144,11 +151,12 @@ def parse_args(parser=None):
     parser.add_argument('--mode', choices=list(_func_dict.keys()), default='FP',
                         help='Which GEOS product to get. The default is %(default)s. Note that to retrieve FP-IT data '
                              'requires a subscription with NASA (https://gmao.gsfc.nasa.gov/GMAO_products/)')
-    parser.add_argument('--path', default='.', help='Where to download the GEOS data to. Default is %(default)s. Data '
+    parser.add_argument('--path', default='.', help='Where to download the GEOS data to, "%(default)s" by default. Data '
                                                     'will be placed in Np, Nv, and Nx subdirectories automatically '
                                                     'created in this directory.')
     parser.add_argument('-t', '--filetypes', default=None, choices=_file_types,
-                        help='Which file types to download. Default is to download met files')
+                        help='Which file types to download. Works in conjunction with --levels to determine which '
+                             'files to download.')
     parser.add_argument('-l', '--levels', default=None, choices=_level_types,
                         help='Which level type to download. Note that only "eta" levels are available for the "chm" '
                              'file type.')

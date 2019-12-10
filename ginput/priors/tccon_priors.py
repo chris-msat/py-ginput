@@ -1367,6 +1367,9 @@ class MidlatTraceGasRecord(TraceGasRecord):
         ptrop = mod_data['scalar']['TROPPB']
         ztrop = mod_utils.interp_tropopause_height_from_pressure(p_trop_met=ptrop, p_met=p, z_met=z)
 
+        # I kept the geographic lat here because this is doing both the troposphere and stratosphere. This could
+        # potentially be updated to happen separately in the troposphere and stratosphere methods and use the
+        # respective eq. lats - JLL 2019-11-26
         prof_gas[:] = self.resample_vmrs_at_effective_altitudes(z=z, itcz_lat=itcz_lat, itcz_width=itcz_width,
                                                                 ztrop_mod=ztrop, obslat_mod=obs_lat)
 
@@ -1557,7 +1560,15 @@ class HFTropicsRecord(MloSmoTraceGasRecord):
     @classmethod
     def _load_ch4_hf_slopes(cls):
         with xr.open_dataset(cls.ch4_hf_slopes_file) as nch:
-            bin_names = [''.join(row) for row in nch.variables['bin_names'][:].T.data]
+            try:
+                bin_names = [''.join(row) for row in nch.variables['bin_names'][:].T.data]
+            except TypeError:
+                # For some reason, some version of xarray read this variable properly as a 2D array of string
+                # objects, others (ostensibly with the same version) read it as a 2D array of 0D arrays, which
+                # contain the strings. In the latter case we need to extract the strings from the 0D arrays
+                # before we can join them.
+                bin_names = [''.join(el.item() for el in row) for row in nch.variables['bin_names'][:].T.data]
+
             slopes = nch['ch4_hf_slopes']
             fit_params = nch['slope_fit_params']
         return bin_names, slopes, fit_params
@@ -2013,7 +2024,7 @@ class HDORecord(TraceGasRecord):
 
     def add_trop_prior(self, prof_gas, obs_date, obs_lat, mod_data, **kwargs):
         h2o_dmf = mod_data['profile']['H2O']
-        prof_gas[:] = h2o_dmf * 0.16 * (8.0 + np.log10(h2o_dmf))
+        prof_gas[:] = h2o_dmf * 0.14 * (8.0 + np.log10(h2o_dmf))
         return prof_gas, dict()
 
     def add_strat_prior(self, prof_gas, retrieval_date, mod_data, **kwargs):
@@ -3047,7 +3058,7 @@ def parse_args(parser=None):
     parser.add_argument('date_range', type=mod_utils.parse_date_range,
                         help='The range of dates to generate .vmr files for. May be given as YYYYMMDD-YYYYMMDD, or '
                              'YYYYMMDD_HH-YYYYMMDD_HH, where the ending date is exclusive. A single date may be given, '
-                             'in which case the ending date is assumed to be one day later.')
+                             '(YYYYMMDD) in which case the ending date is assumed to be one day later.')
     parser.add_argument('mod_dir', nargs='?', default=None,
                         help='Directory to read .mod files from. Note that the .mod files must be in this directory, '
                              'not a subdirectory. If you wish to specify a root directory for files organized by '
@@ -3064,7 +3075,8 @@ def parse_args(parser=None):
     parser.add_argument('-p', '--primary-gases-only', action='store_false', dest='std_vmr_file',
                         help='Write the VMRs only for the primary gases (CO2, N2O, CH4, HF, CO, H2O, and O3). The other '
                              'gases will not be included. This removes the need for a base .vmr file.')
-    parser.add_argument('-s', '--save-dir', help='Path to save .vmr files to. If not given, defaults to $GGGPATH/vmrs/gnd')
+    parser.add_argument('-s', '--save-path', dest='save_dir',
+                        help='Path to save .vmr files to. If not given, defaults to $GGGPATH/vmrs/gnd')
     parser.add_argument('--site', default='xx', choices=valid_site_ids, dest='site_abbrev',
                         help='Which site to generate priors for. Used to set the lat/lon looked for in the file name. '
                              'If an explicit lat and lon are given, those override this.')

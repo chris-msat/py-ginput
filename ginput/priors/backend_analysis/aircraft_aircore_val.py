@@ -63,17 +63,20 @@ Most relevant functions are probably:
 from __future__ import print_function, division
 import argparse
 from glob import glob
+import h5py
 from itertools import product
-
-from .backend_utils import read_atm_file
 from matplotlib import pyplot as plt
 import numpy as np
+import pandas as pd
 import re
 import os
 import sys
 
 from ...common_utils import mod_utils, readers
+from . import backend_utils as butils
+from .backend_utils import read_atm_file
 
+from jllutils import stats as jstats, plots as jplots
 
 _mydir = os.path.dirname(__file__)
 
@@ -295,7 +298,7 @@ def _get_id_info_from_atm_file(atmf, as_abs=True):
         lat = np.abs(lat)
         lon = np.abs(lon)
 
-    date_time = header_info['flight_date' if 'flight_date' in header_info else 'aircraft_date']
+    date_time = header_info['aircraft_floor_time_UTC']
 
     return lon, ew, lat, ns, date_time
 
@@ -335,7 +338,7 @@ def iter_matched_data_by_type(data_root, data_type, prof_type, **kwargs):
         yield i
 
 
-def iter_matched_data(atm_dir, map_dir, years=None, months=None, skip_missing_map=False, ret_filenames=False,
+def iter_matched_data(atm_dir, priors, years=None, months=None, skip_missing_map=False, ret_filenames=False,
                       include_filenames=False, specie=''):
     """
     Iterate over matched pairs of .atm and .map files.
@@ -382,11 +385,64 @@ def iter_matched_data(atm_dir, map_dir, years=None, months=None, skip_missing_ma
     :rtype: iterator of (:class:`pandas.DataFrame`, :class:`pandas.DataFrame`) OR (str, str) OR
      ((:class:`pandas.DataFrame`, str), (:class:`pandas.DataFrame`, str)) pairs.
     """
+    # If the priors argument is a directory, identify whether we're working with old- or new- style .map files. If its
+    # a file, then assume that it is a new priors .h5 file.
+    if os.path.isdir(priors):
+        for x in _iter_matched_data_with_map_files(atm_dir=atm_dir, map_dir=priors, years=years, months=months,
+                                                   skip_missing_map=skip_missing_map, ret_filenames=ret_filenames,
+                                                   include_filenames=include_filenames, specie=specie):
+            yield x
 
+    else:
+        for x in _iter_matched_data_with_h5_file(atm_dir=atm_dir, prior_h5_file=priors, specie=specie, years=years,
+                                                 months=months, include_filenames=include_filenames,
+                                                 ret_filenames=ret_filenames):
+            yield x
+
+
+def _iter_matched_data_with_h5_file(atm_dir, prior_h5_file, specie, years=None, months=None, include_filenames=False,
+                                    ret_filenames=False):
+    # List the available obs files, key by their basename. Make it a byte string because that's what's used in the h5
+    # file.
+    atm_files = glob(os.path.join(atm_dir, '*{}.atm'.format(specie)))
+    if len(atm_files) == 0:
+        raise IOError('No .atm files found in "{}" for specie "{}"'.format(atm_dir, specie))
+    atm_files = {os.path.basename(f).encode('utf8'): f for f in atm_files}
+
+    # Open the .h5 file. Iterate through all the .atm files we're trying to match. For all the priors with a given
+    # .atm file listed find the one that is closest in time - shouldn't need to worry about locations, but we produce
+    # 8+ files for each prior.
+    with h5py.File(prior_h5_file, 'r') as robj:
+        for atmf, atmfullfile in atm_files.items():
+            _, _, _, _, atm_datetime = _get_id_info_from_atm_file(atmfullfile)
+
+            if years is not None and atm_datetime.year not in years:
+                continue
+            elif months is not None and atm_datetime.month not in months:
+                continue
+
+            # nonzero will return one array of indices for each dimension of h5_atm_files. We only care about the first
+            # one, if there's a second dimension, then it just means multiple .atm files matched a single prior, and
+            # the first dimension is the one that corresponds to the prior
+            prior_ind = _h5_find_prior_for_obs(atmfullfile, prior_h5_file)
+
+            obs_data, _ = read_atm_file(atmfullfile)
+            prior_data = {k: robj['Priors']['Profiles'][k][prior_ind, :] for k in robj['Priors']['Profiles'].keys()}
+            prior_data = pd.DataFrame(prior_data)
+
+            if ret_filenames:
+                yield atmfullfile, None
+            elif include_filenames:
+                yield (obs_data, atmfullfile), (prior_data, None)
+            else:
+                yield obs_data, prior_data
+
+
+def _iter_matched_data_with_map_files(atm_dir, map_dir, years=None, months=None, skip_missing_map=False,
+                                      ret_filenames=False, include_filenames=False, specie=''):
     # List the available obs files
     atm_files = sorted(glob(os.path.join(atm_dir, '*{}.atm'.format(specie))))
 
-    # List one map file directory, just to determine which format they are. glob does not return . and ..
     example_map_dir = glob(os.path.join(map_dir, '*'))[0]
     map_file_fxn = _choose_map_file_function(os.path.basename(example_map_dir))
 
@@ -488,19 +544,49 @@ def find_map_for_obs(obs_file, map_dir, check_file_exists=True, map_file_fxn=Non
     :rtype: str
     :raises IOError: if ``check_file_exists`` is ``True`` and the .map file does not exist
     """
-    lon, ew, lat, ns, date_time = _get_id_info_from_atm_file(obs_file)
-    #lat += lat_change
-    #lon += lon_change
-    example_map_dir = glob(os.path.join(map_dir, '*'))[0]
-    if map_file_fxn is None:
-        map_file_fxn = _choose_map_file_function(os.path.basename(example_map_dir))
+    if os.path.isfile(map_dir):
+        return _h5_find_prior_for_obs(obs_file, map_dir)
+    else:
+        lon, ew, lat, ns, date_time = _get_id_info_from_atm_file(obs_file)
+        #lat += lat_change
+        #lon += lon_change
+        example_map_dir = glob(os.path.join(map_dir, '*'))[0]
+        if map_file_fxn is None:
+            map_file_fxn = _choose_map_file_function(os.path.basename(example_map_dir))
 
-    map_file = os.path.join(map_dir, map_file_fxn(lon, ew, lat, ns, date_time, precision=precision,
-                                                  lat_change=lat_change, lon_change=lon_change))
-    if check_file_exists and not os.path.isfile(map_file):
-        raise IOError('Could not find {} corresponding to atm file {}'.format(map_file, obs_file))
+        map_file = os.path.join(map_dir, map_file_fxn(lon, ew, lat, ns, date_time, precision=precision,
+                                                      lat_change=lat_change, lon_change=lon_change))
+        if check_file_exists and not os.path.isfile(map_file):
+            raise IOError('Could not find {} corresponding to atm file {}'.format(map_file, obs_file))
 
-    return map_file
+        return map_file
+
+
+def _h5_find_prior_for_obs(obs_file, prior_h5_file):
+    """
+    Find the index for the prior corresponding to a given .atm file in a prior HDF5 file
+
+    :param obs_file: the full path to the .atm file
+    :type obs_file: str
+
+    :param prior_h5_file: the path to the prior HDF5 file
+    :type prior_h5_file: str
+
+    :return: the index of the prior in the HDF5 file.
+    """
+    atmf = os.path.basename(obs_file).encode('utf8')  # convert to bytes because that's what's in the h5 file
+    _, _, _, _, atm_datetime = _get_id_info_from_atm_file(obs_file)
+
+    with h5py.File(prior_h5_file, 'r') as robj:
+        prior_datetimes = butils.datenum_to_timestamps(robj['Priors']['Scalars']['datetime'][:])
+        h5_atm_files = robj['atm_files'][:]
+
+        # nonzero will return one array of indices for each dimension of h5_atm_files. We only care about the first
+        # one, if there's a second dimension, then it just means multiple .atm files matched a single prior, and
+        # the first dimension is the one that corresponds to the prior
+        prior_ind = np.nonzero(h5_atm_files == atmf)[0]
+        imin = np.abs(prior_datetimes[prior_ind] - atm_datetime).argmin()
+        return prior_ind[imin]
 
 
 def load_as_array_by_type(data_root, data_type, prof_type, **kwargs):
@@ -690,11 +776,23 @@ def interp_profile_to_obs(obsdat, mapdat, specie, ztype='pres', obs_file=None, m
 
     # if we only want profile levels above the surface, get the surface altitude and the altitude profile (regardless
     # of z_type) and cut down the profile
+
     if limit_by_zsurf or ztype == 'alt-trop':
         if obs_file is None or map_dir is None:
             raise TypeError('obs_file and map_dir are needed if limit_by_zsurf is True or ztype == "alt-trop"')
         py_map_file = find_map_for_obs(obs_file, map_dir)
-        full_py_mapdate = readers.read_map_file(py_map_file)
+        if isinstance(py_map_file, str):
+            full_py_mapdate = readers.read_map_file(py_map_file)
+        else:
+            with h5py.File(map_dir, 'r') as h5f:
+                full_py_mapdate = {'constants': dict()}
+                full_py_mapdate['constants']['Surface altitude'] = h5f['Models']['Scalars']['Height'][py_map_file]
+
+                ptrop = h5f['Models']['Scalars']['TROPPB'][py_map_file]
+                pvec = h5f['Models']['Profiles']['Pressure'][py_map_file]
+                zvec = h5f['Models']['Profiles']['Height'][py_map_file]
+                trop_z = mod_utils.interp_tropopause_height_from_pressure(ptrop, pvec, zvec)
+                full_py_mapdate['constants']['Tropopause'] = trop_z
 
     if limit_by_zsurf:
         z_surf = full_py_mapdate['constants']['Surface altitude']
@@ -904,10 +1002,10 @@ def plot_bias_spaghetti(obs_profiles, prior_profiles, z, ax=None, color=None, me
     elif mean_color is None:
         mean_color = color
 
-    diff = (obs_profiles - prior_profiles).T
+    diff = (prior_profiles - obs_profiles).T
     ax.plot(diff, z, color=color, linewidth=0.5)
     ax.plot(np.nanmean(diff, axis=1), z, color=mean_color, linewidth=2)
-    ax.set_xlabel('Observations - priors')
+    ax.set_xlabel('Priors - observations')
     ax.grid()
 
     return fig, ax
@@ -976,6 +1074,94 @@ def plot_profiles_comparison(obs_file, data_roots, data_type, prof_type='py', zt
         ax.legend()
 
     return fig, ax
+
+
+def _load_lat_binned_data(atm_dir, priors, specie, pbl_top):
+    aircraft, priors, z, prof_info = load_binned_array(atm_dir, priors, specie)
+
+    diffs = priors - aircraft
+    if pbl_top is not None:
+        diffs = diffs[:, z > pbl_top]
+        priors = priors[:, z > pbl_top]
+        aircraft = aircraft[:, z > pbl_top]
+
+    lats = prof_info['lat']
+    lats = np.broadcast_to(lats.reshape(-1, 1), diffs.shape)
+
+    diffs_flat = diffs.flatten()
+    priors_flat = priors.flatten()
+    obs_flat = aircraft.flatten()
+    lats_flat = lats.flatten()
+
+    lat_bin_edges = np.arange(-90, 91, 20.)
+
+    data_dict = dict()
+    data_dict['mean_diffs'], lat_bins = jstats.bin_1d(diffs_flat, lats_flat, lat_bin_edges, ret_bins='centers', op=np.nanmean)
+    data_dict['std_diffs'] = jstats.bin_1d(diffs_flat, lats_flat, lat_bin_edges, op=np.nanstd)
+    data_dict['mean_priors'] = jstats.bin_1d(priors_flat, lats_flat, lat_bin_edges, op=np.nanmean)
+    data_dict['std_priors'] = jstats.bin_1d(priors_flat, lats_flat, lat_bin_edges, op=np.nanstd)
+    data_dict['mean_obs'] = jstats.bin_1d(obs_flat, lats_flat, lat_bin_edges, op=np.nanmean)
+    data_dict['std_obs'] = jstats.bin_1d(obs_flat, lats_flat, lat_bin_edges, op=np.nanstd)
+
+    raw_dict = dict()
+    raw_dict['diffs'] = diffs
+    raw_dict['priors'] = priors
+    raw_dict['aircraft'] = aircraft
+
+    return data_dict, raw_dict, lat_bins
+
+
+def plot_lat_bias(atm_dir, prior_file, specie, unit, pbl_top=None, data_ax=True, diff_ax=True):
+    are_bools = [isinstance(data_ax, bool), isinstance(diff_ax, bool)]
+    are_true = [data_ax is True, diff_ax is True]
+    if any(are_true) and not all(are_bools):
+        raise TypeError('Cannot create axes and have axes passed in the same call')
+    elif any(are_true):
+        make_axes = True
+    else:
+        make_axes = False
+
+    fancy_specie = re.sub(r'(\d+)', r'$_\1$', specie).upper()
+    aircraft, priors, z, prof_info = load_binned_array(atm_dir, prior_file, specie)
+
+    if pbl_top is not None:
+        priors = priors[:, z > pbl_top]
+        ylabel_z = 'below {} hPa '.format(pbl_top)
+    else:
+        ylabel_z = ''
+
+    lat_binned_dict, _, lat_bins = _load_lat_binned_data(atm_dir, prior_file, specie, pbl_top)
+
+    if make_axes:
+        nplots = data_ax + diff_ax
+        fig = plt.figure(figsize=(6*nplots, 5))
+
+    iplot = 1
+    if data_ax:
+        if make_axes:
+            data_ax = fig.add_subplot(1, nplots, iplot)
+            iplot += 1
+        data_ax.plot(lat_bins, lat_binned_dict['mean_priors'], color='b', label='Priors')
+        jplots.plot_error_bar(data_ax, lat_bins, lat_binned_dict['mean_priors'], lat_binned_dict['std_priors'],
+                              color='b', linewidth=2)
+        data_ax.plot(lat_bins, lat_binned_dict['mean_obs'], color='r', label='Obs')
+        jplots.plot_error_bar(data_ax, lat_bins, lat_binned_dict['mean_obs'], lat_binned_dict['std_obs'],
+                              color='r', linewidth=2)
+        data_ax.legend()
+        data_ax.set_ylabel(r'Mean [{specie}] {vertical}({unit})'.format(specie=fancy_specie, vertical=ylabel_z, unit=unit))
+        data_ax.set_xlabel('Latitude')
+        data_ax.grid()
+
+    if diff_ax:
+        if make_axes:
+            diff_ax = fig.add_subplot(1, nplots, iplot)
+            iplot += 1
+        diff_ax.plot(lat_bins, lat_binned_dict['mean_diffs'], color='k')
+        jplots.plot_error_bar(diff_ax, lat_bins, lat_binned_dict['mean_diffs'], lat_binned_dict['std_diffs'],
+                              color='k', linewidth=2)
+        diff_ax.set_xlabel('Latitude')
+        diff_ax.set_ylabel(r'Mean $\Delta$[{specie}] {vertical}({unit})'.format(specie=fancy_specie, vertical=ylabel_z, unit=unit))
+        diff_ax.grid()
 
 
 def _get_std_bins(ztype, bin_edges=None, bin_centers=None):

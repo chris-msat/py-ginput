@@ -1072,7 +1072,7 @@ def parse_vmr_args(parser):
     parse_args(parser)
 
     parser.set_defaults(mode='fpit-eta', include_chm=True)
-    parser.epilog = "Defaults have been set to produce the right format of file for TCCON GGG2019 use " \
+    parser.epilog = "Defaults have been set to produce the right format of file for TCCON GGG2020 use " \
                     "(--mode=fpit-eta, --include-chem)."
 
 

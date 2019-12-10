@@ -1,5 +1,6 @@
 from __future__ import print_function
 
+from argparse import ArgumentParser
 import datetime as dt
 from glob import glob
 from hashlib import sha1
@@ -94,33 +95,34 @@ def download_test_geos_data(rebuild=False, rebuild_hash_only=False):
     if not rebuild and not rebuild_hash_only:
         if not check_hash_list(geos_sha_file):
             print('One or more SHA1 hashes for GEOS FP files do not match expected, or files are missing.\n'
-                  'Redownload now (~1 GB)? (y to download, anything else to abort)')
+                  'Redownload now (~2 GB)? (y to download, anything else to abort)')
             user_ans = input('')
             if user_ans.lower().strip() != 'y':
-                raise UserCancelledDownloadError('User elected not to download GEOS FP data')
+                raise UserCancelledDownloadError('User elected not to download GEOS FPIT data')
 
         else:
             return
 
     if not rebuild_hash_only:
-        if os.path.exists(os.path.join(geos_fp_dir, 'Np')):
-            shutil.rmtree(os.path.join(geos_fp_dir, 'Np'))
+        if os.path.exists(os.path.join(geos_fp_dir, 'Nv')):
+            shutil.rmtree(os.path.join(geos_fp_dir, 'Nv'))
         if os.path.exists(os.path.join(geos_fp_dir, 'Nx')):
             shutil.rmtree(os.path.join(geos_fp_dir, 'Nx'))
 
-        get_GEOS5.driver(date_range=[test_date, test_date+dt.timedelta(days=1)], mode='FP', path=geos_fp_dir)
+        get_GEOS5.driver(date_range=[test_date, test_date+dt.timedelta(days=1)], mode='FPIT', path=geos_fp_dir,
+                         filetypes=('met', 'met', 'chm'), levels=('surf', 'eta', 'eta'))
 
     if rebuild or rebuild_hash_only:
         surf_files = glob(os.path.join(geos_fp_dir, 'Nx', 'GEOS*.nc4'))
-        prof_files = glob(os.path.join(geos_fp_dir, 'Np', 'GEOS*.nc4'))
+        prof_files = glob(os.path.join(geos_fp_dir, 'Nv', 'GEOS*.nc4'))
         all_files = sorted(surf_files + prof_files)
         write_hash_list(geos_sha_file, all_files)
     elif not check_hash_list(geos_sha_file):
         raise InputDataMismatchError('After downloading the GEOS FP data, the hashes still do not match what is '
-                                     'expected. The most likely explanation is that a new version of GEOS FP was '
+                                     'expected. The most likely explanation is that a new version of GEOS-FPIT was '
                                      'released. If you are not a maintainer for GGG, please contact one and provide '
                                      'this error message. If you are a maintainer, then you will need to rerun the '
-                                     'test suite with the new GEOS FP version and ensure the correct .mod files are '
+                                     'test suite with the new GEOS-FPIT version and ensure the correct .mod files are '
                                      'produced, then update the SHA1 hash file.')
 
 
@@ -152,3 +154,34 @@ def _iter_file_pairs(pattern, base_dir, test_dir):
                                              'looking for {}.'.format(base_file, test_file))
             else:
                 yield base_file, test_file
+
+
+def parse_args():
+    p = ArgumentParser(description='Download GEOS test data, check the hashes, or update the hashes')
+    subp = p.add_subparsers()
+
+    getp = subp.add_parser('get')
+    getp.description = 'Download GEOS FPIT data to run the unit test'
+    getp.add_argument('--rebuild', action='store_true', help='Rebuild the hash file once the GEOS FPIT data is '
+                                                             'downloaded.')
+    getp.set_defaults(driver_fxn=download_test_geos_data)
+
+    checkp = subp.add_parser('check')
+    checkp.description = 'Check the hashes of the GEOS FPIT data against those stored'
+    checkp.set_defaults(driver_fxn=check_hash_list, hash_list_filename=geos_sha_file)
+
+    updatep = subp.add_parser('update', aliases=['up'])
+    updatep.description = 'Update the list of SHA hashes for the necessary GEOS FPIT files'
+    updatep.set_defaults(driver_fxn=download_test_geos_data, rebuild_hash_only=True)
+
+    return vars(p.parse_args())
+
+
+def main():
+    cl_args = parse_args()
+    driver_fxn = cl_args.pop('driver_fxn')
+    driver_fxn(**cl_args)
+
+
+if __name__ == '__main__':
+    main()
