@@ -1367,6 +1367,9 @@ class MidlatTraceGasRecord(TraceGasRecord):
         ptrop = mod_data['scalar']['TROPPB']
         ztrop = mod_utils.interp_tropopause_height_from_pressure(p_trop_met=ptrop, p_met=p, z_met=z)
 
+        # I kept the geographic lat here because this is doing both the troposphere and stratosphere. This could
+        # potentially be updated to happen separately in the troposphere and stratosphere methods and use the
+        # respective eq. lats - JLL 2019-11-26
         prof_gas[:] = self.resample_vmrs_at_effective_altitudes(z=z, itcz_lat=itcz_lat, itcz_width=itcz_width,
                                                                 ztrop_mod=ztrop, obslat_mod=obs_lat)
 
