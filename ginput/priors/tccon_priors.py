@@ -2021,7 +2021,7 @@ class HDORecord(TraceGasRecord):
 
     def add_trop_prior(self, prof_gas, obs_date, obs_lat, mod_data, **kwargs):
         h2o_dmf = mod_data['profile']['H2O']
-        prof_gas[:] = h2o_dmf * 0.16 * (8.0 + np.log10(h2o_dmf))
+        prof_gas[:] = h2o_dmf * 0.14 * (8.0 + np.log10(h2o_dmf))
         return prof_gas, dict()
 
     def add_strat_prior(self, prof_gas, retrieval_date, mod_data, **kwargs):
