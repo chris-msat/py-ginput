@@ -343,6 +343,22 @@ def make_priors(prior_save_file, mod_dir, gas_name, acdates, aclons, aclats, acf
             these_args = (f, gas_rec, zgrid_file)
             prior_args.append(these_args)
 
+    atm_files_by_mod = _make_mod_atm_map(acdates=acdate_strings, aclons=aclons, aclats=aclats, acfiles=acfiles)
+    mod_files_in_order = [args[0] for args in prior_args]
+    atm_files = [atm_files_by_mod[os.path.basename(f)] for f in mod_files_in_order]
+    atm_files_flat = []
+    for f in atm_files:
+        atm_files_flat += f
+
+    nmissing = 0
+    for f in acfiles:
+        if f not in atm_files_flat:
+            nmissing += 1
+            print('.mod files necessary for {} were missing!'.format(f))
+
+    if nmissing > 0:
+        raise RuntimeError('{} .mod files were missing!'.format(nmissing))
+    
     if nprocs == 0:
         results = []
         for args in prior_args:
@@ -351,9 +367,6 @@ def make_priors(prior_save_file, mod_dir, gas_name, acdates, aclons, aclats, acf
         with Pool(processes=nprocs) as pool:
             results = pool.starmap(_prior_helper, prior_args)
 
-    atm_files_by_mod = _make_mod_atm_map(acdates=acdate_strings, aclons=aclons, aclats=aclats, acfiles=acfiles)
-    mod_files_in_order = [args[0] for args in prior_args]
-    atm_files = [atm_files_by_mod[os.path.basename(f)] for f in mod_files_in_order]
     _write_priors_h5(prior_save_file, results, atm_files, mod_files_in_order)
 
 
