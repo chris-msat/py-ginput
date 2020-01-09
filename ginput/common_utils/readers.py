@@ -73,6 +73,29 @@ def read_mod_file(mod_file, as_dataframes=False):
     return out_dict
 
 
+def read_mod_file_units(mod_file):
+    """
+    Get the units for the profile variables in a .mod file
+
+    :param mod_file: the .mod file to read
+    :type mod_file: str
+
+    :return: a dictionary with the variable names as keys and the units as values.
+    """
+    n_header_lines = mod_utils.get_num_header_lines(mod_file)
+    # Assume that the profile units are the second to last line of the header
+    # and the profile variable names are the last line
+    with open(mod_file, 'r') as robj:
+        for i in range(n_header_lines):
+            line = robj.readline()
+            if i == (n_header_lines-2):
+                units = line.split()
+            elif i == (n_header_lines-1):
+                names = line.split()
+
+    return {n: u for n, u in zip(names, units)}
+ 
+
 def read_map_file(map_file, as_dataframes=False, skip_header=False):
     """
     Read a .map file
