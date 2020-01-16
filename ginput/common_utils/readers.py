@@ -10,6 +10,15 @@ from . import mod_utils
 from .mod_utils import ModelError
 
 
+def read_out_file(out_file, as_dataframes=False):
+    n_header_lines = mod_utils.get_num_header_lines(out_file)
+    df = pd.read_csv(out_file, header=n_header_lines-1, sep='\s+')
+    if not as_dataframes:
+        return df.to_dict()
+    else:
+        return df
+
+
 def read_mod_file(mod_file, as_dataframes=False):
     """
     Read a TCCON .mod file.

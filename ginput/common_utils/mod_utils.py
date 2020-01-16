@@ -1568,7 +1568,8 @@ def hf_ch4_slope_fit(yrs, a, b, c, t0):
 def isoutlier(data, m=2):
     d = np.abs(data - np.nanmedian(data))
     mdev = np.nanmedian(d)
-    s = d / mdev if mdev else 0.
+    s = d / mdev if mdev else np.zeros_like(data)
+    
     return s >= m
 
 
