@@ -8,6 +8,7 @@ from subprocess import Popen, PIPE, STDOUT, CalledProcessError
 import sys
 
 from . import download_utils as dlutils
+from ..common_utils import mod_utils, readers
 from ..common_utils.ggg_logging import logger
 
 ####################
@@ -138,6 +139,22 @@ def _parse_level_types(clinput):
     return clinput
 
 
+def _add_common_args(parser):
+    parser.add_argument('--mode', choices=list(_func_dict.keys()), default='FP',
+                        help='Which GEOS product to get. The default is %(default)s. Note that to retrieve FP-IT data '
+                             'requires a subscription with NASA (https://gmao.gsfc.nasa.gov/GMAO_products/)')
+    parser.add_argument('--path', default='.',
+                        help='Where to download the GEOS data to, "%(default)s" by default. Data '
+                             'will be placed in Np, Nv, and Nx subdirectories automatically '
+                             'created in this directory.')
+    parser.add_argument('-t', '--filetypes', default=None, choices=_file_types,
+                        help='Which file types to download. Works in conjunction with --levels to determine which '
+                             'files to download.')
+    parser.add_argument('-l', '--levels', default=None, choices=_level_types,
+                        help='Which level type to download. Note that only "eta" levels are available for the "chm" '
+                             'file type.')
+
+
 def parse_args(parser=None):
     description = 'Download GEOSFP or GEOSFP-IT reanalysis met data'
     if parser is None:
@@ -148,18 +165,7 @@ def parse_args(parser=None):
         am_i_main = False
 
     parser.add_argument('date_range', type=dlutils.parse_date_range_no_hm, help=dlutils.date_range_cl_help(False))
-    parser.add_argument('--mode', choices=list(_func_dict.keys()), default='FP',
-                        help='Which GEOS product to get. The default is %(default)s. Note that to retrieve FP-IT data '
-                             'requires a subscription with NASA (https://gmao.gsfc.nasa.gov/GMAO_products/)')
-    parser.add_argument('--path', default='.', help='Where to download the GEOS data to, "%(default)s" by default. Data '
-                                                    'will be placed in Np, Nv, and Nx subdirectories automatically '
-                                                    'created in this directory.')
-    parser.add_argument('-t', '--filetypes', default=None, choices=_file_types,
-                        help='Which file types to download. Works in conjunction with --levels to determine which '
-                             'files to download.')
-    parser.add_argument('-l', '--levels', default=None, choices=_level_types,
-                        help='Which level type to download. Note that only "eta" levels are available for the "chm" '
-                             'file type.')
+    _add_common_args(parser)
     parser.epilog = 'If both --filetypes and --levels are omitted, then the legacy behavior is to download met data ' \
                     'for the surface and on fixed pressure levels. However, if one is given, then both must be given.'
 
@@ -172,6 +178,19 @@ def parse_args(parser=None):
         return args
     else:
         parser.set_defaults(driver_fxn=driver)
+
+
+def parse_runlog_args(parser=None):
+    parser.description = 'Download GEOSFP or GEOSFP-IT data for all spectra in a runlog'
+    parser.add_argument('runlog', help='The path to the runlog file to download GEOS files for')
+    parser.add_argument('--first-date', default='2000-01-01',
+                        help='The earliest date to try to download data for; if the runlog contains spectra from '
+                             'before this date, they are ignored. Default is "%(default)s."')
+    parser.add_argument('--last-date', default=None,
+                        help='The latest date to try to download data for; if the runlog contains spectra from after '
+                             'this date, they are ignored.')
+    _add_common_args(parser)
+    parser.set_defaults(driver_fxn=runlog_driver)
 
 
 def check_types_levels(filetypes, levels):
@@ -195,6 +214,29 @@ def check_types_levels(filetypes, levels):
         raise ValueError('filetypes and levels must be the same length, if multiple options are given as lists/tuples')
 
     return filetypes, levels
+
+
+def runlog_driver(runlog, path='', product='FP', filetype=_default_file_type, levels=_default_level_type,
+                  first_date=None, last_date=None):
+    try:
+        # I've had bad luck trying to slice index a DatetimeIndex with timestamps, so convert first and last dates to
+        # strings before slicing the runlog
+        if first_date is not None and not isinstance(first_date, str):
+            first_date = first_date.strftime('%Y-%m-%d %H:%M:%S')
+        if last_date is not None and not isinstance(last_date, str):
+            last_date = last_date.strftime('%Y-%m-%d %H:%M:%S')
+    except AttributeError:
+        raise TypeError('first_date and last_date must be Nones, strings, or date-like objects')
+
+    # Get the dates that the runlog will require
+    rldf = readers.read_runlog(runlog, as_dataframes=True)
+    rldf.set_index(mod_utils.ydh_to_date(rldf['Year'], rldf['Day'], rldf['Hour']), inplace=True)
+    xx_dates = slice(first_date, last_date)
+    rldf = rldf[xx_dates]
+    geos_date_ranges = mod_utils.get_runlog_geos_date_ranges(rldf)
+
+    for drange in geos_date_ranges:
+        driver(drange, mode=product.upper(), path=path, filetypes=filetype, levels=levels)
 
 
 def driver(date_range, mode='FP', path='.', filetypes=_default_file_type, levels=_default_level_type,

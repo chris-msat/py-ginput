@@ -36,6 +36,9 @@ def parse_args():
     get_g5_parser = subparsers.add_parser('getg5', help='Download GEOS5 FP or FP-IT data')
     get_GEOS5.parse_args(get_g5_parser)
 
+    get_rlg5_parser = subparsers.add_parser('get-rl-g5', help='Download GEOS5 FP or FP-IT data for spectra in a runlog')
+    get_GEOS5.parse_runlog_args(get_rlg5_parser)
+
     return vars(parser.parse_args())
 
 

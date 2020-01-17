@@ -2206,3 +2206,8 @@ def make_geos_date_ranges(dates):
     # time will go in the final date range)
     date_ranges.append((range_start, last_date+geos_tdel))
     return date_ranges
+
+
+def get_runlog_geos_date_ranges(rldf):
+    rl_dates = ydh_to_date(rldf['Year'], rldf['Day'], rldf['Hour'])
+    return make_geos_date_ranges(rl_dates)

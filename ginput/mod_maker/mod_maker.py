@@ -2229,7 +2229,7 @@ def runlog_driver(runlog, site_abbrv=None, omit_pre2000=True, **kwargs):
         xx_dates = rl_dates >= '2000-01-01'
         rldf = rldf[xx_dates]
 
-    date_ranges = mod_utils.make_geos_date_ranges(rldf.index)
+    date_ranges = mod_utils.get_runlog_geos_date_ranges(rldf)
 
     if site_abbrv is None:
         # If no site abbreviation given, assume that the site abbreviations are the first two letters of each spectrum
