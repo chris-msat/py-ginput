@@ -67,6 +67,4 @@ pip install -e .
 
 # After installation, create a version of run_ginput set up to use the environment
 # Have the makefile call this with a default environment name, allow that to be overridden as a setting
-echo "#!$(which python)" > run_ginput.py
-tail -n+2 .run_ginput_template.py >> run_ginput.py
-chmod u+x run_ginput.py
+./install-runscript.sh

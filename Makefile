@@ -6,6 +6,9 @@ help:
 install:
 	./install.sh $(ENV)
 
+run_ginput.py: .run_ginput_template.py
+	./install-runscript.sh
+
 test: test-profiles test-utils
 
 quicktest: test-utils
