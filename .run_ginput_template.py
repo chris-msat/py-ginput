@@ -19,8 +19,16 @@ def parse_args():
     mod_maker.parse_args(mm_parser)
 
     mm_tccon_parser = subparsers.add_parser('tccon-mod', help='Generate .mod (model) files appropriate for use with '
-                                                              'TCCON GGG2019 retrievals.')
+                                                              'TCCON GGG2020 retrievals.')
     mod_maker.parse_vmr_args(mm_tccon_parser)
+
+    mmrl_parser = subparsers.add_parser('rlmod', help='Generate .mod (model) files for spectra enumerated in a runlog')
+    mod_maker.parse_runlog_args(mmrl_parser)
+
+    mmrl_tccon_parser = subparsers.add_parser('tccon-rlmod', help='Generate .mod (model) files appropriate for use with'
+                                                                  ' TCCON GGG2020 retrievals for spectra enumerated in'
+                                                                  ' a runlog.')
+    mod_maker.parse_vmr_args(mmrl_tccon_parser, backend=mod_maker.parse_runlog_args)
 
     vmr_parser = subparsers.add_parser('vmr', help='Generate full .vmr files for GGG')
     tccon_priors.parse_args(vmr_parser)

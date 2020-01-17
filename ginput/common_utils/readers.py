@@ -248,3 +248,44 @@ def read_vmr_file(vmr_file, as_dataframes=False, lowercase_names=True, style='ne
         data_table = OrderedDict([(k, v.to_numpy()) for k, v in data_table.items()])
 
     return {'scalar': header_data, 'profile': data_table, 'prior_info': prior_info}
+
+
+def read_runlog(runlog_file, as_dataframes=False, remove_commented_lines=True):
+    nhead = mod_utils.get_num_header_lines(runlog_file)
+    with open(runlog_file, 'r') as robj:
+        for i in range(nhead-2):
+            # Skip ahead to the last two lines of the header which contain the fortran format specification and the
+            # column names
+            robj.readline()
+
+        fmt_line = robj.readline()
+        # we need to read the column names twice. read_fwf expects the first line it reads to be the column names but
+        # with the right widths. Since that's not the case for the runlog, we read in the line manually once (to parse
+        # later into the proper column names) then rewind the file pointed to the beginning of that line so that
+        # read_fwf reads it in as the column names. It'll get them wrong, but at least it doesn't stick a data row in
+        # as the header.
+        pos = robj.tell()
+        column_names_line = robj.readline()
+        robj.seek(pos)
+
+        # the format line will be something like: "format=(a1,a57,1x,2i4,f8.4,f8.3,f9.3,...)\n"; we want to pass only
+        # the part inside the parentheses (including the parentheses)
+        colspecs, _ = mod_utils.fortran_fmt_to_fwf_tuples(fmt_line.split('=')[1].strip())
+        df = pd.read_fwf(robj, colspecs=colspecs)
+
+        # Fix the header. The first column is just where the colon goes if the line is commented out so we have to give
+        # that a name (there isn't one in the header)
+        column_names = column_names_line.split()
+        df.columns = ['comment'] + column_names_line.split()
+
+        # Remove comments if requested.
+        if remove_commented_lines:
+            df = df[~(df['comment'] == ':')]
+
+        # Always remove the comment column itself
+        df = df[column_names]
+
+        if as_dataframes:
+            return df
+        else:
+            return df.to_dict()

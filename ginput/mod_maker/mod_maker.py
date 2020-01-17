@@ -100,7 +100,7 @@ from pydap.cas.urs import setup_session # used to connect to the merra opendap s
 import xarray
 import warnings
 
-from ..common_utils import mod_utils
+from ..common_utils import mod_utils, readers
 from ..common_utils.mod_utils import gravity, check_site_lat_lon_alt
 from ..common_utils.mod_constants import ratio_molec_mass as rmm, p_ussa, t_ussa, z_ussa, mass_dry_air
 from ..common_utils.ggg_logging import logger
@@ -995,6 +995,37 @@ def equivalent_latitude_functions(ncdf_path,mode,start=None,end=None,muted=False
 
     return func_dict
 
+
+def _add_common_args(parser):
+    parser.add_argument('met_path',
+                        help='Path to the meteorology FP(-IT) netCDF files. Must be directory with subdirectories '
+                             'Nx and Np or Nv, containing surface and profile paths respectively.')
+    parser.add_argument('--chem-path', default=None, help='Path to the chemistry FP(-IT) files. Must be a directory '
+                                                          'with subdirectory Nv containing the chm netCDF files. If '
+                                                          'not given, it is assumed that these files are stored with '
+                                                          'the regular met data.')
+    parser.add_argument('-s', '--save-path',
+                        help='Location to save .mod files to. Subdirectories organized by met type, '
+                             'site, and vertical/slant .mod files will be created. If not given, '
+                             'will attempt to save files under $GGGPATH/models/gnd')
+    parser.add_argument('--keep-latlon-prec', action='store_true',
+                        help='Retain lat/lon to 2 decimals in the .mod file names')
+    parser.add_argument('--save-in-local', action='store_false', dest='save_in_utc',
+                        help='Use local time in .mod file name, instead of UTC')
+    parser.add_argument('-c', '--include-chem', action='store_true', dest='include_chm',
+                        help='Include chemistry variables (CO) in the .mod files. Note that this is necessary if the '
+                             '.mod files are to be used to generate GGG2019+ .vmr files.')
+    parser.add_argument('-q', '--quiet', dest='muted', action='store_true', help='Suppress log output to command line.')
+    parser.add_argument('--slant', action='store_true', help='Generate slant .mod files, in addition to vertical .mod '
+                                                             'files.')
+    parser.add_argument('--mode', choices=_old_modmaker_modes + _new_modmaker_modes, default=_default_mode,
+                        help='If one of {old} is chosen, mod_maker uses the old code with time interpolation. If one '
+                             'of {new} is chosen, it uses the new code that generates 8x mod files per day. "{fixedp}" '
+                             'expects fixed pressure level GEOS files; "{eta}" expects native 72 level GEOS files.'
+                        .format(old=', '.join(_old_modmaker_modes), new=', '.join(_new_modmaker_modes),
+                                fixedp=_new_fixedp_mode, eta=_new_native_mode))
+
+
 def parse_args(parser=None):
     """
     parse commandline arguments (see code header or README.md)
@@ -1014,24 +1045,6 @@ def parse_args(parser=None):
                         help='The range of dates to generate .mod files for. May be given as YYYYMMDD-YYYYMMDD, or '
                              'YYYYMMDD_HH-YYYYMMDD_HH, where the ending date is exclusive. A single date may be given, '
                              'in which case the ending date is assumed to be one day later.')
-    parser.add_argument('met_path', help='Path to the meteorology FP(-IT) netCDF files. Must be directory with subdirectories '
-                                          'Nx and Np or Nv, containing surface and profile paths respectively.')
-    parser.add_argument('--chem-path', default=None, help='Path to the chemistry FP(-IT) files. Must be a directory '
-                                                          'with subdirectory Nv containing the chm netCDF files. If '
-                                                          'not given, it is assumed that these files are stored with '
-                                                          'the regular met data.')
-    parser.add_argument('-s', '--save-path', help='Location to save .mod files to. Subdirectories organized by met type, '
-                                                  'site, and vertical/slant .mod files will be created. If not given, '
-                                                  'will attempt to save files under $GGGPATH/models/gnd')
-    parser.add_argument('--keep-latlon-prec', action='store_true', help='Retain lat/lon to 2 decimals in the .mod file names')
-    parser.add_argument('--save-in-local', action='store_false', dest='save_in_utc',
-                        help='Use local time in .mod file name, instead of UTC')
-    parser.add_argument('-c', '--include-chem', action='store_true', dest='include_chm',
-                        help='Include chemistry variables (CO) in the .mod files. Note that this is necessary if the '
-                             '.mod files are to be used to generate GGG2019+ .vmr files.')
-    parser.add_argument('-q', '--quiet', dest='muted', action='store_true', help='Suppress log output to command line.')
-    parser.add_argument('--slant', action='store_true', help='Generate slant .mod files, in addition to vertical .mod '
-                                                             'files.')
     parser.add_argument('--alt', type=float, help='Site altitude in meters, if defining a custom site.')
     parser.add_argument('--lon', type=float, help='Site longitude in degrees east, if defining a custom site. Values '
                                                   'should be positive; i.e. 90 W should be given as 270.')
@@ -1039,12 +1052,7 @@ def parse_args(parser=None):
     parser.add_argument('--site', dest='site_abbrv', choices=valid_site_ids, help='Two-letter site abbreviation. '
                                                                                   'Providing this will produce .mod '
                                                                                   'files only for that site.')
-    parser.add_argument('--mode', choices=_old_modmaker_modes + _new_modmaker_modes, default=_default_mode,
-                        help='If one of {old} is chosen, mod_maker uses the old code with time interpolation. If one '
-                             'of {new} is chosen, it uses the new code that generates 8x mod files per day. "{fixedp}" '
-                             'expects fixed pressure level GEOS files; "{eta}" expects native 72 level GEOS files.'
-                             .format(old=', '.join(_old_modmaker_modes), new=', '.join(_new_modmaker_modes),
-                                     fixedp=_new_fixedp_mode, eta=_new_native_mode))
+    _add_common_args(parser)
 
     if am_i_main:
         arg_dict = vars(parser.parse_args())
@@ -1053,15 +1061,40 @@ def parse_args(parser=None):
         arg_dict['start_date'], arg_dict['end_date'] = arg_dict['date_range']
         if arg_dict['end_date'] < arg_dict['start_date']:
             shell_error('Error: end of date range (if given) must be after the start')
-        if not os.path.exists(arg_dict['GEOS_path']):
-            shell_error('Given GEOS data path ({}) does not exist'.format(arg_dict['GEOS_path']))
+        if not os.path.exists(arg_dict['met_path']):
+            shell_error('Given GEOS data path ({}) does not exist'.format(arg_dict['met_path']))
 
         return arg_dict
     else:
         parser.set_defaults(driver_fxn=driver)
 
 
-def parse_vmr_args(parser):
+def parse_runlog_args(parser=None):
+    if parser is None:
+        parser = argparse.ArgumentParser()
+        am_i_main = True
+    else:
+        am_i_main = False
+    parser.description = 'Generate .mod files for all spectra in a given runlog'
+    parser.add_argument('runlog', help='Path to the runlog file. .mod files will be created for each unique lat/lon/'
+                                       'date combination in the runlog (with date rounded to the nearest GEOS time).')
+    parser.add_argument('--site', dest='site_abbrv', default=None,
+                        help='The two letter site ID to use when organizing the output .mod files into folders. The '
+                             'default behavior is to take the first two letters of each spectrum as the site ID. Pass '
+                             'a single ID with this option to override that. Currently there is no way to pass '
+                             'multiple IDs from the command line.')
+
+    _add_common_args(parser)
+    if am_i_main:
+        arg_dict = vars(parser.parse_args())
+        if not os.path.exists(arg_dict['met_path']):
+            shell_error('Given GEOS data path ({}) does not exist'.format(arg_dict['met_path']))
+        return arg_dict
+    else:
+        parser.set_defaults(driver_fxn=runlog_driver)
+
+
+def parse_vmr_args(parser, backend=parse_args):
     """
 
     :param parser:
@@ -1069,7 +1102,7 @@ def parse_vmr_args(parser):
     :return:
     """
     # configure all the options
-    parse_args(parser)
+    backend(parser)
 
     parser.set_defaults(mode='fpit-eta', include_chm=True)
     parser.epilog = "Defaults have been set to produce the right format of file for TCCON GGG2020 use " \
@@ -2167,6 +2200,52 @@ def mod_maker(site_abbrv=None,start_date=None,end_date=None,mode=None,locations=
 
     if not muted:
         print(len(local_date_list),'mod files written')
+
+
+def runlog_driver(runlog, site_abbrv=None, omit_pre2000=True, **kwargs):
+    def _reduce_lat_lons(df):
+        slla = []
+        for (site, lon, lat), ll_df in df.groupby(['site', 'oblon', 'oblat']):
+            if not np.isclose(df['obalt'], df['obalt'][0]).all():
+                lon_str = mod_utils.format_lon(lon)
+                lat_str = mod_utils.format_lat(lat)
+                first_date = ll_df.index.min().strftime('%Y-%m-%d %H:%M:%S')
+                last_date = ll_df.index.min().strftime('%Y-%m-%d %H:%M:%S')
+                print('WARNING: multiple observation altitudes for {lon}, {lat} in the date range {start} to {stop}. '
+                      'Will only produce the .mod files for the lowest altitude. (Note: altitude only matters if '
+                      'generating .mod files for a slant path.)'.format(lon=lon_str, lat=lat_str, start=first_date, stop=last_date),
+                      file=sys.stderr)
+
+            slla.append((site, lon, lat, df['obalt'].min()))
+        # convert to lists of sites, lons, lats, and alts separately
+        return zip(*slla)
+
+    rldf = readers.read_runlog(runlog, as_dataframes=True)
+    rl_dates = mod_utils.ydh_to_date(rldf['Year'], rldf['Day'], rldf['Hour'])
+    rldf.set_index(rl_dates, inplace=True)
+
+    # GEOS FPIT has no data before 2000 so we usually remove those dates
+    if omit_pre2000:
+        xx_dates = rl_dates >= '2000-01-01'
+        rldf = rldf[xx_dates]
+
+    date_ranges = mod_utils.make_geos_date_ranges(rldf.index)
+
+    if site_abbrv is None:
+        # If no site abbreviation given, assume that the site abbreviations are the first two letters of each spectrum
+        site_abbrv = [s[:2] for s in rldf['Spectrum_File_Name']]
+    elif isinstance(site_abbrv, str):
+        # If a single site abbreviation given, then it must be used for all sites, so we need to expand it so that we
+        # can create a date-indexed series to subset as we loop through the date ranges
+        site_abbrv = rldf.shape[0] * [site_abbrv]
+
+    rldf['site'] = site_abbrv
+
+    for drange in date_ranges:
+        xx = slice(*[d.strftime('%Y-%m-%d %H:%M:%S') for d in drange])
+        sub_df = rldf.loc[xx, ['oblon', 'oblat', 'obalt', 'site']]
+        abbrv, lon, lat, alt = _reduce_lat_lons(sub_df)
+        driver(date_range=drange, alt=alt, lon=lon, lat=lat, site_abbrv=abbrv, **kwargs)
 
 
 def driver(date_range, met_path, chem_path=None, save_path=None, keep_latlon_prec=False, save_in_utc=True, muted=False,

@@ -2107,3 +2107,102 @@ def _datetime2float(dtarray):
 
 def _float2datetime(dtarray):
     return np.array([None if np.isnan(d) else from_unix_time(d, pd.Timestamp) for d in dtarray])
+
+
+def ydh_to_date(year, day, hour):
+    dates = []
+    for y, d, h in zip(year, day, hour):
+        ts = pd.Timestamp(y, 1, 1) + pd.Timedelta(days=d-1, hours=h)
+        dates.append(ts)
+    return pd.DatetimeIndex(dates)
+
+
+def _split_outside_group(s, splitchar, open='(', close=')'):
+    out = []
+    grp_cnt = 0
+    start = 0
+    for i, c in enumerate(s):
+        if c == splitchar and grp_cnt == 0:
+            out.append(s[start:i+1])
+            start = i+1
+        elif c == open:
+            grp_cnt += 1
+        elif c == close:
+            grp_cnt -= 1
+
+        if grp_cnt < 0:
+            raise ValueError('Given string has an unmatched {} at position {}'.format(close, i))
+
+    # Group count should be 0. If not, then there were more open characters than closing characters
+    if grp_cnt > 0:
+        raise ValueError('Given string had an unmatched {}'.format(open))
+
+    # Handle the last piece. Check that we haven't just added something, i.e. that the split character isn't the last
+    # one in the string. If it is, then we should add an empty element
+    if start == len(s) + 1:
+        out.append('')
+    else:
+        out.append(s[start:])
+
+    return out
+
+
+def fortran_fmt_to_fwf_tuples(fmt_str):
+    fmt_str = fmt_str.strip()
+    if not fmt_str.startswith('(') or not fmt_str.endswith(')'):
+        raise ValueError('The first and last non-whitespace characters of the format string must be open and close '
+                         'parentheses, respectively.')
+    fmt_parts = _split_outside_group(fmt_str[1:-1], ',')
+    colspecs = []
+    types = []
+
+    idx = 0
+    for part in fmt_parts:
+        if '(' in part:
+            match = re.match(r'(\d*)(\(.+\))', part)
+            repeats = 1 if len(match.group(1)) == 0 else int(match.group(1))
+            subfmt = match.group(2)
+            subspecs, subtypes = fortran_fmt_to_fwf_tuples(subfmt)
+
+            for i in range(repeats):
+                for start, stop in subspecs:
+                    colspecs.append((idx+start, idx+stop))
+                types += subtypes
+                idx += stop
+        elif re.match(r'\d+x', part):
+            # In Fortran, specifiers like "1x" mean that n spaces do not contain information and are just spacers
+            nspaces = int(re.match(r'\d+', part).group(), re.IGNORECASE)
+            idx += nspaces
+        else:
+            match = re.match(r'(\d*)([a-z])(\d+)', part, re.IGNORECASE)
+            repeats = 1 if len(match.group(1)) == 0 else int(match.group(1))
+            width = int(match.group(3))
+
+            for i in range(repeats):
+                colspecs.append((idx, idx+width))
+                types.append(match.group(2))
+                idx += width
+
+    return colspecs, types
+
+
+def make_geos_date_ranges(dates):
+    geos_tdel = pd.Timedelta(hours=3)
+    geos_dates = dates.round('3H').unique().sort_values()
+    date_ranges = []
+
+    range_start = geos_dates[0]
+    last_date = geos_dates[0]
+
+    for d in geos_dates[1:]:
+        if d - last_date > geos_tdel:
+            # If the next time is more than the GEOS time step in the future, then the current date range is done.
+            # Append it, remembering that the end date is exclusive
+            date_ranges.append((range_start, last_date + geos_tdel))
+            range_start = d
+        last_date = d
+
+    # There will always be a last date range, even if we added a date range in the last loop (in that case only the last
+    # time will go in the final date range)
+    date_ranges.append((range_start, last_date+geos_tdel))
+    return date_ranges
