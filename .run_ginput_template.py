@@ -33,6 +33,9 @@ def parse_args():
     vmr_parser = subparsers.add_parser('vmr', help='Generate full .vmr files for GGG')
     tccon_priors.parse_args(vmr_parser)
 
+    vmr_rl_parser = subparsers.add_parser('rlvmr', help='Generate .vmr files from a runlog')
+    tccon_priors.parse_runlog_args(vmr_rl_parser)
+
     get_g5_parser = subparsers.add_parser('getg5', help='Download GEOS5 FP or FP-IT data')
     get_GEOS5.parse_args(get_g5_parser)
 

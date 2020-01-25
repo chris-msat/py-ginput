@@ -71,7 +71,7 @@ from scipy.interpolate import LinearNDInterpolator
 import xarray as xr
 
 from ..mod_maker import tccon_sites
-from ..common_utils import mod_utils, ioutils, readers, writers, mod_constants as const
+from ..common_utils import mod_utils, ioutils, readers, writers, run_utils, mod_constants as const
 from ..common_utils.ggg_logging import logger
 
 GGGPathError = mod_utils.GGGPathError
@@ -3048,17 +3048,7 @@ def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='x
                                    gas_name_order=gas_name_order)
 
 
-def parse_args(parser=None):
-    if parser is None:
-        parser = argparse.ArgumentParser()
-
-    valid_site_ids = list(tccon_sites.tccon_site_info().keys())
-
-    parser.description = 'Generate .vmr files for input into GGG2019 for use with TCCON retrievals.'
-    parser.add_argument('date_range', type=mod_utils.parse_date_range,
-                        help='The range of dates to generate .vmr files for. May be given as YYYYMMDD-YYYYMMDD, or '
-                             'YYYYMMDD_HH-YYYYMMDD_HH, where the ending date is exclusive. A single date may be given, '
-                             '(YYYYMMDD) in which case the ending date is assumed to be one day later.')
+def _add_common_cl_args(parser):
     parser.add_argument('mod_dir', nargs='?', default=None,
                         help='Directory to read .mod files from. Note that the .mod files must be in this directory, '
                              'not a subdirectory. If you wish to specify a root directory for files organized by '
@@ -3077,6 +3067,27 @@ def parse_args(parser=None):
                              'gases will not be included. This removes the need for a base .vmr file.')
     parser.add_argument('-s', '--save-path', dest='save_dir',
                         help='Path to save .vmr files to. If not given, defaults to $GGGPATH/vmrs/gnd')
+    parser.add_argument('--keep-latlon-prec', action='store_true', help='Use if the .mod files have 2 decimals of '
+                                                                        'precision in their file names.')
+    parser.add_argument('-i', '--integral-file', dest='zgrid', help='Path to an integral file that defined the '
+                                                                    'altitude grid to place the priors on.')
+    parser.add_argument('-f', '--flat-outdir', action='store_true',
+                        help='Write the .vmr files directly to the specified output directory, rather than organizing '
+                             'by site, similarly to .mod files')
+
+
+def parse_args(parser=None):
+    if parser is None:
+        parser = argparse.ArgumentParser()
+
+    valid_site_ids = list(tccon_sites.tccon_site_info().keys())
+
+    parser.description = 'Generate .vmr files for input into GGG2020 for use with TCCON retrievals.'
+    parser.add_argument('date_range', type=mod_utils.parse_date_range,
+                        help='The range of dates to generate .vmr files for. May be given as YYYYMMDD-YYYYMMDD, or '
+                             'YYYYMMDD_HH-YYYYMMDD_HH, where the ending date is exclusive. A single date may be given, '
+                             '(YYYYMMDD) in which case the ending date is assumed to be one day later.')
+
     parser.add_argument('--site', default='xx', choices=valid_site_ids, dest='site_abbrev',
                         help='Which site to generate priors for. Used to set the lat/lon looked for in the file name. '
                              'If an explicit lat and lon are given, those override this.')
@@ -3084,15 +3095,33 @@ def parse_args(parser=None):
                                                                    '--lon must be given as well.')
     parser.add_argument('--lon', type=float, dest='site_lon', help='Longitude to generate prior for. If given, '
                                                                    '--lat must be given as well.')
-    parser.add_argument('--keep-latlon-prec', action='store_true', help='Use if the .mod files have 2 decimals of '
-                                                                        'precision in their file names.')
-    parser.add_argument('-i', '--integral-file', dest='zgrid', help='Path to an integral file that defined the '
-                                                                    'altitude grid to place the priors on.')
-    parser.add_argument('-f', '--flat-outdir', action='store_true', 
-                        help='Write the .vmr files directly to the specified output directory, rather than organizing '
-                             'by site, similarly to .mod files')
-
+    _add_common_cl_args(parser)
     parser.set_defaults(driver_fxn=cl_driver)
+
+
+def parse_runlog_args(parser=None):
+    if parser is None:
+        parser = argparse.ArgumentParser()
+
+    parser.description = 'Generate .vmr files for spectra given in a runlog'
+    parser.add_argument('runlog', help='The runlog file to generate .vmr files for')
+    parser.add_argument('--first-date', default='2000-01-01',
+                        help='First date to generate .vmr files for; spectra in the runlog before this are ignored.'
+                             'Default is %(default)s due to availability of GEOS-FPIT data.')
+    parser.add_argument('--site', dest='site_abbrev', default=None,
+                        help='The two letter site ID to use for all spectra in the runlog. If this argument is not given, '
+                             'the default behavior is to take the first two letters of each spectrum as the site ID. Pass '
+                             'a single ID with this option to override that. Currently there is no way to pass '
+                             'multiple IDs from the command line. If --mod-root-dir was specified, this will be used '
+                             'to find .mod files in the site subdirectories. If --flat-outdir was not given, this will '
+                             'be used to organize the output .vmr files.')
+    _add_common_cl_args(parser)
+    parser.set_defaults(driver_fxn=runlog_cl_driver)
+
+
+def runlog_cl_driver(runlog, first_date='2000-01-01', site_abbrev=None, **kwargs):
+    for drange, abbrv, lon, lat, alt in run_utils.iter_runlog_args(runlog, first_date=first_date, site_abbrv=site_abbrev):
+        cl_driver(date_range=drange, site_lat=lat, site_lon=lon, site_abbrev=abbrv, **kwargs)
 
 
 def cl_driver(date_range, mod_dir=None, mod_root_dir=None, save_dir=None, product='fpit',
