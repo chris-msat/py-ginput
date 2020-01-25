@@ -216,7 +216,7 @@ def check_types_levels(filetypes, levels):
     return filetypes, levels
 
 
-def runlog_driver(runlog, path='', product='FP', filetype=_default_file_type, levels=_default_level_type,
+def runlog_driver(runlog, path='', mode='FP', filetypes=_default_file_type, levels=_default_level_type,
                   first_date=None, last_date=None):
     try:
         # I've had bad luck trying to slice index a DatetimeIndex with timestamps, so convert first and last dates to
@@ -236,7 +236,7 @@ def runlog_driver(runlog, path='', product='FP', filetype=_default_file_type, le
     geos_date_ranges = mod_utils.get_runlog_geos_date_ranges(rldf)
 
     for drange in geos_date_ranges:
-        driver(drange, mode=product.upper(), path=path, filetypes=filetype, levels=levels)
+        driver(drange, mode=mode, path=path, filetypes=filetypes, levels=levels)
 
 
 def driver(date_range, mode='FP', path='.', filetypes=_default_file_type, levels=_default_level_type,
