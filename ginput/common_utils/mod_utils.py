@@ -2109,6 +2109,51 @@ def _float2datetime(dtarray):
     return np.array([None if np.isnan(d) else from_unix_time(d, pd.Timestamp) for d in dtarray])
 
 
+def frac_ydh_to_date(year, day, hour):
+    """
+    Convert a fractional year, day, and hour from a GGG output file to a date
+
+    Some GGG output files record year as :math:`year + (day + hour/24)/366`
+    and day as :math:`day + hour/24`. This function converts such values to
+    a Pandas DatetimeIndex.
+
+    :param year: array of years, as decimal numbers
+    :type year: array(float)
+
+    :param day: array of days-of-year, with Jan 1 = 1, as decimal numbers.
+    :type day: array(float)
+
+    :param hour: array of hours of day.
+    :type hour: array(float)
+
+    :return: array of datetimes
+    :rtype: :class:`pandas.DatetimeIndex`
+    """
+    # In many output files, the year and day are calculated to represent the 
+    # whole date, i.e. year is a decimal number where the decimal part is the
+    # day + hour in fraction of a year. Same for day. Normally we could just
+    # convert them to an integer and be fine, except there are cases where the
+    # day rolls over into the next day, e.g. because we're working on a western
+    # hemisphere site that starts measuring in one UTC day and keeps measuring
+    # through to the next, so the hour exceeds 24.
+    #
+    # We account for this by subtracting off the fractional part of the year and
+    # day computed from the smaller elements. However, we don't subtract the 
+    # whole amount off, because we don't want floating point uncertainty to 
+    # take us to less than the correct integer. E.g. if the day is 60.5 and
+    # we compute hour/24 = 0.50000000001, then int(day - hour/24) = 59.
+
+    # correct the year
+    year_frac = day / 366 
+    year = (year - 0.99*year_frac).astype('int')
+    
+    # correct the day
+    day_frac = hour / 24
+    day = (day - 0.99*day_frac).astype('int')
+
+    return ydh_to_date(year, day, hour)
+
+
 def ydh_to_date(year, day, hour):
     dates = []
     for y, d, h in zip(year, day, hour):
