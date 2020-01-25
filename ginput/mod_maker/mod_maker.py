@@ -2228,6 +2228,7 @@ def runlog_driver(runlog, site_abbrv=None, first_date='2000-01-01', **kwargs):
     rldf.set_index(rl_dates, inplace=True)
 
     # GEOS FPIT has no data before 2000 so we usually remove those dates
+    import pdb; pdb.set_trace()
     if first_date:
         xx_dates = rl_dates >= first_date
         rldf = rldf[xx_dates]
@@ -2245,7 +2246,9 @@ def runlog_driver(runlog, site_abbrv=None, first_date='2000-01-01', **kwargs):
     rldf['site'] = site_abbrv
 
     for drange in date_ranges:
-        xx = slice(*[d.strftime('%Y-%m-%d %H:%M:%S') for d in drange])
+        dstart = drange[0] - pd.Timedelta(minutes=90)
+        dstop = drange[1] # end time is already one GEOS time step ahead
+        xx = slice(dstart.strftime('%Y-%m-%d %H:%M:%S'), dstop.strftime('%Y-%m-%d %H:%M:%S'))
         sub_df = rldf.loc[xx, ['oblon', 'oblat', 'obalt', 'site']]
         abbrv, lon, lat, alt = _reduce_lat_lons(sub_df)
         driver(date_range=drange, alt=alt, lon=lon, lat=lat, site_abbrv=abbrv, **kwargs)
