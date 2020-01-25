@@ -1083,6 +1083,9 @@ def parse_runlog_args(parser=None):
                              'default behavior is to take the first two letters of each spectrum as the site ID. Pass '
                              'a single ID with this option to override that. Currently there is no way to pass '
                              'multiple IDs from the command line.')
+    parser.add_argument('--first-date', default='2000-01-01',
+                        help='First date to generate .mod files for. Default is %(default)s, due to the availability '
+                             'of GEOS-FPIT data.')
 
     _add_common_args(parser)
     if am_i_main:
@@ -2202,7 +2205,7 @@ def mod_maker(site_abbrv=None,start_date=None,end_date=None,mode=None,locations=
         print(len(local_date_list),'mod files written')
 
 
-def runlog_driver(runlog, site_abbrv=None, omit_pre2000=True, **kwargs):
+def runlog_driver(runlog, site_abbrv=None, first_date='2000-01-01', **kwargs):
     def _reduce_lat_lons(df):
         slla = []
         for (site, lon, lat), ll_df in df.groupby(['site', 'oblon', 'oblat']):
@@ -2225,8 +2228,8 @@ def runlog_driver(runlog, site_abbrv=None, omit_pre2000=True, **kwargs):
     rldf.set_index(rl_dates, inplace=True)
 
     # GEOS FPIT has no data before 2000 so we usually remove those dates
-    if omit_pre2000:
-        xx_dates = rl_dates >= '2000-01-01'
+    if first_date:
+        xx_dates = rl_dates >= first_date
         rldf = rldf[xx_dates]
 
     date_ranges = mod_utils.get_runlog_geos_date_ranges(rldf)
