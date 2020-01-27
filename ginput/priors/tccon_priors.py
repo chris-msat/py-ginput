@@ -400,11 +400,12 @@ class MloSmoTraceGasRecord(TraceGasRecord):
     @classmethod
     def _init_helper(cls, first_date, last_date, lag, mlo_file, smo_file):
         # For the stratosphere data, since the age spectra are defined over a 30 year window, we need to make sure
-        # we have values back to slightly more than 30 years before the first TCCON data. Assuming that's around 2004,
-        # a default age of 2000 - 30 = 1970 should be good.
+        # we have values back to slightly more than 30 years before the first TCCON data. Since GEOS-FPIT starts
+        # in 2000, a default age of 1999 - 30 = 1969 gives us enough buffer before 1970 that we get values for
+        # all dates/all ages.
 
         if first_date is None:
-            first_date = dt.datetime(2000, 1, 1) - cls._age_spectra_length
+            first_date = dt.datetime(1999, 1, 1) - cls._age_spectra_length
         else:
             first_date -= cls._age_spectra_length
 
