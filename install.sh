@@ -1,5 +1,4 @@
-#!/bin/bash
-set -e
+#!/bin/bash -l
 
 # Installs ginput into a new Conda environment. Usage: ./install.sh [env_name]. If env_name is not specified,
 # then tries to install in the active Python environment. 
@@ -28,13 +27,20 @@ fi
 
 envname="$1"
 
-# Does conda exist
-which conda >& /dev/null
+# Does conda exist. Can't just test `which conda` because
+# some versions of conda create a shell function, not an 
+# actual executable
+conda -h >& /dev/null
 if [[ $? != 0 ]]; then
     echo "Cannot create a conda environment for ginput because 'conda' is not on your PATH."
     echo "Install Anaconda (https://www.anaconda.com/distribution/) or ensure that 'conda' is on your PATH."
     exit 1
 fi
+
+# Set the script to exit if any errors occur. We cannot do this 
+# before the "conda -h >& /dev/null" check because we manually
+# check if that returns a non-zero exit
+set -e
 
 # Does the environment already exist
 # Make an array of env names
