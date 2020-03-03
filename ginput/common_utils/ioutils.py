@@ -155,7 +155,7 @@ def make_creation_info(filename, creation_note=None):
     try:
         commit_hash, branch, _ = mod_utils.hg_commit_info()
         clean_or_dirty = 'clean' if mod_utils.hg_is_commit_clean(ignore_files=[filename]) else 'dirty'
-    except CalledProcessError:
+    except (CalledProcessError, FileNotFoundError):  # if hg is not installed, get a FileNotFoundError instead of CalledProcessError
         if creation_note is not None:
             description = 'Created by {note} on {date} (could not acquire Mercurial commit information)'
         else:
