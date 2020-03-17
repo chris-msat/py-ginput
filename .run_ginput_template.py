@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import argparse
 
-from ginput.priors import acos_interface as aci, tccon_priors
+from ginput.priors import acos_interface as aci, tccon_priors, map_maker
 from ginput.mod_maker import mod_maker
 from ginput.download import get_GEOS5
 
@@ -41,6 +41,9 @@ def parse_args():
 
     get_rlg5_parser = subparsers.add_parser('get-rl-g5', help='Download GEOS5 FP or FP-IT data for spectra in a runlog')
     get_GEOS5.parse_runlog_args(get_rlg5_parser)
+
+    map_parser = subparsers.add_parser('map', help='Generate .map (a priori) files.')
+    map_maker.parse_cl_args(map_parser)
 
     return vars(parser.parse_args())
 

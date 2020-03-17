@@ -2,6 +2,7 @@ from datetime import datetime as dtime
 import netCDF4 as ncdf
 import numpy as np
 import os
+import pandas as pd
 from warnings import warn
 
 # Have trouble with CFUnits when calling from a Jupyter notebook. This allows the module to at least be imported if that
@@ -133,7 +134,7 @@ def write_map_from_vmr_mod(vmr_file, mod_file, map_output_dir, fmt='txt', wet_or
         moddat = readers.read_mod_file(mod_file)
         _write_ncdf_map_file(mapdat=mapdat, obs_lat=obs_lat, obs_date=moddat['file']['datetime'], obs_site=site_abbrev,
                              file_lat=moddat['file']['lat'], file_lon=moddat['file']['lon'],
-                             map_file=map_name+'.nc', wet_or_dry=wet_or_dry)
+                             map_file=map_name+'.nc', wet_or_dry=wet_or_dry, no_cfunits=no_cfunits)
 
 
 def _merge_and_convert_mod_vmr(vmr_file, mod_file, vmr_vars=('h2o', 'hdo', 'co2', 'n2o', 'co', 'ch4', 'hf', 'o2'),
@@ -386,3 +387,6 @@ def _write_header(fobj, header_lines, n_data_columns):
     fobj.write(line1)
     header_lines = [l if l.endswith('\n') else l + '\n' for l in header_lines]
     fobj.writelines(header_lines)
+
+
+

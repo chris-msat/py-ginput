@@ -220,6 +220,11 @@ def get_isotopes_file(isotopes_file=None, use_gggpath=False):
         return os.path.join(const.data_dir, 'isotopologs.dat')
 
 
+def mod_output_subdir(top_dir, site_abbrev, product='fpit', slant=False):
+    path_dir = 'slant' if slant else 'vertical'
+    return os.path.join(top_dir, product, site_abbrev, path_dir)
+
+
 def vmr_output_subdir(top_dir, site_abbrev, product='fpit', slant=False):
     path_dir = 'vmrs-slant' if slant else 'vmrs-vertical'
     return os.path.join(top_dir, product, site_abbrev, path_dir)
