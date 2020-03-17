@@ -188,12 +188,12 @@ def _write_text_map_file(mapdat, obs_lat, map_file, wet_or_dry):
     #   latitude
 
     header = [os.path.basename(map_file),
-              '{:25} Version {:9} JLL, MK, SR'.format('GINPUT', __version__),
+              '{:25} Version {:9} JLL, SR, MK'.format('GINPUT', __version__),
               'Please see https://tccon-wiki.caltech.edu for a complete description of this file and its usage.']
 
     # Usage and warnings
     if wet_or_dry == 'wet':
-        header += [line + '\n' for line in wmf_message]
+        header += wmf_message
 
     # Constants
     header.append('Avogadro (molecules/mole): {}'.format(mod_constants.avogadro))

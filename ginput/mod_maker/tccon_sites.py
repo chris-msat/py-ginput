@@ -17,12 +17,32 @@ If the instrument has moved enough so that the rounded lat and lon is different,
 the longitudes must be given in the range [0-360]
 """
 
+
 class TCCONSiteDefError(Exception):
     pass
 
 
 class TCCONTimeSpanError(Exception):
     pass
+
+
+class TCCONNonUniqueTimeSpanError(Exception):
+    def __init__(self, sites, date_range, bad_site_spans):
+        self.sites = sites
+        self.date_range = date_range
+        self.bad_site_spans = bad_site_spans
+        super(TCCONNonUniqueTimeSpanError, self).__init__(self.format_span_error_msg())
+
+    def format_span_error_msg(self):
+        msg = '''Cannot produce a site info dictionary for the date range {start} to {stop} for sites {sites}.
+The requested date range overlaps multiple time spans for the following sites:
+
+'''.format(start=self.date_range[0], stop=self.date_range[1], sites=', '.join(self.sites))
+
+        for bad_site, bad_spans in self.bad_site_spans.items():
+            msg += '  * {}: start date in {} to {}, end date in {} to {}'.format(bad_site, *bad_spans[0],
+                                                                                 *bad_spans[1])
+        return msg
 
 
 now = datetime.now()
@@ -342,8 +362,89 @@ def tccon_site_info(site_dict_in=None):
                 else:
                     site_dict_in[site]['time_spans'][time_span]['lon_180'] = site_dict_in[site]['time_spans'][time_span]['lon']
 
-
     return OrderedDict(site_dict_in)
+
+
+def tccon_site_info_for_date_range(date_range, site_abbrv=None, site_dict_in=None, use_closest_in_time=True):
+    """
+    Returns
+    Parameters
+    ----------
+    date_range
+    site_abbrv
+    site_dict_in
+    use_closest_in_time
+
+    Returns
+    -------
+
+    """
+    # First we just verify that all requested sites are located in one place for the requested date range. If so,
+    # we just pass the request on to tccon_site_info_for_date. If not, we error.
+    new_site_dict = tccon_site_info() if site_dict_in is None else tccon_site_info(site_dict_in)
+    if site_abbrv is not None:
+        new_site_dict = {site_abbrv: new_site_dict[site_abbrv]}
+
+    bad_site_spans = dict()
+
+    for site, info in new_site_dict.items():
+        if 'time_spans' not in info:
+            # No time spans = same info for all dates, so not a problem. If a dictionary should have 'time_spans',
+            # tccon_site_info_for_date() will take care of checking.
+            continue
+
+        start_span = _find_time_span_for_date(date_range[0], info['time_spans'].keys(), site, use_closest_in_time=True)
+        end_span = _find_time_span_for_date(date_range[1], info['time_spans'].keys(), site, use_closest_in_time=True)
+        if start_span != end_span:
+            bad_site_spans[site] = (start_span, end_span)
+
+    if len(bad_site_spans) > 0:
+        raise TCCONNonUniqueTimeSpanError(new_site_dict.keys(), date_range, bad_site_spans)
+    else:
+        # As long as all of the requested sites have a single time span to cover the requested date range, it's the same
+        # process as getting the dictionary for just the first date in the range.
+        return tccon_site_info_for_date(date_range[0], site_abbrv=site_abbrv, site_dict_in=site_dict_in,
+                                        use_closest_in_time=use_closest_in_time)
+
+
+def _find_time_span_for_date(date, time_spans, site, use_closest_in_time=True):
+    # Loop through each time span. If we're in that span, add the span-specific information (usually lat/lon)
+    # to the main site info dict
+    first_date_range = None
+    last_date_range = None
+    found_time = False
+    date_range = None
+    for date_range in time_spans:
+        if date_range[0] <= date < date_range[1]:
+            found_time = True
+            break
+        else:
+            # Keep track of which date range is first and last so that if we need to find the closest in time
+            # we can
+            if first_date_range is None or first_date_range[0] > date_range[0]:
+                first_date_range = date_range
+            if last_date_range is None or last_date_range[1] < date_range[1]:
+                last_date_range = date_range
+
+    # Could not find one of the predefined time spans that match. Need to find the closest one. For now, we're
+    # assuming that the time spans cover a continuous range (no inner gaps) and match if we're before or after
+    # the whole range spanned.
+    if not found_time:
+        if not use_closest_in_time:
+            raise TCCONTimeSpanError('Could not find information for {} for {}'.format(site, date))
+        elif date < first_date_range[0]:
+            date_range = first_date_range
+        elif date > last_date_range[1]:
+            date_range = last_date_range
+        else:
+            raise NotImplementedError('The date requested ({date}) is outside the available dates '
+                                      '({first}-{last}) for {site}. This case is not yet implemented'
+                                      .format(date=date, first=first_date_range, last=last_date_range,
+                                              site=site))
+
+    if date_range is None:
+        raise RuntimeError('Failed to assign a value to date_range')
+    return date_range
 
 
 def tccon_site_info_for_date(date, site_abbrv=None, site_dict_in=None, use_closest_in_time=True):
@@ -379,6 +480,10 @@ def tccon_site_info_for_date(date, site_abbrv=None, site_dict_in=None, use_close
     """
     # Get the raw dictionary or ensure that the input has the lon_180 key.
     new_site_dict = tccon_site_info() if site_dict_in is None else tccon_site_info(site_dict_in)
+    if use_closest_in_time == 'nullify':
+        use_closest_in_time_inner = False
+    else:
+        use_closest_in_time_inner = use_closest_in_time
 
     for site, info in new_site_dict.items():
         # If a site has the time spans defined, then we need to find the one that has the date we're interested in
@@ -397,49 +502,18 @@ def tccon_site_info_for_date(date, site_abbrv=None, site_dict_in=None, use_close
                 else:
                     info['lon_180'] = lon
                 continue
+        else:
+            time_spans = info.pop('time_spans')
 
-        time_spans = info.pop('time_spans')
-        found_time = False
-
-        # Loop through each time span. If we're in that span, add the span-specific information (usually lat/lon)
-        # to the main site info dict
-        first_date_range = None
-        last_date_range = None
-        for date_range, values in time_spans.items():
-            if date_range[0] <= date < date_range[1]:
-                info.update(values)
-                found_time = True
-                break
+            try:
+                date_range = _find_time_span_for_date(date, time_spans.keys(), site, use_closest_in_time_inner)
+            except TCCONTimeSpanError:
+                if use_closest_in_time == 'nullify':
+                    new_site_dict[site] = None
+                else:
+                    raise
             else:
-                # Keep track of which date range is first and last so that if we need to find the closest in time
-                # we can
-                if first_date_range is None or first_date_range[0] > date_range[0]:
-                    first_date_range = date_range
-                if last_date_range is None or last_date_range[1] < date_range[1]:
-                    last_date_range = date_range
-
-        # Could not find one of the predefined time spans that match. Need to find the closest one. For now, we're
-        # assuming that the time spans cover a continuous range (no inner gaps) and match if we're before or after
-        # the whole range spanned.
-        if not found_time:
-            if use_closest_in_time == 'nullify':
-                # don't want to modify a dict while iterating over it
-                new_site_dict[site] = None
-                continue
-            elif not use_closest_in_time:
-                raise TCCONTimeSpanError('Could not find information for {} for {}'.format(site, date))
-
-            if date < first_date_range[0]:
-                date_range = first_date_range
-            elif date > last_date_range[1]:
-                date_range = last_date_range
-            else:
-                raise NotImplementedError('The date requested ({date}) is outside the available dates '
-                                          '({first}-{last}) for {site}. This case is not yet implemented'
-                                          .format(date=date, first=first_date_range, last=last_date_range,
-                                                  site=site))
-
-            info.update(time_spans[date_range])
+                info.update(time_spans[date_range])
 
     if site_abbrv is None:
         return new_site_dict

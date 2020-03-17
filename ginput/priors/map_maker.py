@@ -27,7 +27,7 @@ def _find_files_in_dirs(mod_dir, vmr_dir, date_range, site_lat, site_lon, keep_l
             else:
                 raise IOError('Failed to find mod file {}'.format(mod_file))
 
-        vmr_file = mod_utils.vmr_file_name(date, lon=site_lon, lat=site_lat)
+        vmr_file = mod_utils.vmr_file_name(date, lon=site_lon, lat=site_lat, keep_latlon_prec=keep_latlon_prec)
         vmr_file = os.path.join(vmr_dir, vmr_file)
         if not os.path.isfile(vmr_file):
             if skip_missing:
@@ -73,6 +73,8 @@ def _cl_get_mod_vmr_files(root_dir, mod_dir, vmr_dir, date_range, site_lat, site
     if root_dir is not None:
         if save_dir is None:
             save_dir = os.path.join(root_dir, product, site_abbrev, 'maps-vertical')
+            if not os.path.exists(save_dir):
+                os.mkdir(save_dir)
 
         mods, vmrs = _find_files_in_dir_tree(
             root_dir=root_dir, date_range=date_range, site_lat=site_lat, site_lon=site_lon, site_abbrev=site_abbrev,
@@ -89,6 +91,21 @@ def _cl_get_mod_vmr_files(root_dir, mod_dir, vmr_dir, date_range, site_lat, site
     return mods, vmrs, save_dir
 
 
+def _lookup_site_lat_lon(site_abbrev, date_range):
+    try:
+        site_info = tccon_sites.tccon_site_info_for_date_range(date_range=date_range, site_abbrv=site_abbrev)
+    except tccon_sites.TCCONNonUniqueTimeSpanError as err:
+        # Make a more straightforward error message
+        span_end = err.bad_site_spans[site_abbrev][0][1]
+        raise tccon_sites.TCCONTimeSpanError(
+            'Unable to lookup unique site lat/lon for site {site} across date range {start} to {stop}. Site moved on '
+            '{moved}. Either manually specify a lat/lon or limit the date range to end before the move.'.format(
+                site=site_abbrev, start=date_range[0], stop=date_range[1], moved=span_end
+            )
+        )
+    return site_info['lat'], site_info['lon_180']
+
+
 def cl_driver(date_range, root_dir=None, mod_dir=None, save_dir=None, vmr_dir=None, map_fmt='nc', dry=False,
               product='fpit', site_lat=None, site_lon=None, site_abbrev='xx', keep_latlon_prec=False,
               skip_missing=False, req_cfunits=False):
@@ -100,6 +117,10 @@ def cl_driver(date_range, root_dir=None, mod_dir=None, save_dir=None, vmr_dir=No
     wet_or_dry = 'dry' if dry else 'wet'
 
     for this_abbrev, this_lat, this_lon in zip(site_abbrev, site_lat, site_lon):
+        if this_lat is None:
+            # Assuming if lat is None, lon is as well b/c check_site_lat_lon_alt() should guarantee that.
+            this_lat, this_lon = _lookup_site_lat_lon(this_abbrev, date_range)
+
         this_lon = this_lon - 360 if this_lon > 180 else this_lon
         mod_files, vmr_files, this_save_dir = _cl_get_mod_vmr_files(
             root_dir=root_dir, mod_dir=mod_dir, vmr_dir=vmr_dir, save_dir=save_dir, date_range=date_range,
@@ -134,7 +155,7 @@ def parse_cl_args(p: ArgumentParser):
                             'fpit/<site>/maps-vertical.')
     iogrp.add_argument('--met-product', dest='product', default='fpit', choices=('fp', 'fpit'),
                        help='Which meteorology product you used. "fp" = GEOS-FP, "fpit" = GEOS-FPIT. Only required if '
-                            'specifying --root-dir instead of mod_dir+vmr_dir')
+                            'specifying --root-dir instead of mod_dir+vmr_dir. Default is %(default)s')
     iogrp.add_argument('-k', '--keep-latlon-prec', action='store_true',
                        help='Use 2 decimal places for lat/lon in the names of the .mod files. This must match the '
                             'format of your .mod file names, the default is to round to the nearest degree.')

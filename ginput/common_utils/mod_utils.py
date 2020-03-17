@@ -251,9 +251,13 @@ def vmr_file_name(obs_date, lon, lat, keep_latlon_prec=False, date_fmt='%Y%m%d%H
      "yyyymmddhh" the date/time, XX[NS] the latitude and YYY[EW] the longitude.
     :rtype: str
     """
+    # The desired behavior is to zero pad if rounding to whole degrees but not otherwise. This mimics the behavior for
+    # .mod files, although that function does it slightly differently, and reconciling the two should be done at some
+    # point.
     prec = 2 if keep_latlon_prec else 0
-    lat = format_lat(lat, prec=prec, zero_pad=True)
-    lon = format_lon(lon, prec=prec, zero_pad=True)
+    pad = False if keep_latlon_prec else True
+    lat = format_lat(lat, prec=prec, zero_pad=pad)
+    lon = format_lon(lon, prec=prec, zero_pad=pad)
     major_version = const.priors_version.split('.')[0]
     return 'JL{ver}_{date}{tz}_{lat}_{lon}.vmr'.format(ver=major_version, date=obs_date.strftime(date_fmt),
                                                        tz='Z' if in_utc else 'L', lat=lat, lon=lon)
