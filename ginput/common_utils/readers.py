@@ -3,6 +3,7 @@ import os
 import re
 from collections import OrderedDict
 
+import netCDF4 as ncdf
 import numpy as np
 import pandas as pd
 
@@ -105,7 +106,7 @@ def read_mod_file_units(mod_file):
     return {n: u for n, u in zip(names, units)}
  
 
-def read_map_file(map_file, as_dataframes=False, skip_header=False):
+def read_map_file(map_file, as_dataframes=False, skip_header=False, fmt=None):
     """
     Read a .map file
 
@@ -116,14 +117,57 @@ def read_map_file(map_file, as_dataframes=False, skip_header=False):
      (``False``) they are returned as dictionaries of numpy arrays.
     :type as_dataframes: bool
 
-    :param skip_header: set to ``True` to avoid reading the header. This is helpful for reading older .map files that
+    :param skip_header: set to ``True` to avoid reading the header. This is helpful for reading .map files that
      have a slightly different header format.
     :type skip_header: bool
+
+    :param fmt: can use to tell this function which file type the .map file is, either "txt" for text or "nc" for
+     netCDF. If not specified, it will attempt to infer from the extension.
+    :type fmt: str or None
 
     :return: a dictionary with keys 'constants' and 'profile' that hold the header values and main profile data,
      respectively. The form of these values depends on ``as_dataframes``.
     :rtype: dict
     """
+    if map_file.endswith('.nc') or fmt == 'nc':
+        return _read_map_nc_file(map_file, as_dataframes=as_dataframes, skip_header=skip_header)
+    elif map_file.endswith('.map') or fmt == 'txt':
+        return _read_map_txt_file(map_file, as_dataframes=as_dataframes, skip_header=skip_header)
+    else:
+        ext = os.path.splitext(map_file)
+        raise ValueError('Unknown extension "{}" for map file. Use the `fmt` keyword to indicate the file type.'.format(ext))
+
+
+def _read_map_nc_file(map_file, as_dataframes=False, skip_header=False):
+    profile_dict = dict()
+    constant_dict = dict()
+    with ncdf.Dataset(map_file) as ds:
+        for varname, vardat in ds.variables.items():
+            if varname == 'time':
+                vardat = ncdf.num2date(vardat[:], vardat.units)
+                profile_dict[varname] = pd.DatetimeIndex(vardat)
+            else:
+                profile_dict[varname] = vardat[:].filled(np.nan)
+
+        if not skip_header:
+            for attr in ds.ncattrs():
+                if attr.startswith('constant') and not attr.endswith('units'):
+                    k = attr.replace('constant_', '')
+                    constant_dict[k] = ds.getncattr(attr)
+
+    if as_dataframes:
+        # these are both scalar values that can't go into the dataframe
+        profile_dict.pop('time')
+        profile_dict.pop('lat')
+        profile_dict = pd.DataFrame(profile_dict)
+        profile_dict.set_index('altitude', inplace=True)
+
+        constant_dict = pd.DataFrame(constant_dict, index=[0])
+
+    return {'profile': profile_dict, 'constants': constant_dict}
+
+
+def _read_map_txt_file(map_file, as_dataframes=False, skip_header=False):
     n_header_lines = mod_utils.get_num_header_lines(map_file)
     constants = dict()
     if not skip_header:
@@ -150,8 +194,8 @@ def read_map_file(map_file, as_dataframes=False, skip_header=False):
     if not as_dataframes:
         data = {k: v.values for k, v in df.items()}
     else:
-
         data = df
+        constants = pd.DataFrame(constants, index=[0])
 
     out_dict = dict()
     out_dict['constants'] = constants

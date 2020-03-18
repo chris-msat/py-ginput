@@ -48,7 +48,7 @@ _map_standard_names = {'Height': 'altitude',
 _map_var_mapping = {'Temperature': 'Temp'}
 _map_var_order = ('Height', 'Temp', 'Pressure', 'Density', 'h2o', 'hdo', 'co2', 'n2o', 'co', 'ch4', 'hf', 'o2', 'gravity')
 
-_float_fmt = '{:7.2f}'
+_float_fmt = '{:8.3f}'
 _exp_fmt = '{:10.3E}'
 _map_var_formats = {'Height': _float_fmt, 'Temp': _float_fmt, 'Pressure': _exp_fmt, 'Density': _exp_fmt,
                     'h2o': _exp_fmt, 'hdo': _exp_fmt, 'co2': _float_fmt, 'n2o': _float_fmt, 'co': _exp_fmt,
@@ -160,7 +160,8 @@ def _merge_and_convert_mod_vmr(vmr_file, mod_file, vmr_vars=('h2o', 'hdo', 'co2'
     mapdat = mod_utils.interp_to_zgrid(mapdat, zgrid=zgrid)
 
     # the .vmr variables should be on the desired zgrid already since we took the zgrid from that file. However, we
-    # may need to change them from dry to wet VMRs.
+    # may need to change them from dry to wet VMRs. Setting the H2O dry mole fraction to 0 makes the mole fractions dry
+    # b/c there's no water, though it doesn't matter because of the `if wet_or_dry` in the loop.
     h2o_dmf = vmrdat['profile']['h2o'] if wet_or_dry == 'wet' else 0
 
     for vvar in vmr_vars:

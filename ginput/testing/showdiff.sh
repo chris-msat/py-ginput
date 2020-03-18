@@ -6,7 +6,7 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
-usage="$0 mod|vmr hr"
+usage="$0 mod|vmr|map hr"
 mod_or_vmr="$1"
 hr="$2"
 
@@ -16,6 +16,9 @@ if [[ $mod_or_vmr == "mod" ]]; then
 elif [[ $mod_or_vmr == "vmr" ]]; then
     dir="vmr_files/fpit/"
     fname="JL1_20180101${hr}Z_37N_097W.vmr"
+elif [[ $mod_or_vmr == "map" ]]; then
+    dir="mod_files/fpit/"
+    fname="oc_37N_097W_20180101${hr}Z.map"
 else
     echo $usage
     echo "$mod_or_vmr is not a valid first argument"

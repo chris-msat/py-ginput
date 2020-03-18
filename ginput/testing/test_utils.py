@@ -9,6 +9,7 @@ import shutil
 import sys
 
 from ..download import get_GEOS5
+from ..common_utils import mod_utils
 
 _mydir = os.path.abspath(os.path.realpath(os.path.dirname(__file__)))
 
@@ -17,12 +18,15 @@ geos_fp_dir = os.path.join(input_data_dir, 'geosfp-it')
 geos_sha_file = os.path.join(geos_fp_dir, 'fp_hashes.sha1')
 mod_input_dir = os.path.join(input_data_dir, 'mod_files', 'fpit')
 vmr_input_dir = os.path.join(input_data_dir, 'vmr_files', 'fpit')
+map_input_dir = os.path.join(input_data_dir, 'map_files', 'fpit')
 std_vmr_file = os.path.join(input_data_dir, 'summer_35N.vmr')
 
 output_data_dir = os.path.join(_mydir, 'test_output_data')
 mod_output_top_dir = os.path.join(output_data_dir, 'mod_files')
 mod_output_dir = os.path.join(mod_output_top_dir, 'fpit')
 vmr_output_dir = os.path.join(output_data_dir, 'vmr_files', 'fpit')
+map_output_dir = os.path.join(output_data_dir, 'map_files', 'fpit')
+map_dry_output_dir = os.path.join(output_data_dir, 'map_files_dry', 'fpit')
 test_plots_dir = os.path.join(_mydir, 'plots')
 
 test_date = dt.datetime(2018, 1, 1)
@@ -141,6 +145,12 @@ def iter_vmr_file_pairs(base_dir, test_dir):
         yield fpair
 
 
+def iter_map_file_pairs(base_dir, test_dir, nc):
+    pattern = '*.map.nc' if nc else '*.map'
+    for fpair in _iter_file_pairs(pattern, base_dir, test_dir):
+        yield fpair
+
+
 def _iter_file_pairs(pattern, base_dir, test_dir):
     all_base_site_files = sorted(glob(os.path.join(base_dir, pattern)))
 
@@ -154,6 +164,21 @@ def _iter_file_pairs(pattern, base_dir, test_dir):
                                              'looking for {}.'.format(base_file, test_file))
             else:
                 yield base_file, test_file
+
+
+def iter_file_pairs_by_time(pattern, base_dir, test_dir, test_pattern=None):
+    def make_file_dict(file_dir, pat):
+        files =  sorted(glob(os.path.join(file_dir, pat)))
+        return {mod_utils.find_datetime_substring(os.path.basename(f), dt.datetime): f for f in files}
+
+    base_site_files = make_file_dict(base_dir, pattern)
+    test_site_files = make_file_dict(test_dir, pattern if test_pattern is None else test_pattern)
+
+    for base_date, base_file in base_site_files.items():
+        if base_date not in test_site_files:
+            raise InputDataMismatchError('Could not find a test file in {} for time {}'.format(test_dir, base_date))
+        else:
+            yield base_file, test_site_files[base_date]
 
 
 def parse_args():
