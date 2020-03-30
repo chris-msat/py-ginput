@@ -52,8 +52,7 @@ class ErrorHandler(object):
                   'met_qual_flag': 4,
                   'out_of_range_date': 5,
                   'no_data': 6,
-                  'cannot_find_geos': 7,
-                  'const_field_mismatch': 8}
+                  'cannot_find_geos': 7}
 
     _err_descriptions = {'bad_time_str': 'The OCO/ACOS time string could not be parsed',
                          'eqlat_failure': 'A problem occurred while calculating equivalent latitude',
@@ -134,7 +133,7 @@ class ErrorHandler(object):
         return 'Value meanings:  ' + '; '.join(descript_strs)
 
 
-_def_errh = ErrorHandler(suppress_error=False)
+_def_errh = ErrorHandler(suppress_error='never')
 
 
 def acos_interface_main(instrument, met_resampled_file, geos_files, output_file, mlo_co2_file=None, smo_co2_file=None,
@@ -183,7 +182,7 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
         gases = ('co2', 'ch4', 'co')
         flag_field = '{}_prior_failure_flags'
     else:
-        raise ValueError('instrument must be "oco" or "gosat"')
+        raise ValueError('instrument must be "oco", "gosat", or "geocarb"')
 
     # Reshape the met data from (soundings, footprints, levels) to (profiles, level)
     orig_shape = met_data['pv'].shape
@@ -258,7 +257,6 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
         if first_gas:
             profiles = gas_profiles
             units = gas_units
-            first_gas = False
 
         # Handle the fields that will be unique for each gas first
         profiles[gas_flag_field] = gas_prior_flags
@@ -278,14 +276,18 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
             units['sounding_latitude'] = 'degrees_north'
 
             # Also need to convert the entry dates into decimal years to write to HDF
+            # and convert the stratum to a short integer and update the unit to be more descriptive
+            # but these need special handling the first time through because we are converting them;
+            # they already exist in the profiles dictionary in a different format.
             gas_date_dec_years = [mod_utils.date_to_decimal_year(d) for d in profiles['gas_record_date'].flat]
             gas_date_dec_years = np.array(gas_date_dec_years).reshape(profiles['gas_record_date'].shape)
-            _add_or_check_equal(profiles, 'gas_record_date', gas_date_dec_years)
+            if first_gas:
+                profiles['gas_record_date'] = gas_date_dec_years
+                stratum = profiles['atmospheric_stratum'].astype(np.uint8)
+            else:
+                _add_or_check_equal(profiles, 'gas_record_date', gas_date_dec_years)
+                _add_or_check_equal(profiles, 'atmospheric_stratum', stratum)
             units['gas_record_date'] = 'Date as decimal year (decimal part = 0-based day-of-year / {})'.format(mod_constants.days_per_year)
-
-            # And convert the stratum to a short integer and update the unit to be more descriptive
-            stratum = profiles['atmospheric_stratum'].astype(np.uint8)
-            _add_or_check_equal(profiles, 'atmospheric_stratum', stratum)
             units['atmospheric_stratum'] = 'flag (1 = troposphere, 2 = middleworld, 3 = overworld)'
         except ValueChangedError as err:
             # Will either raise error or log it, depending on the error handler settings. Won't actually affect the
@@ -299,6 +301,8 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
             for key, value in profiles.items():
                 profiles[key] = value.squeeze()
                 logger.debug('GOSAT array "{}" squeezed from {} to {}'.format(key, value.shape, profiles[key].shape))
+        
+        first_gas = False
 
     # Write the priors to the file requested.
     write_prior_h5(output_file, profiles, units, geos_files, met_resampled_file)
@@ -1202,7 +1206,10 @@ def parse_args(parser=None, oco_or_gosat=None):
                     'execution of this program, will result in a non-zero flag value being stored. A short version ' \
                     'of the error message will also be printed via the logger. A full traceback can be printed to ' \
                     'the logger by increasing the verbosity to full (-vvvv). Alternately, normal error behavior can ' \
-                    'be restored with the --raise-errors flag'
+                    'be restored with the --raise-errors flag. If you see messages similar to ' \
+                    '"pthread_create: Resource temporarily unavailable", this may be because numpy is trying to acquire ' \
+                    'multiple threads for each process. To avoid this, set OMP_NUM_THREADS or the equivalent environmental ' \
+                    'variable for your C library to limit the number of threads per process.'
 
     if i_am_main:
         parser.set_defaults(instrument='oco')
