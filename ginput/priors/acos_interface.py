@@ -87,11 +87,12 @@ class ErrorHandler(object):
         :type flags: :class:`numpy.ndarray`
 
         :param inds: any form of indexing that will assign the error code to the correct place in the flags array, i.e.
-         that is valid for ``flags[inds] = code``.
+         that is valid for ``flags[inds] = code``. If ``None``, then the flags array will not be modified, but an
+         error will be raised if the ``suppress_error`` level is "never" or "critical".
 
         :return: None
         """
-        if self.suppress_error == 'always':
+        if self.suppress_error == 'never':
             raise err
         elif self.suppress_error == 'critical' and flags is None:
             raise err
@@ -133,7 +134,7 @@ class ErrorHandler(object):
         return 'Value meanings:  ' + '; '.join(descript_strs)
 
 
-_def_errh = ErrorHandler(suppress_error='never')
+_def_errh = ErrorHandler(suppress_error='critical')
 
 
 def acos_interface_main(instrument, met_resampled_file, geos_files, output_file, mlo_co2_file=None, smo_co2_file=None,
@@ -169,18 +170,36 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
     :return: None, writes results to the HDF5 ``output_file``.
     """
 
+    def check_mlo_smo_gas_file(gas_file, mlo_or_smo):
+        if gas_file is not None and '{gas}' not in gas_file:
+            raise ValueError('The {inst} instrument generates multiple gases; if passing an explicit path '
+                             'to the {mlosmo} file, that path must include {{gas}} which will be replaced '
+                             'with the lower case forumla (e.g. "co2") for each gas that needs it (co2, '
+                             'n2o, or ch4)'.format(inst=instrument, mlosmo=mlo_or_smo))
+
+    def fmt_gas_file(gas_file, this_gas):
+        if gas_file is None:
+            return gas_file
+        else:
+            return gas_file.format(gas=this_gas)
+
     if instrument == 'oco':
         met_data, prior_flags = read_oco_resampled_met(met_resampled_file, error_handler=error_handler)
         gases = ('co2',)
         flag_field = 'prior_failure_flags'
+        date_field = 'gas_record_date'
     elif instrument == 'gosat':
         met_data, prior_flags = read_gosat_resampled_met(met_resampled_file, error_handler=error_handler)
         gases = ('co2',)
         flag_field = 'prior_failure_flags'
+        date_field = 'gas_record_date'
     elif instrument == 'geocarb':
         met_data, prior_flags = read_geocarb_resampled_met(met_resampled_file, error_handler=error_handler)
-        gases = ('co2', 'ch4', 'co')
+        gases = ('co', 'ch4', 'co2')
         flag_field = '{}_prior_failure_flags'
+        date_field = '{}_record_date'
+        check_mlo_smo_gas_file(mlo_co2_file, 'MLO')
+        check_mlo_smo_gas_file(smo_co2_file, 'SMO')
     else:
         raise ValueError('instrument must be "oco", "gosat", or "geocarb"')
 
@@ -205,7 +224,7 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
     met_data['el'] = eqlat_array.reshape(orig_shape)
     prior_flags = prior_flags.reshape(flags_orig_shape)
 
-    # Create the CO2 priors
+    # Create the priors
     if cache_strat_lut:
         regen_lut = None
         save_lut = True
@@ -217,17 +236,25 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
     unit_scales = {'ppm': 1e-6, 'ppb': 1e-9}
 
     for gas in gases:
+        # If the user passed explicit paths to the gas files, then we need to replace the format string {gas}
+        # with the current gas
+        mlosmo_record_opts = dict(mlo_file=fmt_gas_file(mlo_co2_file, gas), smo_file=fmt_gas_file(smo_co2_file, gas), 
+                                  recalculate_strat_lut=regen_lut, save_strat=save_lut)
+        # The CO record doesn't expect any init args
+        record_kws = dict() if gas == 'co' else mlosmo_record_opts
+
         gas_field = '{}_prior'.format(gas)
         gas_flag_field = flag_field.format(gas)
+        gas_latency_field = '{}_record_latency'.format(gas)
+        gas_date_field = date_field.format(gas)
         record_class = tccon_priors.gas_records[gas]
-        gas_record = record_class(mlo_file=mlo_co2_file, smo_file=smo_co2_file,
-                                  recalculate_strat_lut=regen_lut, save_strat=save_lut)
+        gas_record = record_class(**record_kws)
         gas_prior_flags = prior_flags.copy()
 
         # The keys here define the variable names that will be used in the HDF file. The values define the corresponding
         # keys in the output dictionaries from tccon_priors.generate_single_tccon_prior.
         var_mapping = {gas_field: gas_record.gas_name,
-                       'co2_record_latency': 'mean_latency',
+                       gas_latency_field: 'mean_latency',
                        'equivalent_latitude': 'EqL',
                        'gas_record_date': 'gas_date',
                        'atmospheric_stratum': 'atm_stratum',
@@ -255,14 +282,22 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
             )
 
         if first_gas:
-            profiles = gas_profiles
-            units = gas_units
+            # The gas_record_date field needs renamed for GeoCarb
+            profiles = gas_profiles.copy()
+            profiles.pop('gas_record_date')
+            units = gas_units.copy()
+            units.pop('gas_record_date')
 
         # Handle the fields that will be unique for each gas first
         profiles[gas_flag_field] = gas_prior_flags
         units[gas_flag_field] = error_handler.get_error_descriptions()
+        gas_date_dec_years = [mod_utils.date_to_decimal_year(d) for d in gas_profiles['gas_record_date'].flat]
+        gas_date_dec_years = np.array(gas_date_dec_years).reshape(gas_profiles['gas_record_date'].shape)
+        profiles[gas_date_field] = gas_date_dec_years
+        units[gas_date_field] = gas_units['gas_record_date']
 
         # Convert the priors from ppm/ppb to dry mole fraction
+        profiles[gas_field] = gas_profiles[gas_field]
         profiles[gas_field] *= unit_scales[record_class._gas_unit]
         units[gas_field] = 'dmf'
 
@@ -279,20 +314,17 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
             # and convert the stratum to a short integer and update the unit to be more descriptive
             # but these need special handling the first time through because we are converting them;
             # they already exist in the profiles dictionary in a different format.
-            gas_date_dec_years = [mod_utils.date_to_decimal_year(d) for d in profiles['gas_record_date'].flat]
-            gas_date_dec_years = np.array(gas_date_dec_years).reshape(profiles['gas_record_date'].shape)
+            stratum = gas_profiles['atmospheric_stratum'].astype(np.uint8)
             if first_gas:
-                profiles['gas_record_date'] = gas_date_dec_years
-                stratum = profiles['atmospheric_stratum'].astype(np.uint8)
+                profiles['atmospheric_stratum'] = stratum
             else:
-                _add_or_check_equal(profiles, 'gas_record_date', gas_date_dec_years)
                 _add_or_check_equal(profiles, 'atmospheric_stratum', stratum)
             units['gas_record_date'] = 'Date as decimal year (decimal part = 0-based day-of-year / {})'.format(mod_constants.days_per_year)
             units['atmospheric_stratum'] = 'flag (1 = troposphere, 2 = middleworld, 3 = overworld)'
         except ValueChangedError as err:
             # Will either raise error or log it, depending on the error handler settings. Won't actually affect the
             # flags.
-            error_handler.handle_err(err, err_code_name='', flags=gas_prior_flags)
+            error_handler.handle_err(err, err_code_name='', flags=gas_prior_flags, inds=None)
 
         # If running for GOSAT, we have an extra dimension between the exposure and level which is just 1 long and was
         # only a placeholder to provide compatibility with the loops over sounding group/sounding for OCO. Remove those
@@ -311,7 +343,7 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
 def _add_or_check_equal(target_dict, key, array):
     if key not in target_dict:
         target_dict[key] = array
-    elif not np.isclose(target_dict[key], array).all():
+    elif not np.allclose(target_dict[key], array, equal_nan=True):
         raise ValueChangedError('The current and new values for "{}" differ'.format(key))
 
 
@@ -820,7 +852,7 @@ def read_geocarb_resampled_met(met_file, error_handler=_def_errh):
                 'trop_pressure': [met_group, 'blended_tropopause_pressure_met'],
                 'trop_temperature': [met_group, 'tropopause_temperature_met'],
                 'surf_gph': [met_group, 'gph_met'],
-                'co': [],
+                'co': [met_group, 'co_profile_met'],
                 'quality_flags': [sounding_group, 'sounding_qual_flag']
                 }
 
@@ -1131,12 +1163,17 @@ def _construct_mod_dict(acos_data_dict, i_sounding, i_foot):
                    ('longitude', ['file', 'lon']),
                    ('dates', ['file', 'datetime']),
                    ('trop_temperature', ['scalar', 'TROPT']),  # need to read in
-                   ('trop_pressure', ['scalar', 'TROPPB'])]  # need to read in
+                   ('trop_pressure', ['scalar', 'TROPPB']),
+                   ('co', ['profile', 'CO'])]  # need to read in
 
     subgroups = set([l[1][0] for l in var_mapping])
     mod_dict = {k: dict() for k in subgroups}
 
     for acos_var, (mod_group, mod_var) in var_mapping:
+        if acos_var not in acos_data_dict:
+            logger.debug('No {} in the sat data, omitting from .mod dict'.format(acos_var))
+            continue
+
         # For 3D vars this slicing will create a vector. For 2D vars, it will create a scalar
         tmp_val = acos_data_dict[acos_var][i_sounding, i_foot]
         # The profile variables need flipped b/c for ACOS they are arranged space-to-surface,
