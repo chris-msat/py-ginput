@@ -39,13 +39,7 @@ _fill_val = -999999
 _string_fill = b'N/A'
 
 
-class ValueChangedError(Exception):
-    """Error to use if a value that should not change did"""
-    pass
-
-
 class ErrorHandler(object):
-    err_choices = ('always', 'never', 'critical')
     _err_codes = {'bad_time_str': 1,
                   'eqlat_failure': 2,
                   'prior_failure': 3,
@@ -63,8 +57,6 @@ class ErrorHandler(object):
                          'cannot_find_geos': 'Could not find a GEOS FP-IT file bracketing the sounding time. '}
 
     def __init__(self, suppress_error):
-        if suppress_error not in self.err_choices:
-            raise ValueError('suppress_error must be one of: {}'.format(', '.join(self.err_choices)))
         self.suppress_error = suppress_error
 
     def handle_err(self, err, err_code_name, flags, inds):
@@ -87,29 +79,23 @@ class ErrorHandler(object):
         :type flags: :class:`numpy.ndarray`
 
         :param inds: any form of indexing that will assign the error code to the correct place in the flags array, i.e.
-         that is valid for ``flags[inds] = code``. If ``None``, then the flags array will not be modified, but an
-         error will be raised if the ``suppress_error`` level is "never" or "critical".
+         that is valid for ``flags[inds] = code``.
 
         :return: None
         """
-        if self.suppress_error == 'never':
-            raise err
-        elif self.suppress_error == 'critical' and flags is None:
+        if not self.suppress_error or flags is None:
             raise err
 
-        if inds is not None:
-            self.set_flag(err_code_name, flags, inds)
+        self.set_flag(err_code_name, flags, inds)
 
         if logger.level <= logging.DEBUG:
             logger.exception(err)
         else:
             last_call = traceback.format_stack()[-2].strip()
             msg = '{}: {}'.format(type(err).__name__, err.args[0].strip())
-            if inds is not None:
-                log_msg = 'Error at indices = {} in {}. Error was: "{}". (Use -vv at the command line for full traceback.)'.format(inds, last_call, msg)
-            else:
-                log_msg = 'Error in {}. Error was: "{}". (Use -vv at the command line for full traceback.)'.format(inds, last_call, msg)
-            logger.error(log_msg)
+            logger.error(
+                'Error at indices = {} in {}. Error was: "{}". (Use -vv at the command line for full traceback.)'
+                .format(inds, last_call, msg))
 
     def set_flag(self, err_code_name, flags, inds):
         try:
@@ -134,7 +120,7 @@ class ErrorHandler(object):
         return 'Value meanings:  ' + '; '.join(descript_strs)
 
 
-_def_errh = ErrorHandler(suppress_error='critical')
+_def_errh = ErrorHandler(suppress_error=False)
 
 
 def acos_interface_main(instrument, met_resampled_file, geos_files, output_file, mlo_co2_file=None, smo_co2_file=None,
@@ -186,18 +172,15 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
     if instrument == 'oco':
         met_data, prior_flags = read_oco_resampled_met(met_resampled_file, error_handler=error_handler)
         gases = ('co2',)
-        flag_field = 'prior_failure_flags'
-        date_field = 'gas_record_date'
+        prior_group = 'priors'
     elif instrument == 'gosat':
         met_data, prior_flags = read_gosat_resampled_met(met_resampled_file, error_handler=error_handler)
         gases = ('co2',)
-        flag_field = 'prior_failure_flags'
-        date_field = 'gas_record_date'
+        prior_group = 'priors'
     elif instrument == 'geocarb':
         met_data, prior_flags = read_geocarb_resampled_met(met_resampled_file, error_handler=error_handler)
         gases = ('co', 'ch4', 'co2')
-        flag_field = '{}_prior_failure_flags'
-        date_field = '{}_record_date'
+        prior_group = '{}_priors'
         check_mlo_smo_gas_file(mlo_co2_file, 'MLO')
         check_mlo_smo_gas_file(smo_co2_file, 'SMO')
     else:
@@ -232,119 +215,74 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
         regen_lut = True
         save_lut = False
 
-    first_gas = True
     unit_scales = {'ppm': 1e-6, 'ppb': 1e-9}
 
-    for gas in gases:
-        # If the user passed explicit paths to the gas files, then we need to replace the format string {gas}
-        # with the current gas
-        mlosmo_record_opts = dict(mlo_file=fmt_gas_file(mlo_co2_file, gas), smo_file=fmt_gas_file(smo_co2_file, gas), 
-                                  recalculate_strat_lut=regen_lut, save_strat=save_lut)
-        # The CO record doesn't expect any init args
-        record_kws = dict() if gas == 'co' else mlosmo_record_opts
+    init_prior_h5(output_file, geos_files, met_resampled_file)
 
+    for gas in gases:
         gas_field = '{}_prior'.format(gas)
-        gas_flag_field = flag_field.format(gas)
-        gas_latency_field = '{}_record_latency'.format(gas)
-        gas_date_field = date_field.format(gas)
+        gas_mlo_file = fmt_gas_file(mlo_co2_file, gas)
+        gas_smo_file = fmt_gas_file(smo_co2_file, gas)
+
+        record_kws = dict(mlo_file=gas_mlo_file, smo_file=gas_smo_file, recalculate_strat_lut=regen_lut, save_strat=save_lut)
+        if gas == 'co':
+            record_kws = dict()
         record_class = tccon_priors.gas_records[gas]
         gas_record = record_class(**record_kws)
         gas_prior_flags = prior_flags.copy()
 
         # The keys here define the variable names that will be used in the HDF file. The values define the corresponding
         # keys in the output dictionaries from tccon_priors.generate_single_tccon_prior.
-        var_mapping = {gas_field: gas_record.gas_name,
-                       gas_latency_field: 'mean_latency',
-                       'equivalent_latitude': 'EqL',
-                       'gas_record_date': 'gas_date',
-                       'atmospheric_stratum': 'atm_stratum',
-                       'age_of_air': 'strat_age_of_air',
+        var_mapping = {gas_field: gas_record.gas_name, 'gas_record_latency': 'mean_latency', 'equivalent_latitude': 'EqL',
+                       'gas_record_date': 'gas_date', 'atmospheric_stratum': 'atm_stratum', 'age_of_air': 'strat_age_of_air',
                        'altitude': 'Height', 'pressure': 'Pressure'}
-
-        # This dictionary defines extra type information to create the output arrays. _make_output_profiles_dict uses
-        # it. The keys should match those in var_mapping; any key from var_mapping that isn't in this one gets the
-        # default output array (with shape orig_shape and fill value np.nan). Each value in this dict must be a
-        # two-element tuple; the first is the desired shape, the second the fill value (which also sets the type). Any
-        # values of -1 in the shape get replaced with the corresponding value from orig_shape.
+        # This dictionary defines extra type information to create the output arrays. _make_output_profiles_dict uses it.
+        # The keys should match those in var_mapping; any key from var_mapping that isn't in this one gets the default
+        # output array (with shape orig_shape and fill value np.nan). Each value in this dict must be a two-element tuple;
+        # the first is the desired shape, the second the fill value (which also sets the type). Any values of -1 in the
+        # shape get replaced with the corresponding value from orig_shape.
         var_type_info = {'gas_record_date': (orig_shape, None)}
 
         if nprocs == 0:
-            gas_profiles, gas_units = _prior_serial(
-                orig_shape=orig_shape, var_mapping=var_mapping, var_type_info=var_type_info, met_data=met_data,
-                co2_record=gas_record, prior_flags=gas_prior_flags, use_trop_eqlat=use_trop_eqlat,
-                error_handler=error_handler
-            )
+            profiles, units = _prior_serial(orig_shape=orig_shape, var_mapping=var_mapping, var_type_info=var_type_info,
+                                            met_data=met_data, gas_record=gas_record, prior_flags=gas_prior_flags,
+                                            use_trop_eqlat=use_trop_eqlat, error_handler=error_handler)
         else:
-            gas_profiles, gas_units = _prior_parallel(
-                orig_shape=orig_shape, var_mapping=var_mapping, var_type_info=var_type_info, met_data=met_data,
-                co2_record=gas_record, prior_flags=gas_prior_flags, nprocs=nprocs, use_trop_eqlat=use_trop_eqlat,
-                error_handler=error_handler
-            )
+            profiles, units = _prior_parallel(orig_shape=orig_shape, var_mapping=var_mapping, var_type_info=var_type_info,
+                                              met_data=met_data, gas_record=gas_record, prior_flags=gas_prior_flags, nprocs=nprocs,
+                                              use_trop_eqlat=use_trop_eqlat, error_handler=error_handler)
 
-        if first_gas:
-            # The gas_record_date field needs renamed for GeoCarb
-            profiles = gas_profiles.copy()
-            profiles.pop('gas_record_date')
-            units = gas_units.copy()
-            units.pop('gas_record_date')
+        # Add latitude, longitude, and flags to the priors file
+        profiles['sounding_longitude'] = met_data['longitude']
+        units['sounding_longitude'] = 'degrees_east'
+        profiles['sounding_latitude'] = met_data['latitude']
+        units['sounding_latitude'] = 'degrees_north'
+        profiles['prior_failure_flags'] = gas_prior_flags
+        units['prior_failure_flags'] = error_handler.get_error_descriptions()
 
-        # Handle the fields that will be unique for each gas first
-        profiles[gas_flag_field] = gas_prior_flags
-        units[gas_flag_field] = error_handler.get_error_descriptions()
-        gas_date_dec_years = [mod_utils.date_to_decimal_year(d) for d in gas_profiles['gas_record_date'].flat]
-        gas_date_dec_years = np.array(gas_date_dec_years).reshape(gas_profiles['gas_record_date'].shape)
-        profiles[gas_date_field] = gas_date_dec_years
-        units[gas_date_field] = gas_units['gas_record_date']
-
-        # Convert the priors from ppm/ppb to dry mole fraction
-        profiles[gas_field] = gas_profiles[gas_field]
-        profiles[gas_field] *= unit_scales[record_class._gas_unit]
+        # Convert the from ppm/ppb to dry mole fraction
+        profiles[gas_field] *= unit_scales[units[gas_field]]
         units[gas_field] = 'dmf'
 
-        # Now handle fields that *should* be the same for all gases. If they are not for some reason, an error will be
-        # raised or logged.
-        try:
-            # Add latitude, longitude, and flags to the priors file
-            _add_or_check_equal(profiles, 'sounding_longitude', met_data['longitude'])
-            units['sounding_longitude'] = 'degrees_east'
-            _add_or_check_equal(profiles, 'sounding_latitude', met_data['latitude'])
-            units['sounding_latitude'] = 'degrees_north'
+        # Also need to convert the entry dates into decimal years to write to HDF
+        gas_date_dec_years = [mod_utils.date_to_decimal_year(d) for d in profiles['gas_record_date'].flat]
+        profiles['gas_record_date'] = np.array(gas_date_dec_years).reshape(profiles['gas_record_date'].shape)
+        units['gas_record_date'] = 'Date as decimal year (decimal part = 0-based day-of-year / {})'.format(mod_constants.days_per_year)
 
-            # Also need to convert the entry dates into decimal years to write to HDF
-            # and convert the stratum to a short integer and update the unit to be more descriptive
-            # but these need special handling the first time through because we are converting them;
-            # they already exist in the profiles dictionary in a different format.
-            stratum = gas_profiles['atmospheric_stratum'].astype(np.uint8)
-            if first_gas:
-                profiles['atmospheric_stratum'] = stratum
-            else:
-                _add_or_check_equal(profiles, 'atmospheric_stratum', stratum)
-            units['gas_record_date'] = 'Date as decimal year (decimal part = 0-based day-of-year / {})'.format(mod_constants.days_per_year)
-            units['atmospheric_stratum'] = 'flag (1 = troposphere, 2 = middleworld, 3 = overworld)'
-        except ValueChangedError as err:
-            # Will either raise error or log it, depending on the error handler settings. Won't actually affect the
-            # flags.
-            error_handler.handle_err(err, err_code_name='', flags=gas_prior_flags, inds=None)
+        # And convert the stratum to a short integer and update the unit to be more descriptive
+        profiles['atmospheric_stratum'] = profiles['atmospheric_stratum'].astype(np.uint8)
+        units['atmospheric_stratum'] = 'flag (1 = troposphere, 2 = middleworld, 3 = overworld)'
 
-        # If running for GOSAT, we have an extra dimension between the exposure and level which is just 1 long and was
-        # only a placeholder to provide compatibility with the loops over sounding group/sounding for OCO. Remove those
-        # singleton dimensions to keep the GOSAT files clean
+        # If running for GOSAT, we have an extra dimension between the exposure and level which is just 1 long and was only
+        # a placeholder to provide compatibility with the loops over sounding group/sounding for OCO. Remove those singleton
+        # dimensions to keep the GOSAT files clean
         if instrument == 'gosat':
             for key, value in profiles.items():
                 profiles[key] = value.squeeze()
                 logger.debug('GOSAT array "{}" squeezed from {} to {}'.format(key, value.shape, profiles[key].shape))
-        
-        first_gas = False
 
-    # Write the priors to the file requested.
-    write_prior_h5(output_file, profiles, units, geos_files, met_resampled_file)
-
-
-def _add_or_check_equal(target_dict, key, array):
-    if key not in target_dict:
-        target_dict[key] = array
-    elif not np.allclose(target_dict[key], array, equal_nan=True):
-        raise ValueChangedError('The current and new values for "{}" differ'.format(key))
+        # Write the priors to the file requested.
+        write_prior_h5(output_file, profiles, units, prior_group=prior_group.format(gas))
 
 
 def _prior_helper(i_sounding, i_foot, qflag, mod_data, gas_record, var_mapping, var_type_info, use_trop_eqlat=False,
@@ -480,7 +418,7 @@ def _make_output_profiles_dict(orig_shape, var_mapping, var_type_info):
     return prof_dict, unit_dict
 
 
-def _prior_serial(orig_shape, var_mapping, var_type_info, met_data, co2_record, prior_flags=None, use_trop_eqlat=False,
+def _prior_serial(orig_shape, var_mapping, var_type_info, met_data, gas_record, prior_flags=None, use_trop_eqlat=False,
                   error_handler=_def_errh):
     """
     Generate the priors, running in serial mode.
@@ -504,7 +442,7 @@ def _prior_serial(orig_shape, var_mapping, var_type_info, met_data, co2_record, 
             mod_data = _construct_mod_dict(met_data, i_sounding, i_foot)
             qflag = met_data['quality_flags'][i_sounding, i_foot]
 
-            this_profiles, this_units, _ = _prior_helper(i_sounding, i_foot, qflag, mod_data, co2_record,
+            this_profiles, this_units, _ = _prior_helper(i_sounding, i_foot, qflag, mod_data, gas_record,
                                                          var_mapping, var_type_info, prior_flags=prior_flags,
                                                          use_trop_eqlat=use_trop_eqlat, error_handler=error_handler)
             for h5_var, h5_array in profiles.items():
@@ -516,7 +454,7 @@ def _prior_serial(orig_shape, var_mapping, var_type_info, met_data, co2_record, 
     return profiles, units
 
 
-def _prior_parallel(orig_shape, var_mapping, var_type_info, met_data, co2_record, nprocs, prior_flags=None,
+def _prior_parallel(orig_shape, var_mapping, var_type_info, met_data, gas_record, nprocs, prior_flags=None,
                     use_trop_eqlat=False, error_handler=_def_errh):
     """
     Generate the priors, running in parallel mode.
@@ -534,7 +472,7 @@ def _prior_parallel(orig_shape, var_mapping, var_type_info, met_data, co2_record
      each array.
     :rtype: dict, dict
     """
-    logger.info('Running CO2 prior calculation in parallel with {} processes'.format(nprocs))
+    logger.info('Running {} prior calculation in parallel with {} processes'.format(gas_record.gas_name.upper(), nprocs))
 
     # Need to prepare iterators of the sounding and footprint indices, as well as the individual met dictionaries
     # and observation dates. We only want to pass the individual dictionary and date to each worker, not the whole
@@ -545,7 +483,7 @@ def _prior_parallel(orig_shape, var_mapping, var_type_info, met_data, co2_record
 
     with Pool(processes=nprocs) as pool:
         result = pool.starmap(_prior_helper, zip(sounding_inds, footprint_inds, qflags, mod_dicts,
-                                                 repeat(co2_record), repeat(var_mapping), repeat(var_type_info),
+                                                 repeat(gas_record), repeat(var_mapping), repeat(var_type_info),
                                                  repeat(use_trop_eqlat), repeat(prior_flags), repeat(error_handler)))
 
     # At this point, result will be a list of tuples of pairs of dicts, the first dict the profiles dict, the second
@@ -962,9 +900,33 @@ def read_resampled_met(met_file, var_dict, error_handler=_def_errh):
     return data_dict, flags
 
 
-def write_prior_h5(output_file, profile_variables, units, geos_files, resampler_file):
+def init_prior_h5(output_file, geos_files, resampler_file):
     """
-    Write the CO2 priors to and HDF5 file.
+    Initialize the output .h5 file. If it already exists, it will be overwritten.
+
+    Initialize the output .h5 file. If it already exists, it will be overwritten.
+    :type output_file: str
+
+    :param geos_files: a list/tuple of GEOS-FP(IT) files from which the equivalent 
+     latitude was computed.
+    :type geos_files: Sequence[str]
+
+    :param resampler_file: the path to the resampled met file that the regular met
+     variables were read from.
+    :type resampler_file: str
+
+    :return: none, writes to disk
+    """
+    with h5py.File(output_file, 'w') as h5obj:
+        h5obj.attrs['geos_files'] = ','.join(os.path.abspath(f) for f in geos_files)
+        h5obj.attrs['resampler_file'] = os.path.abspath(resampler_file)
+        h5obj.attrs['ginput_version'] = __version__
+        h5obj.attrs['interface_version'] = __acos_int_version__
+
+
+def write_prior_h5(output_file, profile_variables, units, prior_group='priors'):
+    """
+    Write the priors to an HDF5 file.
 
     :param output_file: the path to the output file.
     :type output_file: str
@@ -978,12 +940,8 @@ def write_prior_h5(output_file, profile_variables, units, geos_files, resampler_
 
     :return: none, writes to file on disk.
     """
-    with h5py.File(output_file, 'w') as h5obj:
-        h5obj.attrs['geos_files'] = ','.join(os.path.abspath(f) for f in geos_files)
-        h5obj.attrs['resampler_file'] = os.path.abspath(resampler_file)
-        h5obj.attrs['ginput_version'] = __version__
-        h5obj.attrs['interface_version'] = __acos_int_version__
-        h5grp = h5obj.create_group('priors')
+    with h5py.File(output_file, 'a') as h5obj:
+        h5grp = h5obj.create_group(prior_group)
         for var_name, var_data in profile_variables.items():
             # Replace NaNs with numeric fill values
             if np.issubdtype(var_data.dtype, np.number):
@@ -1230,14 +1188,8 @@ def parse_args(parser=None, oco_or_gosat=None):
                         help='Silence all logging except warnings and critical messages. Note: some messages that do '
                              'not use the standard logger will also not be silenced.')
     parser.add_argument('-n', '--nprocs', default=0, type=int, help='Number of processors to use in parallelization')
-    parser.add_argument('--errors', default='critical', choices=ErrorHandler.err_choices,
-                        help='Which errors to raise normally. "critical" (the default) will raise errors that affect '
-                             'the whole file, but simply flag soundings affected by per-sounding errors. "never" will '
-                             'never raise an (expected) error, critical errors will be printed as warnings. "always" '
-                             'will raise all errors.')
-    parser.add_argument('--raise-errors', action='store_const', dest='errors', const='always',
-                        help='Raise errors normally rather than suppressing and logging them. Equivalent to '
-                             '--errors=always.')
+    parser.add_argument('--raise-errors', action='store_true', help='Raise errors normally rather than suppressing and '
+                                                                    'logging them.')
 
     parser.epilog = 'A note on error handling: by default, most errors will be caught and, rather than halt the ' \
                     'execution of this program, will result in a non-zero flag value being stored. A short version ' \
