@@ -1130,8 +1130,7 @@ def GEOS_files(GEOS_path, start_date, end_date, chm=False):
     select_dates = ncdf_dates[(ncdf_dates>=start_date) & (ncdf_dates<end_date)]
 
     if len(select_dates) == 0:
-        print('No GEOS files between',start_date,end_date)
-        sys.exit()
+        raise IOError('No GEOS files between {} and {}'.format(start_date,end_date))
 
     return select_files,select_dates
 
