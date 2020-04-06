@@ -2594,8 +2594,10 @@ def modify_strat_co(base_co_profile, pres_profile, eqlat_profile, pt_profile, tr
     doy_grid = xr.DataArray(np.full(eqlat_profile.shape, prof_doy), coords=level_coords)
 
     # Eq. lat. can get outside the range of the CMAM model's latitude, we clip the eqlat profile so that
-    # effectively we use the last CMAM lat bin for any out-of-range latitudes.
-    eqlat_profile = eqlat_profile.clip(co_lut.lat.min().item(), co_lut.lat.max().item())
+    # effectively we use the last CMAM lat bin for any out-of-range latitudes. We add a little extra buffer
+    # with the 0.9995 b/c in testing with the GeoCARB mock met data, strictly limited to the min/max
+    # caused some points to still be outside the allowed range.
+    eqlat_profile = eqlat_profile.clip(co_lut.lat.min().item()*0.9995, co_lut.lat.max().item()*0.9995)
     cmam_co_prof = co_lut.interp(doy=doy_grid, lat=eqlat_profile, plev=pres_profile).data
 
     # Rather than mess with calculating "excess" CO concentrations for the lookup table, we just averaged the CMAM model
