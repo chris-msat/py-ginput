@@ -1,4 +1,4 @@
-name: modmaker-py3
+name: ginput-auto-default
 channels:
   - conda-forge
   - defaults

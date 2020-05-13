@@ -1,4 +1,4 @@
-ENV ?= ginput-py3
+ENV ?= ginput-auto-default
 
 help:
 	@cat .makehelp
