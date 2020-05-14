@@ -116,7 +116,7 @@ _old_modmaker_modes = ('ncep','merradap42','merradap72','merraglob','fpglob','fp
 _new_fixedp_mode = 'fpit'
 _new_native_mode = 'fpit-eta'
 _new_modmaker_modes = (_new_fixedp_mode, _new_native_mode)
-_default_mode = _new_fixedp_mode
+_default_mode = _new_native_mode
 
 
 def shell_error(msg, ecode=1):
@@ -2210,7 +2210,7 @@ def runlog_driver(runlog, site_abbrv=None, first_date='2000-01-01', **kwargs):
 
 
 def driver(date_range, met_path, chem_path=None, save_path=None, keep_latlon_prec=False, save_in_utc=True, muted=False,
-           slant=False, alt=None, lon=None, lat=None, site_abbrv=None, mode=_default_mode, include_chm=False, **kwargs):
+           slant=False, alt=None, lon=None, lat=None, site_abbrv=None, mode=_default_mode, include_chm=True, **kwargs):
     """
     Function that when called executes the full mod maker process as if called from the command line
 
