@@ -1331,7 +1331,7 @@ def lat_lon_interp(data_old,lat_old,lon_old,lat_new,lon_new,IDs_list):
         lat = np.array([lat_old[lat1],lat_old[lat2]])
         lon = np.array([lon_old[lon1],lon_old[lon2]])
 
-        data = np.array([[data_old[lat1,lon1],data_old[lat1,lon2]],[data_old[lat2,lon2],data_old[lat2,lon1]]])
+        data = np.array([[data_old[lat1,lon1],data_old[lat1,lon2]],[data_old[lat2,lon1],data_old[lat2,lon2]]])
 
         data = ma.masked_where(np.isnan(data),data)
 
