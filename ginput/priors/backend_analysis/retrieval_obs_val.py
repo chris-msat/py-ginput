@@ -971,6 +971,98 @@ def interp_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None, filt
     return combined_prof, obsceil, adj_flag
 
 
+def bin_obs_to_vmr_alts(vmralts, obsz, obsprof, obsceil=None, full_size=True, fill_surface=False, filter_nans=True):
+    """Bin observational data to prior profile altitudes using a linear weighting
+
+    Parameters
+    ----------
+    vmralts : array-like
+        The altitudes of the prior profile levels
+
+    obsz : array-like
+        The altitudes of the observations. Must be in the same units as vmralts
+
+    obsprof : array-like
+        The observed concentrations
+
+    obsceil : float, optional
+        If given, the top altitude of the observations. If not given, inferred from `obsz`
+
+    Returns
+    -------
+    array-like
+        The binned observed concentrations
+
+    """
+    if filter_nans:
+        notnans = ~np.isnan(obsz) & ~np.isnan(obsprof)
+        obsz = obsz[notnans]
+        obsprof = obsprof[notnans]
+
+    if obsceil is None:
+        obsceil = np.max(obsz)
+    zz_vmr = vmralts <= obsceil
+    if full_size:
+        binned_prof = np.full_like(vmralts, np.nan)
+    else:
+        binned_prof = np.full([zz_vmr.sum()], np.nan)
+
+    for i in np.flatnonzero(zz_vmr):
+        # What we want are weights that are 1 at the VMR level i and decrease linearly to 0 at levels i-1 and i+1. This
+        # way the weighted sum of observed concentrations for level i is weighted most toward the nearest altitude
+        # observations but account for the concentration between levels. This is similar to how the effective vertical
+        # path is handled in GGG.
+        weights = np.zeros_like(obsz)
+        if i > 0:
+            # The bottom level will not get these weights because it should be at zero altitude and has no level below
+            # it.
+            zdiff = vmralts[i] - vmralts[i - 1]
+            in_layer = (obsz >= vmralts[i - 1]) & (obsz < vmralts[i])
+        else:
+            # There's a couple different ways we could handle the case where there is aircraft data below the bottom
+            # layer. We could just ignore it, which might make sense if the profiles we defined on layer edges. For
+            # TCCON, when we do that, typically the bottom edge is at 0, so there will be no values there. We could just
+            # give all points below the bottom layer a relative weight of 1, but that's inconsistent with the idea that
+            # points near the prior level should contribute the most. What I've chosen to do is to assume the altitude
+            # is in the center of the layer, so it should extend as far below as it does above, as use that to weight
+            # the aircraft data.
+            zdiff = vmralts[i + 1] - vmralts[i]
+            bottom_alt = vmralts[i] - zdiff
+            in_layer = (obsz >= bottom_alt) & (obsz < vmralts[i])
+        weights[in_layer] = (obsz[in_layer] - vmralts[i - 1]) / zdiff
+
+        # The top bin can be handled by this code whether or not adjust_to_overworld is set, but the result will be
+        # different:
+        #   * if adjust_to_overworld is False, then there will be "observations" extending at least to the next bin
+        #     above the obs. ceiling. Some of these will be from the prior, but the will be spaced out so that they are
+        #     on the same z-grid as the obs. The weighted average will then include some amount of the prior, depending
+        #     on how much of the inter-level space needed prior data. This ensures a smooth transition to the prior.
+        #   * if adjust_to_overworld is True, then the will be no observations above the ceiling. The last bin below the
+        #     ceiling will potentially have fewer points than the others, but it will represent only observations and
+        #     so can be extended to the tropopause.
+        zdiff = vmralts[i + 1] - vmralts[i]
+        in_layer = (obsz >= vmralts[i]) & (obsz < vmralts[i + 1])
+        weights[in_layer] = (vmralts[i + 1] - obsz[in_layer]) / zdiff
+
+        # normalize the weights. if no values in this bin, this will result in weights all being NaN which is what
+        # we want. The following sum should NOT be a nansum because we want a NaN in that bin so it can get filled
+        # in later. If NaNs in the obs/prior profiles are problems, that needs to be dealt with before binning.
+        weights /= weights.sum()
+        binned_prof[i] = np.sum(weights * obsprof)
+
+    if fill_surface:
+        # If there are any NaNs left at the beginning (bottom) of the profile, replace them with the first non-NaN
+        # value. This assumes that the .atm file already includes a surface measurement at the bottom and we just need
+        # to extrapolate to below surface layers.
+        nn = np.flatnonzero(~np.isnan(binned_prof))[0]
+        binned_prof[:nn] = binned_prof[nn]
+
+    if not full_size and np.any(np.isnan(binned_prof)):
+        raise RuntimeError('Not all levels got a value')
+
+    return binned_prof
+
+
 def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None, filter_obs_fxn=None,
                                  adjust_to_overworld=False, min_req_top_alt=_default_min_req_top_alt,
                                  vmr_trop_alt=None, vmr_theta=None):
@@ -1052,59 +1144,7 @@ def weighted_bin_obs_to_vmr_alts(obsfile, vmralts, vmrprof, force_prior_fxn=None
         obsz, obsprof = _blend_top_weighted_bin(obsz=obsz, obsprof=obsprof, obsceil=obsceil,
                                                 vmralts=vmralts, vmrprof=vmrprof, zz_vmr=zz_vmr)
 
-    binned_prof = np.full([zz_vmr.sum()], np.nan)
-
-    for i in np.flatnonzero(zz_vmr):
-        # What we want are weights that are 1 at the VMR level i and decrease linearly to 0 at levels i-1 and i+1. This
-        # way the weighted sum of observed concentrations for level i is weighted most toward the nearest altitude
-        # observations but account for the concentration between levels. This is similar to how the effective vertical
-        # path is handled in GGG.
-        weights = np.zeros_like(obsz)
-        if i > 0:
-            # The bottom level will not get these weights because it should be at zero altitude and has no level below
-            # it.
-            zdiff = vmralts[i] - vmralts[i-1]
-            in_layer = (obsz >= vmralts[i-1]) & (obsz < vmralts[i])
-        else:
-            # There's a couple different ways we could handle the case where there is aircraft data below the bottom
-            # layer. We could just ignore it, which might make sense if the profiles we defined on layer edges. For
-            # TCCON, when we do that, typically the bottom edge is at 0, so there will be no values there. We could just
-            # give all points below the bottom layer a relative weight of 1, but that's inconsistent with the idea that
-            # points near the prior level should contribute the most. What I've chosen to do is to assume the altitude
-            # is in the center of the layer, so it should extend as far below as it does above, as use that to weight
-            # the aircraft data.
-            zdiff = vmralts[i+1] - vmralts[i]
-            bottom_alt = vmralts[i] - zdiff
-            in_layer = (obsz >= bottom_alt) & (obsz < vmralts[i])
-        weights[in_layer] = (obsz[in_layer] - vmralts[i-1])/zdiff
-
-        # The top bin can be handled by this code whether or not adjust_to_overworld is set, but the result will be
-        # different:
-        #   * if adjust_to_overworld is False, then there will be "observations" extending at least to the next bin
-        #     above the obs. ceiling. Some of these will be from the prior, but the will be spaced out so that they are
-        #     on the same z-grid as the obs. The weighted average will then include some amount of the prior, depending
-        #     on how much of the inter-level space needed prior data. This ensures a smooth transition to the prior.
-        #   * if adjust_to_overworld is True, then the will be no observations above the ceiling. The last bin below the
-        #     ceiling will potentially have fewer points than the others, but it will represent only observations and
-        #     so can be extended to the tropopause.
-        zdiff = vmralts[i+1] - vmralts[i]
-        in_layer = (obsz >= vmralts[i]) & (obsz < vmralts[i+1])
-        weights[in_layer] = (vmralts[i+1] - obsz[in_layer])/zdiff
-
-        # normalize the weights. if no values in this bin, this will result in weights all being NaN which is what
-        # we want. The following sum should NOT be a nansum because we want a NaN in that bin so it can get filled
-        # in later. If NaNs in the obs/prior profiles are problems, that needs to be dealt with before binning.
-        weights /= weights.sum()
-        binned_prof[i] = np.sum(weights * obsprof)
-
-    # If there are any NaNs left at the beginning (bottom) of the profile, replace them with the first non-NaN value.
-    # This assumes that the .atm file already includes a surface measurement at the bottom and we just need to
-    # extrapolate to below surface layers.
-    nn = np.flatnonzero(~np.isnan(binned_prof))[0]
-    binned_prof[:nn] = binned_prof[nn]
-
-    if np.any(np.isnan(binned_prof)):
-        raise RuntimeError('Not all levels got a value')
+    binned_prof = bin_obs_to_vmr_alts(vmralts, obsz, obsprof, obsceil=obsceil, full_size=False, fill_surface=True)
 
     combined_prof = vmrprof.copy()
     combined_prof[zz_vmr] = binned_prof
