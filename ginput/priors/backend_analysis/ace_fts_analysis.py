@@ -2,7 +2,7 @@ from __future__ import print_function, division, absolute_import
 
 from collections import OrderedDict
 import datetime as dt
-from dateutil.relativedelta import relativedelta
+from glob import glob
 from itertools import repeat
 from matplotlib import pyplot as plt
 from multiprocessing import Pool
@@ -10,6 +10,7 @@ import netCDF4 as ncdf
 import numpy as np
 import pandas as pd
 import os
+import re
 from scipy.optimize import curve_fit
 from statsmodels.robust.robust_linear_model import RLM
 from statsmodels.robust.norms import TukeyBiweight
@@ -35,6 +36,64 @@ _std_frac_bins = np.arange(0.0, 1.05, 0.05)
 _std_frac_bin_centers = _bin_centers(_std_frac_bins)
 _std_theta_bins = np.concatenate([np.arange(380, 1080, 50), np.arange(1080, 1680, 100), np.arange(1680, 3680, 200)])
 _std_theta_bin_centers = _bin_centers(_std_theta_bins)
+
+
+def ace_lut_driver(ace_dir, rw_supp_table_file, geos_path, lut_save_dir, overwrite_age_file=True, nprocs=0):
+    """Generate all the ACE-derived look-up tables needed for ginput
+
+    Parameters
+    ----------
+    ace_dir : str
+        Directory to the ACE-FTS data. Expects the ACEs files therein to be named "ACE*{specie}.nc", e.g.
+        "ACEFTS_L2_v3p6_N2O.nc".
+
+    rw_supp_table_file : str
+        Path to text file containing Table S3.1 from Washenfelder et al. 2003 (doi:10.1029/2003GL017969). This is
+        usually "washenfelder03_table_s3.txt" in ginput/data.
+
+    geos_path : str
+        Path to the GEOS-FPIT met directory containing the "Nv" subdirectory with eta-level GEOS met files.
+
+    lut_save_dir : str
+        Path to save the newly generated LUT files to
+
+    overwrite_age_file : bool
+        Whether or not to recreate and overwrite the ACE-FTS "AGE" file if it exists.
+
+    nprocs : int
+        Number of processors to use when generating the ACE AGE file.
+
+    Returns
+    -------
+    None
+        Writes 3 files (ace_fn2o_lut.nc, n2o_ch4_acefts.nc, and ch4_hf_slopes.nc) to `lut_save_dir` and an ACE "AGE"
+        file to `ace_dir` if either that file does not exist or `overwrite_age_file` is `True`.
+
+    """
+    # Make a dictionary of the available ACE files by species
+    ace_files = {re.search(r'[A-Z](?=\.nc)', os.path.basename(f)).group(): f for f in glob(os.path.join(ace_dir, 'ACE*.nc'))}
+
+    if 'AGE' not in ace_files or overwrite_age_file:
+        age_file = re.sub(r'N2O.nc$', 'AGE.nc', ace_files['N2O'])
+        logger.info('Creating ACE-FTS AGE file. Will save to {}. Using {} processors'.format(age_file, nprocs))
+        generate_ace_age_file(ace_in_file=ace_files['N2O'], age_file_out=age_file, geos_path=geos_path,
+                              use_geos_theta_for_age=False, nprocs=nprocs)
+        ace_files['AGE'] = age_file
+
+    fn2o_save_file = os.path.join(lut_save_dir, 'ace_fn2o_lut.nc')
+    logger.info('Creating F(N2O) look up table file. Will save to {}.'.format(fn2o_save_file))
+    make_fn2o_lookup_table(ace_age_file=ace_files['AGE'], ace_n2o_file=ace_files['N2O'], lut_save_file=fn2o_save_file)
+
+    fch4_save_file = os.path.join(lut_save_dir, 'n2o_ch4_acefts.nc')
+    logger.info('Creating F(CH4):F(N2O) look up table file. Will save to {}.'.format(fch4_save_file))
+    make_fch4_fn2o_lookup_table(ace_age_file=ace_files['AGE'], ace_n2o_file=ace_files['N2O'], ace_ch4_file=ace_files['CH4'],
+                                lut_save_file=fch4_save_file)
+
+    hf_slope_save_file = os.path.join(lut_save_dir, 'ch4_hf_slopes.nc')
+    logger.info('Creating CH4:HF slope look up table file. Will save to {}'.format(hf_slope_save_file))
+    make_hf_ch4_slopes(ace_ch4_file=ace_files['CH4'], ace_hf_file=ace_files['HF'], ace_age_file=ace_files['AGE'],
+                       washenfelder_supp_table_file=rw_supp_table_file, lut_save_file=hf_slope_save_file,
+                       clip_values=True)
 
 
 def make_fn2o_lookup_table(ace_age_file, ace_n2o_file, lut_save_file):
@@ -72,8 +131,10 @@ def make_fn2o_lookup_table(ace_age_file, ace_n2o_file, lut_save_file):
     fn2o_means[fn2o_means > 1] = 1
     fn2o_overall[fn2o_overall > 1] = 1
 
-    _save_fn2o_lut(lut_save_file, fn2o_means, fn2o_counts, fn2o_overall, theta_overall, age_bin_centers, age_bins,
-                   theta_bin_centers, theta_bins, ace_n2o_file)
+    _save_fn2o_lut(lut_save_file, fn2o_means=fn2o_means, fn2o_counts=fn2o_counts, fn2o_overall=fn2o_overall,
+                   theta_overall=theta_overall, age_bin_centers=age_bin_centers, age_bin_edges=age_bins,
+                   theta_bin_centers=theta_bin_centers, theta_bin_edges=theta_bins,
+                   ace_n2o_file=ace_n2o_file, ace_age_file=ace_age_file)
 
 
 def make_fch4_fn2o_lookup_table(ace_age_file, ace_n2o_file, ace_ch4_file, lut_save_file):
@@ -115,8 +176,10 @@ def make_fch4_fn2o_lookup_table(ace_age_file, ace_n2o_file, ace_ch4_file, lut_sa
                                                                         fn2o_bins, theta_bins)
 
     logger.info('Saving F(CH4):F(N2O) file')
-    _save_fch4_lut(lut_save_file, fch4_means, fch4_counts, fch4_overall, theta_overall,
-                   fn2o_bin_centers, fn2o_bins, theta_bin_centers, theta_bins)
+    _save_fch4_lut(lut_save_file, fch4_means=fch4_means, fch4_counts=fch4_counts, fch4_overall=fch4_overall,
+                   theta_overall=theta_overall, fn2o_bin_centers=fn2o_bin_centers, fn2o_bin_edges=fn2o_bins,
+                   theta_bin_centers=theta_bin_centers, theta_bin_edges=theta_bins,
+                   ace_ch4_file=ace_ch4_file, ace_n2o_file=ace_n2o_file, ace_age_file=ace_age_file)
 
 
 def make_hf_ch4_slopes(ace_ch4_file, ace_hf_file, ace_age_file, washenfelder_supp_table_file, lut_save_file,
@@ -201,8 +264,9 @@ def make_hf_ch4_slopes(ace_ch4_file, ace_hf_file, ace_age_file, washenfelder_sup
     full_dtindex = pd.date_range(start=dt.datetime(first_year, 1, 1), end=dt.datetime(last_year, 1, 1), freq='YS')
 
     logger.info('Saving CH4 vs. HF slopes')
-    _save_hf_ch4_lut(lut_save_file, ace_ch4_file, ace_hf_file, lat_bin_functions, full_dtindex,
-                     lat_bin_slopes, lat_bin_counts, fit_params)
+    _save_hf_ch4_lut(lut_save_file, ace_ch4_file=ace_ch4_file, ace_hf_file=ace_hf_file, ace_age_file=ace_age_file,
+                     lat_bin_edges=lat_bin_functions, full_date_index=full_dtindex,
+                     ace_slopes=lat_bin_slopes, ace_counts=lat_bin_counts, slope_fit_params=fit_params)
 
     return lat_bin_slopes, lat_bin_counts
 
@@ -278,7 +342,8 @@ def _get_year_avg_ch4_sbc(year, ch4):
 
 
 def _save_fn2o_lut(nc_filename, fn2o_means, fn2o_counts, fn2o_overall, theta_overall,
-                   age_bin_centers, age_bin_edges, theta_bin_centers, theta_bin_edges, ace_n2o_file):
+                   age_bin_centers, age_bin_edges, theta_bin_centers, theta_bin_edges,
+                   ace_n2o_file, ace_age_file):
 
     with ncdf.Dataset(nc_filename, 'w') as nch:
         age_dim = ioutils.make_ncdim_helper(nch, 'age', age_bin_centers,
@@ -308,10 +373,13 @@ def _save_fn2o_lut(nc_filename, fn2o_means, fn2o_counts, fn2o_overall, theta_ove
                                   description='Mean value of potential temperature in a given age bin',
                                   units='K')
         ioutils.add_dependent_file_hash(nch, 'ace_n2o_file_sha1', ace_n2o_file)
+        ioutils.add_dependent_file_hash(nch, 'ace_age_file_sha1', ace_age_file)
+        ioutils.add_creation_info(nch, 'make_fn2o_lookup_table')
 
 
 def _save_fch4_lut(nc_filename, fch4_means, fch4_counts, fch4_overall, theta_overall,
-                   fn2o_bin_centers, fn2o_bin_edges, theta_bin_centers, theta_bin_edges):
+                   fn2o_bin_centers, fn2o_bin_edges, theta_bin_centers, theta_bin_edges,
+                   ace_ch4_file, ace_n2o_file, ace_age_file):
     with ncdf.Dataset(nc_filename, 'w') as nch:
         fn2o_dim = ioutils.make_ncdim_helper(nch, 'fn2o', fn2o_bin_centers,
                                              description='Fraction of N2O remaining relative to the stratospheric boundary condition.',
@@ -339,13 +407,19 @@ def _save_fch4_lut(nc_filename, fch4_means, fch4_counts, fch4_overall, theta_ove
         ioutils.make_ncvar_helper(nch, 'theta_overall', theta_overall, (fn2o_dim,),
                                   description='Mean value of potential temperature in a given F(N2O) bin',
                                   units='K')
+        ioutils.add_creation_info(nch, 'make_fch4_fn2o_lookup_table')
+        ioutils.add_dependent_file_hash(nch, 'ace_ch4_file_sha1', ace_ch4_file)
+        ioutils.add_dependent_file_hash(nch, 'ace_n2o_file_sha1', ace_n2o_file)
+        ioutils.add_dependent_file_hash(nch, 'ace_age_file_sha1', ace_age_file)
 
 
-def _save_hf_ch4_lut(nc_filename, ace_ch4_file, ace_hf_file, lat_bin_edges, full_date_index, ace_slopes, ace_counts, slope_fit_params):
+def _save_hf_ch4_lut(nc_filename, ace_ch4_file, ace_hf_file, ace_age_file, lat_bin_edges,
+                     full_date_index, ace_slopes, ace_counts, slope_fit_params):
     with ncdf.Dataset(nc_filename, 'w') as nch:
-        ioutils.add_creation_info(nch, creation_note='ace_fts_analysis.make_hf_ch4_slopes')
+        ioutils.add_creation_info(nch, creation_note='make_hf_ch4_slopes')
         ioutils.add_dependent_file_hash(nch, 'ace_ch4_file_sha1', ace_ch4_file)
         ioutils.add_dependent_file_hash(nch, 'ace_hf_file_sha1', ace_hf_file)
+        ioutils.add_dependent_file_hash(nch, 'ace_age_file_sha1', ace_age_file)
 
         nch.ace_ch4_file = ace_ch4_file
         nch.ace_hf_file = ace_hf_file
@@ -657,7 +731,7 @@ def _calc_el_age_for_ace(ace_dates, ace_lon, ace_lat, ace_theta, geos_dates, geo
     geos_vars = {'EPV': 1e6, 'T': 1.0}
 
     try:
-        geos_files = [os.path.join(geos_path, 'Np', mod_utils._format_geosfp_name('fpit', 'Np', d)) for d in geos_dates]
+        geos_files = [os.path.join(geos_path, 'Nv', mod_utils._format_geosfp_name('fpit', 'met', 'eta', d)) for d in geos_dates]
         geos_data_on_std_times = []
         for i, f in enumerate(geos_files):
             geos_data_on_std_times.append(_interp_geos_vars_to_ace_lat_lon(f, geos_vars, ace_lon, ace_lat))
