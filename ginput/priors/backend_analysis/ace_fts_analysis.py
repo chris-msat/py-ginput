@@ -71,7 +71,7 @@ def ace_lut_driver(ace_dir, rw_supp_table_file, geos_path, lut_save_dir, overwri
 
     """
     # Make a dictionary of the available ACE files by species
-    ace_files = {re.search(r'[A-Z](?=\.nc)', os.path.basename(f)).group(): f for f in glob(os.path.join(ace_dir, 'ACE*.nc'))}
+    ace_files = {re.search(r'[A-Z0-9]+(?=\.nc)', os.path.basename(f)).group(): f for f in glob(os.path.join(ace_dir, 'ACE*.nc'))}
 
     if 'AGE' not in ace_files or overwrite_age_file:
         age_file = re.sub(r'N2O.nc$', 'AGE.nc', ace_files['N2O'])
@@ -731,7 +731,7 @@ def _calc_el_age_for_ace(ace_dates, ace_lon, ace_lat, ace_theta, geos_dates, geo
     geos_vars = {'EPV': 1e6, 'T': 1.0}
 
     try:
-        geos_files = [os.path.join(geos_path, 'Nv', mod_utils._format_geosfp_name('fpit', 'met', 'eta', d)) for d in geos_dates]
+        geos_files = [os.path.join(geos_path, 'Np', mod_utils._format_geosfp_name('fpit', 'met', 'p', d)) for d in geos_dates]
         geos_data_on_std_times = []
         for i, f in enumerate(geos_files):
             geos_data_on_std_times.append(_interp_geos_vars_to_ace_lat_lon(f, geos_vars, ace_lon, ace_lat))
