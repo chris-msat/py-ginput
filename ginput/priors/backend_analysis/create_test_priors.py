@@ -146,7 +146,7 @@ def read_date_lat_lon_file(acinfo_filename, date_fmt='str'):
     """
     with open(acinfo_filename, 'r') as acfile:
         # Check that the header matches what is expected
-        header_parts = acfile.readline().split(',')
+        header_parts = acfile.readline().strip().split(',')
         expected_header_parts = ('DATE', 'LAT', 'LON', 'ATMFILE')
         if any(a != b for a, b in zip(header_parts, expected_header_parts)):
             raise IOError('The first {ncol} columns in the info file ({infofile}) do not match what is expected: '
@@ -638,6 +638,13 @@ def _write_priors_h5(save_file, prior_results, atm_files, mod_files=None):
                 var_array[var_array < 0] = int_h5_fill
                 attrs = {'units': 'seconds since 1970-01-01'}
                 fill_val = int_h5_fill
+            elif var_array.flatten()[0] is None:
+                if all(v is None for v in var_array.flat):
+                    var_array = np.full_like(var_array, float_h5_fill, dtype=np.float)
+                    attrs = dict()
+                    fill_val = float_h5_fill
+                else:
+                    raise NotImplementedError('Some, but not all, values are None')
             else:
                 obj_type = type(var_array.flatten()[0]).__name__
                 raise NotImplementedError('Converting objects of type "{}" not implemented'.format(obj_type))
@@ -668,6 +675,7 @@ def _write_priors_h5(save_file, prior_results, atm_files, mod_files=None):
         prior_grp = wobj.create_group('Priors')
         prof_grp = prior_grp.create_group('Profiles')
         for key in profiles[0].keys():
+            print('Writing', key)
             prof_array, prof_attrs, this_fill_val = convert_h5_array_type(make_h5_array(profiles, key))
             prof_attrs['units'] = units[0][key]  # assume the units are the same for all profiles
             dset = prof_grp.create_dataset(key, data=prof_array, fillvalue=this_fill_val)
