@@ -1,8 +1,14 @@
 from datetime import datetime as dtime
 from itertools import product
+import netCDF4 as ncdf
+import numpy as np
+import os
 import unittest
 
 from ..common_utils import mod_utils
+from ..mod_maker import mod_maker, tccon_sites
+
+from . import test_utils
 
 
 class TestGinputUtils(unittest.TestCase):
@@ -70,6 +76,37 @@ class TestGinputUtils(unittest.TestCase):
                 t = t + 273.15
                 th_chk = mod_utils.calculate_potential_temperature(p, t)
                 self.assertLess(abs(theta - th_chk), 0.01)
+
+
+class TestModMakerUtils(unittest.TestCase):
+    @staticmethod
+    def _test_lat_lon_interp_internal(site_lat, site_lon):
+        geos_file = mod_utils._format_geosfp_name('fpit', 'met', 'surf', test_utils.test_date, add_subdir=True)
+        geos_file = os.path.join(test_utils.geos_fp_dir, geos_file)
+        with ncdf.Dataset(geos_file) as ds:
+            ids = mod_maker.querry_indices(ds, site_lat, site_lon, None, None)
+            lat = ds['lat'][:].filled(np.nan)
+            lon = ds['lon'][:].filled(np.nan)
+            shape = ds['PS'][:].squeeze().shape
+            lat_array = np.broadcast_to(lat.reshape(-1,1), shape)
+            lon_array = np.broadcast_to(lon.reshape(1,-1), shape)
+            
+            new_lat = mod_maker.lat_lon_interp(lat_array, lat, lon, [site_lat], [site_lon], [ids])[0]
+            new_lon = mod_maker.lat_lon_interp(lon_array, lat, lon, [site_lat], [site_lon], [ids])[0]
+            return new_lat.item(), new_lon.item()
+
+    def test_lat_lon_interp(self):
+        sites = tccon_sites.tccon_site_info_for_date(test_utils.test_date)
+        failed_sites = []
+        for sid, info in sites.items():
+            lat = info['lat']
+            lon = info['lon_180']
+            new_lat, new_lon = self._test_lat_lon_interp_internal(lat, lon)
+            if not np.isclose(lat, new_lat) and np.isclose(lon, new_lon):
+                failed_sites.append(sid)
+
+        msg = "{nfail}/{tot} sites' interpolated lat/lon do not match their original: {sites}".format(nfail=len(failed_sites), tot=len(sites), sites=', '.join(failed_sites))
+        self.assertTrue(len(failed_sites) == 0, msg=msg)
 
 
 if __name__ == '__main__':
