@@ -1328,19 +1328,16 @@ def lat_lon_interp(data_old,lat_old,lon_old,lat_new,lon_new,IDs_list):
     for IDs in IDs_list:
         lat1,lat2,lon1,lon2 = IDs
 
-        # interp2d docs indicate that one way to give coordinates is to give the full arrays
-        # less prone to errors than trying to give individual columns, esp. for a 2x2 array where
-        # interp2d can't tell if we gave things in the right order
-        lat = np.array([[lat_old[lat1],lat_old[lat1]], [lat_old[lat2],lat_old[lat2]]])
-        lon = np.array([[lon_old[lon1],lon_old[lon2]], [lon_old[lon1],lon_old[lon2]]])
+        lat = np.array([lat_old[lat1],lat_old[lat2]])
+        lon = np.array([lon_old[lon1],lon_old[lon2]])
 
         data = np.array([[data_old[lat1,lon1],data_old[lat1,lon2]],[data_old[lat2,lon1],data_old[lat2,lon2]]])
 
         data = ma.masked_where(np.isnan(data),data)
 
-        func = interp2d(lat,lon,data)
+        func = interp2d(lon,lat,data)
 
-        data_new.append(func(lat_new[count],lon_new[count]))
+        data_new.append(func(lon_new[count],lat_new[count]))
 
         count+=1
 
