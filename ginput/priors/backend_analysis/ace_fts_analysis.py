@@ -71,7 +71,7 @@ def ace_lut_driver(ace_dir, rw_supp_table_file, geos_path, lut_save_dir, overwri
 
     """
     # Make a dictionary of the available ACE files by species
-    ace_files = {re.search(r'[A-Z](?=\.nc)', os.path.basename(f)).group(): f for f in glob(os.path.join(ace_dir, 'ACE*.nc'))}
+    ace_files = {re.search(r'[A-Z0-9]+(?=\.nc)', os.path.basename(f)).group(): f for f in glob(os.path.join(ace_dir, 'ACE*.nc'))}
 
     if 'AGE' not in ace_files or overwrite_age_file:
         age_file = re.sub(r'N2O.nc$', 'AGE.nc', ace_files['N2O'])
@@ -725,26 +725,33 @@ def generate_ace_age_file(ace_in_file, age_file_out, geos_path, use_geos_theta_f
 
 
 def _calc_el_age_for_ace(ace_dates, ace_lon, ace_lat, ace_theta, geos_dates, geos_path, use_geos_theta_for_age=False):
+    # Let's get to the point where we load the GEOS data
     date_str = ', '.join(d.strftime('%Y-%m-%d %H:%M') for d in ace_dates)
     logger.info('Calculating eqlat and age for profiles on {}'.format(date_str))
     # Read in the GEOS data, calculating quantities as necessary #
-    geos_vars = {'EPV': 1e6, 'T': 1.0}
+    geos_vars = {'EPV': 1e6, 'T': 1.0, 'DELP': 1.0}
 
     try:
         geos_files = [os.path.join(geos_path, 'Nv', mod_utils._format_geosfp_name('fpit', 'met', 'eta', d)) for d in geos_dates]
         geos_data_on_std_times = []
+        geos_pres = []
         for i, f in enumerate(geos_files):
-            geos_data_on_std_times.append(_interp_geos_vars_to_ace_lat_lon(f, geos_vars, ace_lon, ace_lat))
-
-        with ncdf.Dataset(geos_files[0]) as nh:
-            geos_pres = nh.variables['lev'][:]
-        geos_pres = np.tile(geos_pres.reshape(1, -1), [ace_lon.size, 1])
+            this_data = _interp_geos_vars_to_ace_lat_lon(f, geos_vars, ace_lon, ace_lat)
+            geos_pres.append(np.fliplr(mod_utils.convert_geos_eta_coord(this_data.pop('DELP'))))
+            
+            # Handle flipping vertically after computing pressure in case the convert function expects the
+            # delp vector space-to-surface. Flipping lr instead of ud because the flip has to go along the
+            # second dimension
+            for k, v in this_data.items():
+                this_data[k] = np.fliplr(v)
+                
+            geos_data_on_std_times.append(this_data)
 
         # Generate the eq. lat. intepolators and find the eq. lat. profiles on the GEOS levels #
-        eqlat_interpolators = mm.equivalent_latitude_functions_from_geos_files(geos_files, geos_dates, muted=True)
+        eqlat_interpolators = mm.equivalent_latitude_functions_from_native_geos_files(geos_files, geos_dates, muted=True)
         for i, geos_data in enumerate(geos_data_on_std_times):
             gdate = geos_dates[i]
-            geos_data['PT'] = mod_utils.calculate_potential_temperature(geos_pres, geos_data['T'])
+            geos_data['PT'] = mod_utils.calculate_potential_temperature(geos_pres[i], geos_data['T'])
             # Calculate the equivalent latitude profiles.
             eqlat = np.full_like(geos_data['T'], np.nan)
             for j in range(ace_lon.size):
@@ -756,10 +763,21 @@ def _calc_el_age_for_ace(ace_dates, ace_lon, ace_lat, ace_theta, geos_dates, geo
         geos_data_on_ace_levels = dict()
         for varname, geos_data in geos_data_at_ace_times.items():
             ace_profiles = np.full_like(ace_theta, np.nan)
-            for i, profile in enumerate(geos_data):
+            for i, _ in enumerate(geos_data):
+                # Limit to GEOS levels where potential temperature is monotonically increasing. 
+                pt_incr = np.flatnonzero(np.diff(geos_data_at_ace_times['PT'][i,:]) <= 0)[-1] + 1
+                logger.debug('Limiting GEOS data to level {} and up to ensure monotonically increasing potential temperature'.format(pt_incr+1))
+                # Check that the GEOS data still covers the range of ACE potential temperatures. It should be okay if it doesn't
+                # (ACE should just get NaNs there) this is just to see how often it happens
+                min_geos_pt = np.nanmin(geos_data_at_ace_times['PT'][i, pt_incr:])
+                min_ace_pt = np.nanmin(ace_theta[i, :])
+                if min_geos_pt > min_ace_pt:
+                    logger.info('Note that GEOS PT starts increasing monotonically above the bottom ACE level (profile time: {date}, ACE bottom: {ace:.2f}, GEOS bottom: {geos:.2f})'
+                                .format(date=ace_dates[i], ace=min_ace_pt, geos=min_geos_pt))
+                
                 # This is one case where I think we do not want to extrapolate because the ACE data spans much greater
                 # vertical extent than the GEOS data, so it can't be reliable
-                ace_profiles[i, :] = np.interp(ace_theta[i, :], geos_data_at_ace_times['PT'][i, :], geos_data[i, :],
+                ace_profiles[i, :] = np.interp(ace_theta[i, :], geos_data_at_ace_times['PT'][i, pt_incr:], geos_data[i, pt_incr:],
                                                left=np.nan, right=np.nan)
             geos_data_on_ace_levels[varname] = ace_profiles
 
