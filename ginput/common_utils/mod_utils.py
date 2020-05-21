@@ -669,7 +669,7 @@ def convert_geos_eta_coord(delp):
     # the top pressure is always 0.01 hPa. Since the columns are space-to-surface, we add the cumulative sum to get the
     # level bottom pressure, then take the average along that axis to get the middle pressure
     level_shape = dp_shape.copy()
-    level_shape[:i_ax+1] = 1
+    level_shape[i_ax] = 1
     top_p = 0.01
     top_p_slice = np.full(level_shape, top_p)
 
