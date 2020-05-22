@@ -673,6 +673,7 @@ def generate_ace_age_file(ace_in_file, age_file_out, geos_path, use_geos_theta_f
     # This will need to group ACE profiles by which GEOS files they fall between, read the PV from those files,
     # interpolate to the ACE profile lat/lon/time, generate the EL interpolators, calculate the EL profiles, then
     # finally lookup age from CLAMS.
+    logger.info('Generating ACE age file with NATIVE-level GEOS files')
     ace_data = dict()
     with ncdf.Dataset(ace_in_file) as nh:
         ace_data['dates'] = read_ace_date(nh)
@@ -722,6 +723,7 @@ def generate_ace_age_file(ace_in_file, age_file_out, geos_path, use_geos_theta_f
 
     save_ace_age_file(age_file_out, ('longitude', 'latitude', 'orbit', 'year', 'month', 'day', 'hour', 'quality_flag', 'temperature', 'pressure'),
                       ace_in_file, ace_outputs['EL'], ace_outputs['age'])
+    logger.info('Done generating ACE age file with NATIVE-level GEOS files')
 
 
 def _calc_el_age_for_ace(ace_dates, ace_lon, ace_lat, ace_theta, geos_dates, geos_path, use_geos_theta_for_age=False):
@@ -765,8 +767,13 @@ def _calc_el_age_for_ace(ace_dates, ace_lon, ace_lat, ace_theta, geos_dates, geo
             ace_profiles = np.full_like(ace_theta, np.nan)
             for i, _ in enumerate(geos_data):
                 # Limit to GEOS levels where potential temperature is monotonically increasing. 
-                pt_incr = np.flatnonzero(np.diff(geos_data_at_ace_times['PT'][i,:]) <= 0)[-1] + 1
-                logger.debug('Limiting GEOS data to level {} and up to ensure monotonically increasing potential temperature'.format(pt_incr+1))
+                decr_theta = np.diff(geos_data_at_ace_times['PT'][i,:]) <= 0
+                if np.any(decr_theta):
+                    pt_incr = np.flatnonzero(decr_theta)[-1] + 1
+                    logger.debug('Limiting GEOS data to level {} and up to ensure monotonically increasing potential temperature'.format(pt_incr+1))
+                else:
+                    pt_incr = 0
+                    logger.debug('GEOS potential temperature monotonically increasing for all levels')
                 # Check that the GEOS data still covers the range of ACE potential temperatures. It should be okay if it doesn't
                 # (ACE should just get NaNs there) this is just to see how often it happens
                 min_geos_pt = np.nanmin(geos_data_at_ace_times['PT'][i, pt_incr:])
