@@ -954,12 +954,7 @@ def equivalent_latitude_functions(ncdf_path,mode,start=None,end=None,muted=False
         new_EPV = np.zeros([new_nlev,nlat,nlon])
         for i in range(nlat):
             for j in range(nlon):
-                z = np.flatnonzero(PT[:, i, j] < 0)
-                if len(z) == 0:
-                    z = 0
-                else:
-                    z = z[-1]+1
-                new_EPV[:, i, j] = np.interp(theta_grid, PT[z+1:, i, j], EPV[z+1:, i, j])
+                new_EPV[:,i,j] = np.interp(fixed_PT,PT[:,i,j],EPV[:,i,j])
 
         # Compute equivalent latitudes
         EL = np.zeros([new_nlev,100])
@@ -1277,8 +1272,8 @@ def equivalent_latitude_functions_from_native_geos_files(geos_nv_files, geos_dat
             lat[np.abs(lat) < 0.001] = 0.0
             lon = dataset['lon'][:]
             pres = mod_utils.convert_geos_eta_coord(dataset['DELP'][0])
-            EPV = dataset['EPV'][0].data * 1e6
-            PT = mod_utils.calculate_potential_temperature(pres.data, dataset['T'][0].data)
+            EPV = dataset['EPV'][0] * 1e6
+            PT = mod_utils.calculate_potential_temperature(pres, dataset['T'][0])
 
             # Get the area of each grid cell
             lat_res = float(dataset.LatitudeResolution)
@@ -1287,7 +1282,6 @@ def equivalent_latitude_functions_from_native_geos_files(geos_nv_files, geos_dat
 
         # The native 72-level geos files are ordered space-to-surface. The equivalent latitude calculation *may* be okay
         # with that, but I felt it was safer to just go ahead and flip them.
-        print('debugging: type(EPV) = {}, type(PT) = {}, type(area) = {}'.format(type(EPV), type(PT), type(area)))
         func_dict[date] = mod_utils.calculate_eq_lat(np.flip(EPV, axis=0), np.flip(PT, axis=0), area)
 
     return func_dict
