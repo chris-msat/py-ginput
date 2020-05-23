@@ -2914,9 +2914,8 @@ def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='x
     them given as collections must have the same number of elements; those given as single instances will be used for
     all profiles.
 
-    For example, say that you wanted to generate profiles for three days. ``mod_data`` and ``obs_dates`` would need to
-    be lists of paths to .mod files and Python datetimes, respectively, but ``utc_offsets`` and ``site_abbrevs`` could
-    be a single timedelta and string, respectively.
+    For example, say that you wanted to generate profiles for three days. ``mod_data`` would need to be a list of paths
+    to .mod files, but ``utc_offsets`` and ``site_abbrevs`` could be a single timedelta and string, respectively.
 
     ``species`` can likewise be a single instance or a collection, but in either case will be applied to all
     sites/times. This determines which species will have profiles generated.
@@ -3048,7 +3047,8 @@ def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='x
             writers.write_vmr_file(vmr_name, tropopause_alt=map_constants['tropopause_alt'],
                                    profile_date=site_date, profile_lat=site_lat,
                                    profile_alt=profile_dict['Height'], profile_gases=vmr_gases,
-                                   gas_name_order=gas_name_order)
+                                   gas_name_order=gas_name_order,
+                                   extra_header_info={'EFF_LAT_TROP': map_constants['trop_eqlat']})
 
 
 def _add_common_cl_args(parser):
