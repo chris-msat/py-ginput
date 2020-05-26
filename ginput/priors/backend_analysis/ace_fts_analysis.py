@@ -74,9 +74,9 @@ def ace_lut_driver(ace_dir, rw_supp_table_file, geos_path, lut_save_dir, overwri
     ace_files = {re.search(r'[A-Z0-9]+(?=\.nc)', os.path.basename(f)).group(): f for f in glob(os.path.join(ace_dir, 'ACE*.nc'))}
 
     if 'AGE' not in ace_files or overwrite_age_file:
-        age_file = re.sub(r'N2O.nc$', 'AGE.nc', ace_files['N2O'])
+        age_file = re.sub(r'P.nc$', 'AGE.nc', ace_files['P'])
         logger.info('Creating ACE-FTS AGE file. Will save to {}. Using {} processors'.format(age_file, nprocs))
-        generate_ace_age_file(ace_in_file=ace_files['N2O'], age_file_out=age_file, geos_path=geos_path,
+        generate_ace_age_file(ace_in_file=ace_files['P'], age_file_out=age_file, geos_path=geos_path,
                               use_geos_theta_for_age=False, nprocs=nprocs)
         ace_files['AGE'] = age_file
 
