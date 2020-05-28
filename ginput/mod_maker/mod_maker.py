@@ -1335,9 +1335,9 @@ def lat_lon_interp(data_old,lat_old,lon_old,lat_new,lon_new,IDs_list):
 
         data = ma.masked_where(np.isnan(data),data)
 
-        func = interp2d(lat,lon,data)
+        func = interp2d(lon,lat,data)
 
-        data_new.append(func(lat_new[count],lon_new[count]))
+        data_new.append(func(lon_new[count],lat_new[count]))
 
         count+=1
 

@@ -434,7 +434,7 @@ def _find_time_span_for_date(date, time_spans, site, use_closest_in_time=True):
             raise TCCONTimeSpanError('Could not find information for {} for {}'.format(site, date))
         elif date < first_date_range[0]:
             date_range = first_date_range
-        elif date > last_date_range[1]:
+        elif date >= last_date_range[1]:
             date_range = last_date_range
         else:
             raise NotImplementedError('The date requested ({date}) is outside the available dates '

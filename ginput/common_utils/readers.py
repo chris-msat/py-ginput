@@ -273,6 +273,19 @@ def read_vmr_file(vmr_file, as_dataframes=False, lowercase_names=True, style='ne
                 prior_info[category] = np.array([float(x) for x in split_data_line])
 
     data_table = pd.read_csv(vmr_file, sep='\s+', header=nheader-1)
+    
+    # Also get the information that's only in the file name (namely date and longitude, we'll also read the latitude
+    # because it's there).
+    file_vars = dict()
+    base_name = os.path.basename(vmr_file)
+    try:
+        file_vars['datetime'] = mod_utils.find_datetime_substring(base_name, out_type=dt.datetime)
+        file_vars['lon'] = mod_utils.find_lon_substring(base_name, to_float=True)
+        file_vars['lat'] = mod_utils.find_lat_substring(base_name, to_float=True)
+    except AttributeError:
+        # Happens when the regex can't find a date/lon/lat in the file name
+        # usually means we're reading a climatological file
+        file_vars = dict(datetime=None, lon=None, lat=None)
 
     if lowercase_names:
         data_table.columns = [v.lower() for v in data_table]
@@ -291,7 +304,7 @@ def read_vmr_file(vmr_file, as_dataframes=False, lowercase_names=True, style='ne
         # a template to write another .vmr file that gsetup.f can read.
         data_table = OrderedDict([(k, v.to_numpy()) for k, v in data_table.items()])
 
-    return {'scalar': header_data, 'profile': data_table, 'prior_info': prior_info}
+    return {'scalar': header_data, 'profile': data_table, 'prior_info': prior_info, 'file': file_vars}
 
 
 def read_runlog(runlog_file, as_dataframes=False, remove_commented_lines=True):
