@@ -87,7 +87,9 @@ _code_dep_files[os.path.splitext(os.path.basename(__file__))[0]] = os.path.abspa
 
 _data_dir = const.data_dir
 _clams_file = os.path.join(_data_dir, 'clams_age_clim_scaled.nc')
+_theta_v_lat_file = os.path.join(const.data_dir, 'GEOS_FPIT_lat_vs_theta_2018_500-700hPa.nc')
 _excess_co_file = os.path.join(_data_dir, 'meso_co_lut.nc')
+
 
 ###########################################
 # FUNCTIONS SUPPORTING PRIORS CALCUALTION #
@@ -1376,9 +1378,10 @@ class MidlatTraceGasRecord(TraceGasRecord):
 
         xx_trop = z < ztrop
         if use_theta_eqlat:
-            trop_eqlat = get_trop_eq_lat(prof_theta=mod_data['profile']['PT'], p_levels=p, obs_lat=obs_lat, obs_date=obs_date)
+            trop_eqlat, midtrop_theta = get_trop_eq_lat(prof_theta=mod_data['profile']['PT'], p_levels=p, obs_lat=obs_lat, obs_date=obs_date)
         else:
             trop_eqlat = obs_lat
+            midtrop_theta = np.nan
 
         trop_aoa = mod_utils.age_of_air(lat=trop_eqlat, z=z[xx_trop], ztrop=ztrop, ref_lat=self._ref_lat)
 
@@ -1389,7 +1392,7 @@ class MidlatTraceGasRecord(TraceGasRecord):
                                                              ref_lat=self._ref_lat)
 
         # TODO: add what ancillary data is available.
-        return prof_gas, dict()
+        return prof_gas, dict(midtrop_theta=midtrop_theta)
 
     def add_strat_prior(self, prof_gas, retrieval_date, mod_data, **kwargs):
         z = mod_data['profile']['Height']
@@ -1902,7 +1905,9 @@ class CORecord(TraceGasRecord):
         prof_gas[:] = co * self.compute_co_scale(prof_pres=pres, prof_theta=theta,
                                                  trop_pres=trop_pres, trop_theta=trop_theta)
 
-        return prof_gas, dict()
+        # these are computed only for inclusion in the ancillary data since they go in the .vmr header
+        trop_eff_lat, midtrop_theta = get_trop_eq_lat(theta, pres, obs_lat, obs_date)
+        return prof_gas, dict(midtrop_theta=midtrop_theta, trop_lat=trop_eff_lat)
 
     def add_strat_prior(self, prof_gas, retrieval_date, mod_data, **kwargs):
         """
@@ -2114,6 +2119,23 @@ def get_clams_age(theta, eq_lat, day_of_year, as_timedelta=False, clams_dat=dict
     return prof_ages
 
 
+def _read_pres_range(nc_handle):
+    range_str = nc_handle.theta_range  # it says theta range, its really the pressures theta is averaged over
+    range_values = [float(s) for s in range_str.split('-')]
+    if len(range_values) == 1:
+        range_values *= 2
+
+    return min(range_values), max(range_values)
+
+
+def _compute_midtrop_theta(p_levels, prof_theta, pres_range=None):
+    if pres_range is None:
+        with ncdf.Dataset(_theta_v_lat_file) as nch:
+            pres_range = _read_pres_range(nch)
+    zz = (p_levels >= pres_range[0]) & (p_levels <= pres_range[1])
+    return np.mean(prof_theta[zz])
+
+
 def get_trop_eq_lat(prof_theta, p_levels, obs_lat, obs_date, theta_wt=1.0, lat_wt=1.0, dtheta_cutoff=0.25,
                     _theta_v_lat=dict()):
     """
@@ -2196,13 +2218,6 @@ def get_trop_eq_lat(prof_theta, p_levels, obs_lat, obs_date, theta_wt=1.0, lat_w
     :return: the equivalent latitude derived from mid-tropospheric potential temperature
     :rtype: float
     """
-    def read_pres_range(nc_handle):
-        range_str = nc_handle.theta_range  # it says theta range, its really the pressures theta is averaged over
-        range_values = [float(s) for s in range_str.split('-')]
-        if len(range_values) == 1:
-            range_values *= 2
-
-        return min(range_values), max(range_values)
 
     def theta_lat_cost(dtheta, dlat):
         return dtheta*theta_wt + dlat*lat_wt
@@ -2237,8 +2252,7 @@ def get_trop_eq_lat(prof_theta, p_levels, obs_lat, obs_date, theta_wt=1.0, lat_w
                 return lat[north_min_ind]
 
     if len(_theta_v_lat) == 0:
-        theta_v_lat_file = os.path.join(const.data_dir, 'GEOS_FPIT_lat_vs_theta_2018_500-700hPa.nc')
-        with ncdf.Dataset(theta_v_lat_file, 'r') as nch:
+        with ncdf.Dataset(_theta_v_lat_file, 'r') as nch:
             _theta_v_lat['theta'] = nch.variables['theta_mean'][:].squeeze()
             lat_tmp = nch.variables['latitude_mean'][:].squeeze()
             # Sometimes lats near 0 get read in as very small non-zero numbers. This causes a 
@@ -2251,7 +2265,7 @@ def get_trop_eq_lat(prof_theta, p_levels, obs_lat, obs_date, theta_wt=1.0, lat_w
             _theta_v_lat['times_calendar'] = nch.variables['times'].calendar
 
             # Read the pressure range that we're using
-            _theta_v_lat['pres_range'] = read_pres_range(nch)
+            _theta_v_lat['pres_range'] = _read_pres_range(nch)
 
             # Append the first time slice (which will be the first two weeks of the year) to the end so that we can
             # intepolate past the last date, assuming that the changes are cyclical. At the same time, let's record the
@@ -2281,8 +2295,7 @@ def get_trop_eq_lat(prof_theta, p_levels, obs_lat, obs_date, theta_wt=1.0, lat_w
         this_lat_clim[i] = np.interp(this_datenum, _theta_v_lat['times'], _theta_v_lat['lat'][:, i])
 
     # Then we find the theta for this profile
-    zz = (p_levels >= _theta_v_lat['pres_range'][0]) & (p_levels <= _theta_v_lat['pres_range'][1])
-    midtrop_theta = np.mean(prof_theta[zz])
+    midtrop_theta = _compute_midtrop_theta(p_levels, prof_theta, _theta_v_lat['pres_range'])
 
     # Last we find the part on the lookup curve that has the same mid-tropospheric theta as our profile. We have to be
     # careful because we will have the same theta in both the NH and SH. The way we'll handle this is to require that we
@@ -2306,7 +2319,7 @@ def get_trop_eq_lat(prof_theta, p_levels, obs_lat, obs_date, theta_wt=1.0, lat_w
         wt = min((np.abs(obs_lat) - 20)/5.0, 1.0)
         eqlat = (1 - wt) * obs_lat + wt * eqlat
 
-    return eqlat
+    return eqlat, midtrop_theta
 
 
 def adjust_zgrid(z_grid, z_trop, z_obs):
@@ -2407,7 +2420,9 @@ def add_trop_prior_standard(prof_gas, obs_date, obs_lat, gas_record, mod_data, r
     if use_theta_eqlat:
         if theta_grid is None or pres_grid is None:
             raise TypeError('theta_grid and pres_grid must be given if use_theta_eqlat is True')
-        obs_lat = get_trop_eq_lat(theta_grid, pres_grid, obs_lat, obs_date)
+        obs_lat, midtrop_theta = get_trop_eq_lat(theta_grid, pres_grid, obs_lat, obs_date)
+    else:
+        midtrop_theta = np.nan
 
     xx_trop = z_grid <= z_trop
     obs_air_age = mod_utils.age_of_air(obs_lat, z_grid[xx_trop], z_trop, ref_lat=ref_lat)
@@ -2438,7 +2453,7 @@ def add_trop_prior_standard(prof_gas, obs_date, obs_lat, gas_record, mod_data, r
     prof_gas[xx_trop] *= mod_utils.seasonal_cycle_factor(obs_lat, z_grid[xx_trop], z_trop, year_fraction,
                                                          species=gas_record, ref_lat=ref_lat)
 
-    return prof_gas, {'co2_latency': profs_latency, 'co2_date': prof_gas_date, 'age_of_air': prof_aoa,
+    return prof_gas, {'co2_latency': profs_latency, 'co2_date': prof_gas_date, 'age_of_air': prof_aoa, 'midtrop_theta': midtrop_theta,
                       'stratum': prof_world_flag, 'ref_lat': ref_lat, 'trop_lat': obs_lat, 'tropopause_alt': z_trop}
 
 
@@ -2741,6 +2756,7 @@ def generate_single_tccon_prior(mod_file_data, utc_offset, concentration_record,
     trop_ref_lat = ancillary_trop['ref_lat'] if 'ref_lat' in ancillary_trop else np.nan
     trop_eqlat = ancillary_trop['trop_lat'] if 'trop_lat' in ancillary_trop else np.nan
     z_trop_met = ancillary_trop['tropopause_alt'] if 'tropopause_alt' in ancillary_trop else np.nan
+    midtrop_theta = ancillary_trop['midtrop_theta'] if 'midtrop_theta' in ancillary_trop else np.nan
 
     # Next we add the stratospheric profile, including interpolation between the tropopause and 380 K potential
     # temperature (the "middleworld").
@@ -2790,6 +2806,7 @@ def generate_single_tccon_prior(mod_file_data, utc_offset, concentration_record,
                      'site_lat': file_lat,
                      'datetime': file_date,
                      'trop_eqlat': trop_eqlat,
+                     'midtrop_theta': midtrop_theta,
                      'prof_ref_lat': trop_ref_lat,
                      'surface_alt': mod_file_data['scalar']['Height'],
                      'tropopause_alt': z_trop_met,
@@ -3048,7 +3065,8 @@ def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='x
                                    profile_date=site_date, profile_lat=site_lat,
                                    profile_alt=profile_dict['Height'], profile_gases=vmr_gases,
                                    gas_name_order=gas_name_order,
-                                   extra_header_info={'EFF_LAT_TROP': map_constants['trop_eqlat']})
+                                   extra_header_info={'EFF_LAT_TROP': map_constants['trop_eqlat'],
+                                                      'MIDTROP_THETA': '{:.2f}'.format(map_constants['midtrop_theta'])})
 
 
 def _add_common_cl_args(parser):
