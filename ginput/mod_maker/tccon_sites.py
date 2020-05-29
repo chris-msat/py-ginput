@@ -52,7 +52,7 @@ site_dict = {
         'name': 'Park Falls',
         'loc': 'Wisconsin, USA',
         'time_spans': {
-            (datetime(2004, 5, 1), now): {'lat': 45.945, 'lon': 269.727, 'alt': 442}
+            (datetime(2004, 5, 1), now): {'lat': 45.945, 'lon': 269.727, 'alt': 476}
         }
     },
     'oc': {
@@ -211,7 +211,10 @@ site_dict = {
         'name': 'Dryden',
         'loc': 'California, USA',
         'time_spans': {
-            (datetime(2013, 7, 1), now): {'lat': 34.958, 'lon': 242.118, 'alt': 700}
+            # lat/lon moved from wiki values (34.958N, 242.118E) to improve CO profile.
+            # position chosen to get away from LA CO profile to better match aircore CO, but also to keep the rounded
+            # lat/lon the same in the file name
+            (datetime(2013, 7, 1), now): {'lat': 35.49, 'lon': 242.490, 'alt': 700}
         }
     },
     'js': {
@@ -232,9 +235,9 @@ site_dict = {
         'name': 'Pasadena',
         'loc': 'California, USA',
         'time_spans': {
-            # latitude moved south (original value 34.136) to extend the profiles down to the observation altitude,
+            # latitude moved west (original value 241.873) to extend the profiles down to the observation altitude,
             # at the true latitude, the GEOS data stops about 50 hPa too far up.
-            (datetime(2012, 9, 1), now): {'lat': 33.940, 'lon': 241.873, 'alt': 230}
+            (datetime(2012, 9, 1), now): {'lat': 34.136, 'lon': 241.51, 'alt': 230}
         }
     },
     'rj': {
