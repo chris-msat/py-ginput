@@ -2305,7 +2305,7 @@ def get_trop_eq_lat(prof_theta, p_levels, obs_lat, obs_date, theta_wt=1.0, lat_w
     # is_tropics doesn't actually use the age & doy arguments, they are just there for consistency with is_vortex, so
     # we can pass them None.
     if mod_utils.is_tropics(obs_lat, None, None):
-        return obs_lat
+        return obs_lat, midtrop_theta
     elif obs_lat > 0:
         yy = this_lat_clim > 0.0
     else:
