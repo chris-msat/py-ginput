@@ -1658,12 +1658,20 @@ class HFTropicsRecord(MloSmoTraceGasRecord):
 
         return gas_conc
 
+    def add_extra_column(self, prof_gas, retrieval_date, mod_data, **kwargs):
+        # Replace 0 values with 0.1 ppt. Since the units are in ppb, that = 1e-4 ppb
+        # This is a kludge added to support AK generation, since AK calculation requires non-zero VMRs at all levels.
+        # This was realized late in the GGG2020 dev cycle, after the standard site priors had been generated, so it was
+        # necessary to patch those files to avoid regenerating for a fourth time. Post-GGG2020, the correct fix would be
+        # to set the tropospheric concentration to 1e-4 instead of 0, but that will alter the middleworld interpolation.
+        prof_gas[prof_gas <= 1e-4] = 1e-4
+
 
 class CO2TropicsRecord(MloSmoTraceGasRecord):
     _gas_name = 'co2'
     _gas_unit = 'ppm'
     _gas_seas_cyc_coeff = 0.007
-    # the default of infinity is kept for GGG2019 as the priors code was delivered to JPL before the necessity of this
+    # the default of infinity is kept for GGG2020 as the priors code was delivered to JPL before the necessity of this
     # correction was realized.
     # gas_trop_lifetime_yrs = 200.0 # estimated from Box 6.1 of Ch 6 of the IPCC AR5 (p. 473).
     _max_trend_poly_deg = 'exp'
@@ -1727,7 +1735,6 @@ class CH4TropicsRecord(MloSmoTraceGasRecord):
     _gas_unit = 'ppb'
     _gas_seas_cyc_coeff = 0.012
     gas_trop_lifetime_yrs = 12.4  # from Table 8.A.1 of IPCC AR5, Ch 8, p. 731
-
 
     _nyears_for_extrap_avg = 5
 

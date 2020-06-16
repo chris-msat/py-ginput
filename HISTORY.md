@@ -1,5 +1,10 @@
 # Ginput Version History
 
+## v1.0.6
+
+HF priors now have values < 0.1 ppt set to 0.1 ppt. This allows proper computation of
+HF averaging kernels, which requires non-zero VMRs.
+
 ## v1.0.5
 
 Updated Caltech and Dryden lat/lon in `tccon_sites.py` to optimize their profiles.
