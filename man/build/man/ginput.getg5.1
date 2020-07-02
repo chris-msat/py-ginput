@@ -1,0 +1,156 @@
+.\" Man page generated from reStructuredText.
+.
+.TH "GINPUT.GETG5" "1" "Jul 01, 2020" "" "ginput"
+.SH NAME
+ginput.getg5 \- Ginput: download GEOS documentation
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.SH SYNOPSIS
+.sp
+run_ginput.py getg5 [ \-\-mode {FP, FPIT} ] [ \-\-path PATH ] [ \-t | \-\-filetypes {met,chm} ] [ \-l | \-\-levels {surf,p,eta} ] DATE_RANGE
+.sp
+run_ginput.py getg5\-rl [ \-\-mode {FP, FPIT} ] [ \-\-path PATH ] [ \-t | \-\-filetypes {met,chm} ] [ \-l | \-\-levels {surf,p,eta} ] [ \-\-first\-date FIRST_DATE ] [ \-\-last\-date LAST_DATE ] RUNLOG
+.SH DESCRIPTION
+.sp
+These subcommands download GEOS\-FPIT or GEOS\-FP data from NASA. These files are necessary inputs to ginput. Ginput
+requires 3 files per time:
+.INDENT 0.0
+.INDENT 3.5
+.INDENT 0.0
+.IP \(bu 2
+The 2D met variables (e.g. \fBGEOS.fpit.asm.inst3_2d_asm_Nx.GEOS5124.20180101_0000.V01.nc4\fP)
+.IP \(bu 2
+The 3D met variables on the native 72\-eta level grid (e.g. \fBGEOS.fpit.asm.inst3_3d_asm_Nv.GEOS5124.20180101_0000.V01.nc4\fP)
+.IP \(bu 2
+The 3D chemistry variables on the native 72\-eta level grid
+(e.g. \fBGEOS.fpit.asm.inst3_3d_chm_Nv.GEOS5124.20180101_0000.V01.nc4\fP)
+.UNINDENT
+.UNINDENT
+.UNINDENT
+.sp
+The rest of ginput expects these to be available in a specific file structure. All met files must be under a directory,
+which can be anything and which we will refer to as \fB$METDIR\fP\&. Within this directory the 2D files must go in a
+subdirectory named \fBNx\fP and the 3D native level files in a subdirectory named \fBNv\fP\&. Chemistry files may go in
+\fB$METDIR/Nv\fP or a separate directory, \fB$CHMDIR/Nv\fP\&. The leading directory may be whatever you wish, but it must
+have the \fBNv\fP subdirectory.  There are no further subdivisions within the Nx or Nv subdirectories.
+.sp
+The difference between the \fBgetg5\fP and \fBget\-rl\-g5\fP subcommands is that the former expects a range of dates to
+download GEOS data for, while the second expects a TCCON runlog.
+.SH REQUIRED ARGUMENTS
+.INDENT 0.0
+.TP
+\fBDATE_RANGE\fP
+Required for \fBgetg5\fP, this must be a range of dates in the form YYYYMMDD\-YYYYMMDD, for example, 20180101\-20180201.
+Note that the second date \fIis exclusive\fP, meaning that (in this example) data would \fInot\fP be downloaded for
+Feb 1st. This follows the standard Python convention of exclusive ranges and is generally followed throughout
+ginput. Alternatively, a single date can be given (YYYYMMDD).
+.TP
+\fBRUNLOG\fP
+Required for \fBget\-rl\-g5\fP, this must be a path to a TCCON runlog (.?rl file).
+.TP
+\fB\-t, \-\-filetypes\fP
+Which data type of file to download. \fImet\fP will download meteorology files (2D or 3D, determined by \fB\-\-levels\fP)
+and \fIchm\fP will download the chemistry files.
+.TP
+\fB\-l, \-\-levels\fP
+Which vertical structure type of file to download. \fIsurf\fP will download the 2D files, \fIeta\fP will download the
+native 72\-eta level files. \fIp\fP is a legacy option that downloads fixed\-pressure level files. These files are no
+longer officially supported for ginput.
+.UNINDENT
+.SH OPTIONAL ARGUMENTS
+.INDENT 0.0
+.TP
+\fB\-\-mode\fP
+Which GEOS files to download. \fIFP\fP is the standard forward product, while \fIFPIT\fP is the forward processing for
+instrument teams product. The TCCON standard product uses FPIT data, since it covers the necessary time range for
+the TCCON data record. However, FPIT requires a data subscription to access (see
+\fI\%https://gmao.gsfc.nasa.gov/GMAO_products/\fP). FP data \fIshould\fP work, but has not been as extensively tested.
+\fBNote: FP is the default since it does not require a data subscription. If you are doing standard TCCON processing, this option must be set to FPIT\fP
+.TP
+\fB\-\-path\fP
+Where to download the data to. This would be your root $METDIR or $CHMDIR from the description above; the Nv or
+Nx subdirectories are created automatically. That is, \fBpath=/data/geos/met\fP would place the downloaded files in
+\fI/data/geos/met/Nv\fP or \fI/data/geos/met/Nx\fP, as appropriate. If not specified, then data is downloaded to the current
+directory.
+.TP
+\fB\-\-first\-date, \-\-last\-date\fP (get\-rl\-g5 only)
+These options allow you to limit the dates that GEOS data will be downloaded for given a runlog. That is, if the
+runlog has dates spanning 2000 to 2020, specifying \-\-last\-date=2010\-01\-01 will limit ginput to downloading files
+to before 2010 only. By default, \fB\-\-first\-date\fP is set to 2000\-01\-01 since GEOS\-FPIT data are not available
+prior to 2000. These dates must be given in YYYY\-MM\-DD format, which is currently inconsistent with the standard
+date range arguments. \fBNote: whether \-\-last\-date is exclusive or inclusive has not been extensively tested and should not be relied on.\fP
+.UNINDENT
+.SH EXAMPLES
+.sp
+Download 3D FPIT met data to \fI/data/geos\fP for all of 2000:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+\&./run_ginput.py getg5 \-\-mode=FPIT \-\-path=/data/geos \-\-filetypes=met \-\-level=eta 20000101\-20010101
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Download 2D FPIT met data to the current directory for just Jan 1st, 2018:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+\&./run_ginput.py getg5 \-\-mode=FPIT \-t met \-l surf 20180101
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Download 3D FPIT chemistry data to \fI/data/geos\fP for all dates after Jan 1st, 2000 in the runlog \fIpa.grl\fP in the current
+directory:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+\&./run_ginput.py get\-rl\-g5 \-\-mode=FPIT \-t chm \-l eta pa.grl
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.SH NOTES
+.sp
+There is some legacy behavior preserved if neither \fB\-\-levels\fP nor \fB\-\-filetypes\fP are specified that the 2D and
+fixed\-pressure level 3D met files are downloaded. Since fixed\-pressure level 3D met files are no longer officially
+supported, this will likely change in future versions and should not be relied on.
+.SH AUTHOR
+Joshua Laughner, Sebastien Roche, and Matthaeus Kiel
+.SH COPYRIGHT
+2020, Joshua Laughner, Sebastien Roche, and Matthaeus Kiel
+.\" Generated by docutils manpage writer.
+.

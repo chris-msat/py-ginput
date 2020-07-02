@@ -3,8 +3,13 @@ ENV ?= ginput-auto-default
 help:
 	@cat .makehelp
 
-install:
+install: install-code install-man
+
+install-code:
 	./install.sh $(ENV)
+
+install-man:
+	$(MAKE) -C man install-man
 
 run_ginput.py: .run_ginput_template.py
 	./install-runscript.sh

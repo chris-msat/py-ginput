@@ -1,0 +1,248 @@
+.\" Man page generated from reStructuredText.
+.
+.TH "GINPUT.MOD" "1" "Jul 01, 2020" "" "ginput"
+.SH NAME
+ginput.mod \- Ginput: mod file documentation
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.SH SYNOPSIS
+.INDENT 0.0
+.TP
+.B run_ginput.py mod | tccon\-mod [ \-\-alt ALT ] [ \-\-lon LON ] [ \-\-lat LAT ] [ \-\-site SITE ]
+[ \-\-chem\-path CHEM_PATH ] [ \-s | \-\-save\-path SAVE_PATH ] [ \-\-mode MODE ]
+[ \-\-keep\-latlon\-prec ] [ \-\-save\-in\-local ] [ \-c | \-\-include\-chem ]
+[ \-q | \-\-quiet ] [ \-\-slant ]
+DATE_RANGE MET_PATH
+.TP
+.B run_ginput.py rlmod | tccon\-rlmod [ \-\-site SITE ] [ \-\-first\-date FIRST_DATE ]
+[ \-\-chem\-path CHEM_PATH ] [ \-s | \-\-save\-path SAVE_PATH ] [ \-\-mode MODE ]
+[ \-\-keep\-latlon\-prec ] [ \-\-save\-in\-local ] [ \-c | \-\-include\-chem ]
+[ \-q | \-\-quiet ] [ \-\-slant ]
+RUNLOG MET_PATH
+.UNINDENT
+.SH DESCRIPTION
+.sp
+Generates the .mod (meteorology model) files required by GGG and for the next step in GGG prior generation. There
+are four subcommands to do this:
+.INDENT 0.0
+.INDENT 3.5
+.INDENT 0.0
+.IP \(bu 2
+\fBtccon\-mod\fP generates standard TCCON model files for a given date range.
+.IP \(bu 2
+\fBtccon\-rlmod\fP generates standard TCCON model files for a given runlog.
+.IP \(bu 2
+\fBmod\fP, \fBrlmod\fP generates non\-standard model files using legacy settings.
+.UNINDENT
+.UNINDENT
+.UNINDENT
+.sp
+Unless you have a good reason not to, \fBtccon\-mod\fP or \fBtccon\-rlmod\fP should be the subcommand you use.
+.sp
+Output files are automatically organized by product (usually fp or fpit), site, and vertical or slant under the
+save path, with directory structure like \fI$SAVE_PATH/fpit/pa/vertical\fP\&. The site ID is determined with the following
+rules:
+.INDENT 0.0
+.INDENT 3.5
+.INDENT 0.0
+.IP \(bu 2
+For \fBtccon\-mod\fP or \fBmod\fP, if a site is specified with \fB\-\-site\fP, that site ID is used.
+.IP \(bu 2
+For \fBtccon\-mod\fP or \fBmod\fP, if a custom location is specified with \fB\-\-lon\fP, \fB\-\-lat\fP, and \fB\-\-alt\fP, then
+"xx" is used as the site ID.
+.IP \(bu 2
+For \fBtccon\-rlmod\fP or \fBrlmod\fP, the site ID is assumed to be the first two letters of each spectrum name (so
+a runlog may produce multiple sites\(aq .mod files), but if \fB\-\-site\fP is specified, that overrides the site ID for
+all spectra.
+.UNINDENT
+.UNINDENT
+.UNINDENT
+.SH REQUIRED ARGUMENTS
+.INDENT 0.0
+.TP
+\fBDATE_RANGE\fP (mod or tccon\-mod)
+The range of dates to generate .mod files for, in the form YYYYMMDD or YYYYMMDD\-YYYYMMDD. In the first form, only
+\&.mod files for the specified date are generated. In the second form, the ending date is \fIexclusive\fP, following
+standard Python syntax. Alternatively, the format may be YYYYMMDD_HH or YYYYMMDD_HH\-YYYYMMDD_HH, where HH is the
+hour, so e.g. \fI20180101_00\-20180101_12\fP would only generate files between 00:00 and 12:00 (exclusive) on 1 Jan 2018.
+\fBNote: all times are UTC.\fP
+.TP
+\fBRUNLOG\fP (rlmod or tccon\-rlmod)
+The path to the runlog to generate .mod files for.
+.TP
+\fBMET_PATH\fP
+The path to the GEOS\-FP or FPIT meterology data. This directory must contain subdirectories \fINv\fP and \fINx\fP; for
+example, if your 3D files are in \fI/data/geos/Nv\fP and your 2D files are in \fI/data/geos/Nx\fP, then this argument
+would be \fI/data/geos\fP\&. This works in conjunction with the \fB\-\-chem\-path\fP optional argument if the chemistry files
+are stored separately.
+.UNINDENT
+.SH OPTIONAL ARGUMENTS: LOCATION
+.INDENT 0.0
+.TP
+\fB\-\-alt\fP (mod or tccon\-mod)
+The altitude in meters for a custom location.
+.TP
+\fB\-\-lon\fP (mod or tccon\-mod)
+The longitude in degrees east (i.e. 90 W should be given as 270 or \-90) for a custom location.
+.TP
+\fB\-\-lat\fP (mod or tccon\-mod)
+The latitude (positive for north, negative for south) for a custom location.
+.TP
+\fB\-\-site\fP
+For the \fBmod\fP or \fBtccon\-mod\fP subcommands, this specifies which standard TCCON site to generate .mod files for.
+Call \fIrun_ginput.py tccon\-mod \-\-help\fP to see the list of allowed site abbreviations.
+For the \fBrlmod\fP or \fBtccon\-rlmod\fP subcommands, this overrides the site abbreviation inferred from the first
+two letters of the spectrum in the runlog.
+.UNINDENT
+.sp
+When running \fBmod\fP or \fBtccon\-mod\fP you \fImust\fP specified \fIeither\fP \fB\-\-site\fP or \fB\-\-lat\fP, \fB\-\-lon\fP, and \fB\-\-alt\fP\&.
+.SH OPTIONAL ARGUMENTS: OTHER
+.INDENT 0.0
+.TP
+\fB\-\-first\-date\fP (rlmod or tccon\-rlmod)
+When generating .mod files for a runlog, this argument indicates the earliest date that .mod files should be
+generated for (in YYYY\-MM\-DD format). The default is 2000\-01\-01, since GEOS\-FPIT data is not available before
+that date.
+.TP
+\fB\-\-chem\-path\fP
+Where the GEOS chemistry files are located. Only needed if \fB\-\-include\-chem\fP is present (default for \fBtccon\-mod\fP
+and (\fBtccon\-rlmod\fP) and these files are not in the same directory as the meteorology files. For example, if
+\fI/data/geos/Nv\fP has the 3D meteorology and chemistry files, then set \fBMET_PATH\fP to \fI/data/geos\fP and leave
+\fB\-\-chem\-path\fP unset. However, if the 3D meteorology files are in \fI/data/geos/Nv\fP but the 3D chemistry files
+are in \fI/data/chem/Nv\fP, then set \fBMET_PATH\fP to \fI/data/geos\fP and \fB\-\-chem\-path\fP to \fI/data/chem\fP\&.
+.TP
+\fB\-s, \-\-save\-path\fP
+Root directory to save the output .mod files to. See \fBDescription\fP for how the files are organized. If this is
+not specified, then ginput checks if the environmental variable \fIGGGPATH\fP is defined. If so, then
+\fI$GGGPATH/models/gnd/fpit\fP is used as the save path. If not, an error is thrown.
+.TP
+\fB\-\-keep\-latlon\-prec\fP
+By default, the .mod file name includes the lat and lon rounded to the nearest integer. Adding this flag will
+extend the precision to 2 decimal places. Note that GGG expects the integer format; this option is only included
+for custom use where greater precision is required.
+.TP
+\fB\-\-save\-in\-local\fP
+By default, the .mod file name includes the time in UTC that it represents. This will compute the time in local
+standard time instead (based on the longitude: lon/15 with west as negative will be the number of hours added or
+subtracted). Note that GGG expects UTC time.
+.TP
+\fB\-c, \-\-include\-chem\fP
+With this flag, variables from the GEOS chemisty files are added to the .mod files. These are required for GGG2020,
+so this flag is always present when using the \fBtccon\-mod\fP subcommand. This requires that you have the GEOS
+chemistry files available.
+.TP
+\fB\-q, \-\-quiet\fP
+Limit logging output to the command line.
+.TP
+\fB\-\-slant\fP
+Produces slant path column files as well as vertical path files. This is an experimental feature and not required
+for standard GGG2020 processing.
+.TP
+\fB\-\-mode\fP
+Controls how the .mod files are generated. Of the many options, only \fIfpit\-eta\fP is fully supported. The other
+options listed by the \fB\-\-help\fP are made available with no guarantee of their success, and many produce .mod files
+unsuitable for the generation of GGG2020 .vmr files. Crashes using any mode other than \fIfpit\-eta\fP will likely not
+be addressed.
+.sp
+GGG2020:
+* fpit\-eta: generate .mod files from GEOS\-FPIT data on the native 72\-eta level grid. This is the default.
+* fpit: generate .mod files from GEOS\-FPIT data on the fixed\-pressure level grid. This is legacy and no longer recommended.
+.sp
+GGG2014 (use strongly discouraged and not supported):
+* ncep: generate .mod files from NCEP data (pre\-GGG2020 approach)
+* merradap42, merradap72: read 42 or 72 level MERRA files over OpenDAP. Required a .netrc file with an entry for \fIurs.earthdata.nasa.gov\fP\&.
+* merraglob, fpglob, fpitglob: read global MERRA, GEOS\-FP, or GEOS\-FPIT files stored in either \fBMET_PATH\fP\&.
+.UNINDENT
+.SH EXAMPLES
+.sp
+Generate standard TCCON .mod files for Park Falls (saving to GGGPATH) for Jan 2018, with met and chem files in the same
+directory (\fI/data/geos\fP):
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+\&./run_ginput.py tccon\-mod \-\-site=pa 20180101\-20180201 /data/geos
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Same as above, but save to the \fImod_files\fP directory in your home directory:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+\&./run_ginput.py tccon\-mod \-\-site=pa \-\-save\-path ~/mod_files 20180101\-20180201 /data/geos
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Same as the first example, but with the chemistry files stored separately in \fI/data/chem\fP:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+\&./run_ginput.py tccon\-mod \-\-site=pa \-\-chem\-path=/data/chem 20180101\-20180201 /data/geos
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Create mod files for a custom location (near San Francisco):
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+\&./run_ginput.py tccon\-mod \-\-lat=33.77 \-\-lon=237.57 \-\-alt=0 20180101\-20180201 /data/geos
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Create mod files for sites & dates in the \fIpa.grl\fP runlog:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+\&./run_ginput.py tccon\-rlmod pa.grl /data/geos
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.SH AUTHOR
+Joshua Laughner, Sebastien Roche, and Matthaeus Kiel
+.SH COPYRIGHT
+2020, Joshua Laughner, Sebastien Roche, and Matthaeus Kiel
+.\" Generated by docutils manpage writer.
+.

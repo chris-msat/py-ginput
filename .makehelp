@@ -20,6 +20,14 @@ make install: install the ginput Python package and its dependencies.
     will automatically use the correct environment without needing to
     activate it.
 
+    Note that this will also try to install manual pages into 
+    ~/.local/man/man1. This will allow you to use "man ginput" to see
+    the main ginput manpage (along with several other pages for the
+    various subcommands). If ~/.local does not exist, it will not
+    install these pages, but you can still view them by giving the
+    man command the full path to them; they are in the man/build/man
+    subdirectory of this repo.
+
 make test:
     Carries out full set of tests on ginput. Requires GEOS-FPIT data from
     2018-01-01 to be placed in ./ginput/testing/test_input_data/geosfp-it/Nv

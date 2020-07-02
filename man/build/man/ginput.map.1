@@ -1,0 +1,177 @@
+.\" Man page generated from reStructuredText.
+.
+.TH "GINPUT.MAP" "1" "Jul 01, 2020" "" "ginput"
+.SH NAME
+ginput.map \- Ginput: map file documentation
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.SH SYNOPSIS
+.INDENT 0.0
+.TP
+.B run_ginput.py map [ \-r | \-\-root\-dir DIR ] [ \-s | \-\-save\-dir DIR ] [ \-\-met\-product {fp,fpit} ] [ \-\-keep\-latlon\-prec]
+[ \-\-site ID ] [ \-\-lat LAT ] [ \-\-lon LON ]
+[ \-f | \-\-map\-fmt {nc,txt} ] [ \-d | \-\-dry ]
+[ \-m | \-\-skip\-missing ] [ \-c | \-\-req\-cfunits ]
+DATE_RANGE [ MOD_DIR ] [ VMR_DIR ]
+.UNINDENT
+.SH DESCRIPTION
+.sp
+This ginput subcommand writes out .map files. These files combine the key information from .mod and .vmr files. These
+files are not used by GGG itself.
+.SH ARGUMENTS
+.SS Required
+.INDENT 0.0
+.TP
+\fBDATE_RANGE\fP
+The range of dates to produce the .map files for, in YYYYMMDD\-YYYYMMDD format, with the second date being exclusive.
+As with the other subcommands, this may also be YYYYMMDD for a single day or YYYYMMDD_HH\-YYYYMMDD_HH to limit to
+specific hours.
+.UNINDENT
+.SS I/O
+.INDENT 0.0
+.TP
+\fBMOD_DIR\fP
+This is the directory where the .mod files can be found. Similar to the .vmr subcommands, if this positional
+argument is given, it points to the directory actually containing the .mod files, in contrast to \fB\-\-root\-dir\fP\&.
+If \fB\-\-root\-dir\fP is given, this argument is not needed.
+.TP
+\fBVMR_DIR\fP
+Like \fBMOD_DIR\fP, this is a path to the directory containing the .vmr files. If \fB\-\-root\-dir\fP is given, this is
+also not needed.
+.TP
+\fB\-r, \-\-root\-dir\fP
+If given, this option\(aqs argument must point to the top of a directory structure organized as
+\fI<product>/<site>/{vertical,vmrs\-vertical}\fP\&. Then, depending on the value of \fB\-\-met\-product\fP and \fB\-\-site\fP,
+ginput will automatically find the .mod and .vmr files within this directory. You should give \fIeither\fP this option
+or the \fBMOD_DIR\fP and \fBVMR_DIR\fP positional arguments, but not both. If you give neither, then ginput assumes the
+\&.mod and .vmr files are in \fI$GGGPATH/models/gnd\fP and \fI$GGGPATH/vmrs/gnd\fP, respectively.
+.TP
+\fB\-s, \-\-save\-dir\fP
+Where to save the .map files. The .map files are directly saved here. If this is not given but \fB\-\-root\-dir\fP is
+given, the .map files are saved to \fI$ROOT_DIR/<product>/<site>/maps\-vertical\fP, e.g. \fI$ROOT_DIR/fpit/pa/maps\-vertical\fP\&.
+If \fB\-\-root\-dir\fP is not given, this argument is required.
+.TP
+\fB\-\-met\-product\fP
+One of the strings "fp" or "fpit". Used to determine the first level of the directory tree under the \fB\-\-root\-dir\fP,
+otherwise not used.
+.TP
+\fB\-k, \-\-keep\-latlon\-prec\fP
+This flag indicates that the .mod and .vmr files use 2 decimals places for the latitude and longitude in their file
+names. The .mod and .vmr file names must match \- both use 0 or 2 decimal places (cannot have one with 0 and one with
+2). The .map file will have the same lat/lon in its file name as the .vmr file.
+.UNINDENT
+.SS Location
+.sp
+From this group, you will either need to specify \fB\-\-site\fP if you are making .map files for a standard TCCON site or
+\fB\-\-lat\fP and \fB\-\-lon\fP if not.
+.INDENT 0.0
+.TP
+\fB\-\-site\fP
+The two\-letter site ID. This is used both to determine the \fI<site>\fP part of the I/O directory structure with
+\fB\-\-root\-dir\fP, in naming the file, and in setting some file attributes when writing a netCDF file.
+.TP
+\fB\-\-lat\fP
+The site latitude (south is negative). Used to find the .mod and .vmr files; not necessary if \fB\-\-site\fP is one of
+the standard TCCON site IDs.
+.TP
+\fB\-\-lon\fP
+The site longitude (west is negative or >180). Used to find the .mod and .vmr files; not necessary if \fB\-\-site\fP is
+one of the standard TCCON site IDs.
+.UNINDENT
+.SS Format
+.INDENT 0.0
+.TP
+\fB\-f, \-\-map\-fmt\fP
+One of the strings "txt" or "nc". "txt" means to write the .map files as text. "nc" will write them as netCDF files.
+"nc" is the default.
+.TP
+\fB\-d, \-\-dry\fP
+This flag means to write the VMRs in the .map file as dry mole fractions, rather than the default wet mole
+fractions.  Note that TCCON retrievals use wet mole fractions. If you are unsure of which to use, please
+visit the TCCON wiki (\fI\%https://tccon\-wiki.caltech.edu/\fP) for additional information and contact one of the
+network members for assistance if needed.
+.UNINDENT
+.SS Other
+.INDENT 0.0
+.TP
+\fB\-m, \-\-skip\-missing\fP
+If this flag is present, then missing .mod or .vmr files will just not generate a .map file. Otherwise there is
+an error.
+.TP
+\fB\-c, \-\-req\-cfunits\fP
+CFUnits is a Python package that allows us to ensure CF\-compliant unit strings when writing a netCDF file. However,
+it sometimes has a binary incompatibility under some environments and fails to import. In those cases, the unit
+strings may not be CF\-compliant, but the .map file can still be written (you will get a warning if CFUnits cannot
+import). However, if having CF\-compliant units is crucial to your work, use this flag to require that the package
+import successfully or give an error when trying to check that units are CF\-compliant.
+.UNINDENT
+.SH EXAMPLES
+.sp
+Create .map files for Park Falls (pa) from .mod and .vmr files in \fI~/mod\-files\fP and \fI~/vmr\-files\fP for 1 Jan 2018,
+saving to ~/map\-files:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+\&./run_ginput.py map \-\-site pa \-\-save\-dir ~/map\-files 20180101 ~/mod\-files ~/vmr\-files
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+The same, except let the .mod and .vmr files both be under the root directory, \fI~/tccon\-data\fP\&. This means the two
+directories \fI~/tccon\-data/fpit/pa/vertical\fP and \fI~/tccon\-data/fpit/pa/vmrs\-vertical\fP exist:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+\&./run_ginput.py map \-\-site pa \-\-save\-dir ~/map\-files \-\-root\-dir ~/tccon\-data 20180101
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Same as the last, except also saving to the root directory:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+\&./run_ginput.py map \-\-site pa \-\-root\-dir ~/tccon\-data 20180101
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.SH AUTHOR
+Joshua Laughner, Sebastien Roche, and Matthaeus Kiel
+.SH COPYRIGHT
+2020, Joshua Laughner, Sebastien Roche, and Matthaeus Kiel
+.\" Generated by docutils manpage writer.
+.

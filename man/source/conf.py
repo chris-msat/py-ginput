@@ -58,8 +58,13 @@ html_static_path = ['_static']
 
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
-man_pages = [ 
-    ('aciman', 'ginput.acos_interface', 'Ginput: ACOS interface documentation',
+man_pages = [
+    ('ginputman', 'ginput', 'Ginput: main documentation', [author], 1),
+    ('getg5man', 'ginput.getg5', 'Ginput: download GEOS documentation', [author], 1),
+    ('modman', 'ginput.mod', 'Ginput: mod file documentation', [author], 1),
+    ('vmrman', 'ginput.vmr', 'Ginput: vmr file documentation', [author], 1),
+    ('mapman', 'ginput.map', 'Ginput: map file documentation', [author], 1),
+    ('aciman', 'ginput.acos', 'Ginput: ACOS interface documentation',
      [author], 1), 
 ]
 

@@ -1,0 +1,212 @@
+.\" Man page generated from reStructuredText.
+.
+.TH "GINPUT.VMR" "1" "Jul 01, 2020" "" "ginput"
+.SH NAME
+ginput.vmr \- Ginput: vmr file documentation
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.SH SYNOPSIS
+.INDENT 0.0
+.TP
+.B run_ginput.py vmr [ \-\-site SITE ] [ \-\-lat LAT ] [ \-\-lon LON ]
+[ \-r | \-\-mod\-root\-dir ROOT_DIR ]
+[ \-b | \-\-std\-vmr\-file VMR_FILE ]
+[ \-i | \-\-integral\-file GRID_FILE ]
+[ \-\-keep\-latlon\-prec ] [ \-p | \-\-primary\-gases\-only ] [ \-f | \-\-flat\-outdir ]
+DATE_RANGE [ MOD_DIR ]
+.TP
+.B run_ginput.py rlvmr [ \-\-site SITE ] [ \-\-lat LAT ] [ \-\-lon LON ]
+[ \-\-first\-date FIRST_DAT ]
+[ \-r | \-\-mod\-root\-dir ROOT_DIR ]
+[ \-b | \-\-std\-vmr\-file VMR_FILE ]
+[ \-i | \-\-integral\-file GRID_FILE ]
+[ \-p | \-\-primary\-gases\-only ] [ \-f | \-\-flat\-outdir ]
+RUNLOG [ MOD_DIR ]
+.UNINDENT
+.SH DESCRIPTION
+.sp
+Generate .vmr files from existing .mod file. .vmr files contain the a priori mixing ratio profiles read in by GGG
+(specifically, gsetup). These can be either generated for a specific date range (\fBvmr\fP) or a runlog file (\fBrlvmr\fP).
+.sp
+The .vmr files contain ~80 gases for standard TCCON usage; this includes the typical standard TCCON product gases
+(e.g. CO2, N2O, CH4, HF, CO, etc.) and a large number of other gases that are either experimental or only interfering
+absorbers in our retrieval windows. The primary gases\(aq profiles are generated using the new ginput algorithms; the
+remaining gases are derived from a climatological file included with GGG. If you do not have this file, and do not
+care about gases other than CO2, N2O, CH4, HF, CO, H2O, or O3, then you can disable the need for the climatological
+file with the \fB\-\-primary\-gases\-only\fP flag.
+.sp
+Where ginput looks for the .mod files it requires depends on how you specify where those files can be found. If you
+use the \fBMOD_DIR\fP positional argument, it assumes that all of the .mod files it needs will be in that directory.
+However, if you use the \fB\-\-mod\-root\-dir\fP optional argument instead, then it looks for subdirectories under that
+path following the product/site/vertical organization that is automatically created for .mod files. Note that if you
+give both \fBMOD_DIR\fP and \fB\-\-mod\-root\-dir\fP then the former takes precendence. If neither are given, then
+\fI$GGGPATH/models/gnd\fP is used as the mod root directory, and an error is raised if the GGGPATH environmental
+variable is not defined.
+.sp
+Also note that all .mod files required for a job must exist, or an error is raised. Finally, you must give either
+\fB\-\-site\fP or \fB\-\-lat\fP and \fB\-\-lon\fP to indicate which location\(aqs .mod files are to be processed.
+.SH ARGUMENTS
+.INDENT 0.0
+.TP
+\fBDATE_RANGE\fP (vmr)
+The date or date range, in YYYYMMDD\-YYYYMMDD format, e.g. 20180101\-20180201. Note that the second date is exclusive.
+Additionally, like the other subcommands, this can have a single day given as YYYYMMDD or have specific hours given
+in YYYYMMDD_HH\-YYYYMMDD_HH format.
+.TP
+\fBRUNLOG\fP (rlvmr)
+The path to the runlog to generate .vmr files for.
+.TP
+\fBMOD_DIR\fP
+This is optional; if given, it is the path that ginput will search for the .mod files needed to generate the
+corresponding .vmr files. That is, if \fI~/ggg/mod_files\fP is given as this argument, the .mod files must be in
+\fI~/ggg/mod_files\fP and not a subdirectory. See also \fB\-\-mod\-root\-dir\fP\&.
+.TP
+\fB\-\-site\fP
+The two\-letter site ID of the TCCON site to generate .vmr files for. This is used to determine the lat/lon to look
+for in the .mod file name. Only standard TCCON site IDs are allowed for this argument, call \fI\&./run_ginput.py \-\-help\fP
+for the list. This is "xx" by default. If using \fB\-\-mod\-root\-dir\fP, you must ensure that there is a site
+subdirectory under that root dir with the matching site ID, i.e. if given \-\-site=pa, then there must be a
+\fI$MOD_ROOT_DIR/fpit/pa\fP directory.
+.TP
+\fB\-\-lat\fP
+The latitude of the site if using a custom site; this will be used to find the matching .mod files by name. If using
+a predefined TCCON site, this is not necessary. If you do not specify \fB\-\-site\fP, you must specify this.
+.TP
+\fB\-\-lon\fP
+The longitude of the site in degrees east (i.e. 90 W would be 270 or \-90).  As with \fB\-\-lat\fP, this is only needed
+if you do not specify \fB\-\-site\fP\&.
+.TP
+\fB\-r, \-\-mod\-root\-dir\fP
+The root directory to look for .mod files. This directory is assumed to be organized in \fI$MOD_ROOT_DIR/product/site/vertical\fP
+with .mod files for "site" in that \fIvertical\fP subdirectory. Currently, "product" is always "fpit" since standard
+TCCON processing expects FPIT files. "site" is defined by the \fB\-\-site\fP argument, which is "xx" by default.
+.TP
+\fB\-b, \-\-std\-vmr\-file\fP
+The path to the climatological .vmr file that comes with GGG; in GGG2020, this is the \fIsummer_35N.vmr\fP file in
+\fI$GGGPATH/vmrs/gnd\fP\&. This is used to fill in the a priori profiles for the secondary gases. If you do not have
+this file, you can still generate .vmr files without the secondary gases with the \fB\-\-primary\-gases\-only\fP flag.
+.TP
+\fB\-p, \-\-primary\-gases\-only\fP
+This will tell ginput to only write the primary gases (those that do not rely on the climatological .vmr file: CO2,
+N2O, CH4, HF, CO, H2O, and O3). This allows you to generate .vmr files without that file.
+.TP
+\fB\-s, \-\-save\-dir\fP
+Path to save the .vmr files to. Behavior depends on \fB\-\-flat\-outdir\fP, see that flag for details. This is required
+if you do not have a GGGPATH environmental variable defined. If you do and do not pass this option, then it uses
+\fI$GGGPATH/vmrs/gnd\fP as the save path.
+.TP
+\fB\-f, \-\-flat\-outdir\fP
+By default, the save directory given is treated as the root save directory, and .vmrs will be saved in
+subdirectories \fIsite/vmrs\-vertical\fP, similar to .mod files. Giving the \fB\-\-flat\-outdir\fP flag means that the
+\&.vmrs are saved directly in the given save dir.
+.TP
+\fB\-i, \-\-integral\-file\fP
+This accepts a path to a GGG integral file; this is a file with two columns of numbers where the first gives the
+altitude grid in kilometers for the a prior profiles and the second column is the molar mass of air at that level
+(not used). When given, the .vmr files are interpolated to that grid. See \fBNotes\fP as well.
+.TP
+\fB\-\-keep\-latlon\-prec\fP
+This flag indicates that the .mod files have 2 decimal places of precision in the latitude and longitude in their
+names, and that the .vmr files should as well.
+.TP
+\fB\-\-first\-date\fP (rlvmr)
+When generating .vmr files for a runlog, this argument indicates the earliest date that .vmr files should be
+generated for (in YYYY\-MM\-DD format). The default is 2000\-01\-01, since GEOS\-FPIT data is not available before
+that date.
+.UNINDENT
+.SH EXAMPLES
+.sp
+Create .vmr files for Park Falls for January 2018 with .mod files in ~/mod\-files, using a climatological file for the
+secondary gases (summer_35N.vmr), an integral file for the grid (tccon_grid.dat) and saving to ~/vmr\-files:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+\&./run_ginput.py vmr \-s ~/vmr\-files \-b ~/tccon/summer_35N.vmr \-i ~/tccon/tccon_grid.dat \-\-site=pa 20180101\-20180201 ~/mod\-files
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Create .vmr files on the native grid for the primary gases only:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+\&./run_ginput.py vmr \-s ~/vmr\-files \-p \-\-site=pa 20180101\-20180201 ~/mod\-files
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Create .vmr files on a specified grid but only for primary gases, by specifying the root directory for the .mod
+files, for only Jan 1st, 2018:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+\&./run_ginput.py vmr \-s ~/vmr\-files \-i ~/tccon/tccon_grid.dat \-r ~/mod\-file\-root \-\-site=pa \-p 20180101
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Create standard TCCON .vmr files for the runlog \fIpa.grl\fP, assuming you have the \fIGGGPATH\fP environmental variable
+defined and that the climatological .vmr file is in the right place and the .mod files are in
+\fI$GGGPATH/models/gnd/fpit/<site>/vertical\fP:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+\&./run_ginput.py vmr \-i $GGGPATH/levels/ap_51_level_0_to_70km.gnd pa.grl
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.INDENT 0.0
+.TP
+.B Same as last except the .mod files are all directly in \fI$GGGPATH/models/gnd\fP::
+\&./run_ginput.py vmr \-i $GGGPATH/levels/ap_51_level_0_to_70km.gnd pa.grl $GGGPATH/models/gnd
+.UNINDENT
+.SH NOTES
+.sp
+When generating CO priors, keep in mind two things. First, the .mod files must include CO from the GEOS chemistry files.
+Second, additional CO is added to the top level to account for the mesospheric CO column above the top of the prior.
+Because this calculation depends on the width and position of the top level, if you want the a priori profiles on a
+different grid than the native GEOS grid, it is best to pass in that grid through an integral file rather than
+reinterpolating after the fact.
+.SH AUTHOR
+Joshua Laughner, Sebastien Roche, and Matthaeus Kiel
+.SH COPYRIGHT
+2020, Joshua Laughner, Sebastien Roche, and Matthaeus Kiel
+.\" Generated by docutils manpage writer.
+.
