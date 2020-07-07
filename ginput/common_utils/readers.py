@@ -144,7 +144,7 @@ def _read_map_nc_file(map_file, as_dataframes=False, skip_header=False):
     with ncdf.Dataset(map_file) as ds:
         for varname, vardat in ds.variables.items():
             if varname == 'time':
-                vardat = ncdf.num2date(vardat[:], vardat.units)
+                vardat = ncdf.num2date(vardat[:], vardat.units, only_use_cftime_datetimes=False)
                 profile_dict[varname] = pd.DatetimeIndex(vardat)
             else:
                 profile_dict[varname] = vardat[:].filled(np.nan)
