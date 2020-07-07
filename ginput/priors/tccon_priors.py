@@ -2854,7 +2854,7 @@ def _get_std_vmr_file(std_vmr_file):
         return std_vmr_file
 
 
-def generate_full_tccon_vmr_file(mod_data, utc_offsets, save_dir, std_vmr_file=None, site_abbrevs='xx',
+def generate_full_tccon_vmr_file(mod_data, utc_offsets, save_dir, product='fpit', std_vmr_file=None, site_abbrevs='xx',
                                  keep_latlon_prec=False, use_existing_luts=False, **kwargs):
     """
     Generate a .vmr file with all the gases required by TCCON (both retrieved and secondary).
@@ -2923,11 +2923,11 @@ def generate_full_tccon_vmr_file(mod_data, utc_offsets, save_dir, std_vmr_file=N
 
     generate_tccon_priors_driver(mod_data=mod_data, utc_offsets=utc_offsets, species=species, site_abbrevs=site_abbrevs,
                                  write_vmrs=save_dir, keep_latlon_prec=keep_latlon_prec, gas_name_order=std_vmr_gases,
-                                 **kwargs)
+                                 product=product, **kwargs)
 
 
 def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='xx', write_vmrs=False,
-                                 gas_name_order=None, keep_latlon_prec=False, flat_outdir=True,
+                                 gas_name_order=None, keep_latlon_prec=False, flat_outdir=True, product='fpit',
                                  **prior_kwargs):
     """
     Generate multiple TCCON priors or a file containing multiple gas concentrations
@@ -3064,7 +3064,7 @@ def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='x
             if flat_outdir:
                 vmr_name = os.path.join(vmrs_dir, vmr_name)
             else:
-                this_vmr_dir = mod_utils.vmr_output_subdir(vmrs_dir, site_abbrevs[iprofile])
+                this_vmr_dir = mod_utils.vmr_output_subdir(vmrs_dir, site_abbrevs[iprofile], product=product)
                 if not os.path.exists(this_vmr_dir):
                     os.makedirs(this_vmr_dir)
                 vmr_name = os.path.join(this_vmr_dir, vmr_name)
@@ -3208,6 +3208,6 @@ def cl_driver(date_range, mod_dir=None, mod_root_dir=None, save_dir=None, produc
         raise IOError(msg)
 
     # GO!
-    generate_full_tccon_vmr_file(mod_data=mod_files, utc_offsets=dt.timedelta(0), save_dir=save_dir,
+    generate_full_tccon_vmr_file(mod_data=mod_files, utc_offsets=dt.timedelta(0), save_dir=save_dir, product=product,
                                  keep_latlon_prec=keep_latlon_prec, site_abbrevs=all_site_abbrevs, **kwargs)
 

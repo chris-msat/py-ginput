@@ -47,7 +47,7 @@ def _find_files_in_dir_tree(root_dir, date_range, site_lat, site_lon, site_abbre
     mod_dir = mod_utils.mod_output_subdir(root_dir, site_abbrev=site_abbrev, product=product)
     vmr_dir = mod_utils.vmr_output_subdir(root_dir, site_abbrev=site_abbrev, product=product)
     return _find_files_in_dirs(mod_dir=mod_dir, vmr_dir=vmr_dir, date_range=date_range,
-                               site_lat=site_lat, site_lon=site_lon,
+                               site_lat=site_lat, site_lon=site_lon, product=product,
                                keep_latlon_prec=keep_latlon_prec, skip_missing=skip_missing)
 
 
