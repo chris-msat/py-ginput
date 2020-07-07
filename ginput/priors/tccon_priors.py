@@ -3191,8 +3191,9 @@ def cl_driver(date_range, mod_dir=None, mod_root_dir=None, save_dir=None, produc
                 lat, lon = site_info['lat'], site_info['lon_180']
             else:
                 lat, lon = this_lat, this_lon
-            this_file = os.path.join(this_mod_dir, mod_utils.mod_file_name_for_priors(d, site_lat=lat, site_lon_180=lon,
-                                                                                      round_latlon=not keep_latlon_prec))
+            this_file = os.path.join(this_mod_dir,
+                                     mod_utils.mod_file_name_for_priors(d, site_lat=lat, site_lon_180=lon, prefix=product.upper(),
+                                                                        round_latlon=not keep_latlon_prec))
             if os.path.isfile(this_file):
                 mod_files.append(this_file)
                 all_site_abbrevs.append(this_abbrev)

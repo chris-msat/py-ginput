@@ -1969,7 +1969,7 @@ def mod_maker_new(start_date=None, end_date=None, func_dict=None, GEOS_path=None
             else:
                 ew = 'W'
 
-            mod_name = mod_utils.mod_file_name('FPIT', local_date, timedelta(hours=3), site_lat, site_lon_180, ew, ns, mod_path, round_latlon=not keep_latlon_prec, in_utc=save_in_utc)
+            mod_name = mod_utils.mod_file_name(product.upper(), local_date, timedelta(hours=3), site_lat, site_lon_180, ew, ns, mod_path, round_latlon=not keep_latlon_prec, in_utc=save_in_utc)
             if not muted:
                 print('\t\t\t{:<20s} : {}'.format(site_dict[site]['name'], mod_name))
 

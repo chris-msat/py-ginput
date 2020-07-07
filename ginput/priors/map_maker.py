@@ -6,7 +6,7 @@ from ..common_utils import mod_utils, writers
 from ..mod_maker import tccon_sites
 
 
-def _find_files_in_dirs(mod_dir, vmr_dir, date_range, site_lat, site_lon, keep_latlon_prec=False,
+def _find_files_in_dirs(mod_dir, vmr_dir, date_range, site_lat, site_lon, product='fpit', keep_latlon_prec=False,
                         skip_missing=False):
     if not os.path.isdir(mod_dir):
         raise IOError('Cannot find expected mod file directory: {}'.format(mod_dir))
@@ -19,7 +19,7 @@ def _find_files_in_dirs(mod_dir, vmr_dir, date_range, site_lat, site_lon, keep_l
     all_mod_files = []
     all_vmr_files = []
     for date in dates:
-        mod_file = mod_utils.mod_file_name_for_priors(date, site_lat=site_lat, site_lon_180=site_lon, round_latlon=round_latlon)
+        mod_file = mod_utils.mod_file_name_for_priors(date, site_lat=site_lat, site_lon_180=site_lon, round_latlon=round_latlon, prefix=product.upper())
         mod_file = os.path.join(mod_dir, mod_file)
         if not os.path.isfile(mod_file):
             if skip_missing:
@@ -84,7 +84,7 @@ def _cl_get_mod_vmr_files(root_dir, mod_dir, vmr_dir, date_range, site_lat, site
         raise TypeError('Cannot infer a save directory when not using root_dir')
     else:
         mods, vmrs = _find_files_in_dirs(
-            mod_dir=mod_dir, vmr_dir=vmr_dir, date_range=date_range, site_lat=site_lat, site_lon=site_lon,
+            mod_dir=mod_dir, vmr_dir=vmr_dir, date_range=date_range, site_lat=site_lat, site_lon=site_lon, product=product,
             keep_latlon_prec=keep_latlon_prec, skip_missing=skip_missing
         )
 
