@@ -153,7 +153,7 @@ def parse_cl_args(p: ArgumentParser):
                        help='Directory to save the .map files to. If not given, but passing --root-dir (and not '
                             'mod_dir+vmr_dir), then .map files are automatically saved in the root directory under '
                             'fpit/<site>/maps-vertical.')
-    iogrp.add_argument('--met-product', dest='product', default='fpit', choices=('fp', 'fpit'),
+    iogrp.add_argument('--product', default='fpit', choices=('fp', 'fpit'),
                        help='Which meteorology product you used. "fp" = GEOS-FP, "fpit" = GEOS-FPIT. Only required if '
                             'specifying --root-dir instead of mod_dir+vmr_dir. Default is %(default)s')
     iogrp.add_argument('-k', '--keep-latlon-prec', action='store_true',
