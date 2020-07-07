@@ -113,10 +113,10 @@ from .tccon_sites import site_dict, tccon_site_info, tccon_site_info_for_date
 ####################
 
 _old_modmaker_modes = ('ncep','merradap42','merradap72','merraglob','fpglob','fpitglob')
-_new_fixedp_mode = 'fpit'
-_new_native_mode = 'fpit-eta'
-_new_modmaker_modes = (_new_fixedp_mode, _new_native_mode)
-_default_mode = _new_native_mode
+_new_fixedp_modes = ('fpit', 'fp')
+_new_native_modes = ('fpit-eta', 'fp-eta')
+_new_modmaker_modes = _new_fixedp_modes + _new_native_modes
+_default_mode = 'fpit-eta'
 
 
 def shell_error(msg, ecode=1):
@@ -997,6 +997,17 @@ def equivalent_latitude_functions(ncdf_path,mode,start=None,end=None,muted=False
 
 
 def _add_common_args(parser):
+    def english_join(conj, seq):
+        seq = ['"{}"' for el in seq]
+        if len(seq) == 1:
+            return seq[0]
+
+        seq[-1] = '{} {}'.format(conj, seq[-1])
+        if len(seq) == 2:
+            return ' '.join(seq)
+        else:
+            return ', '.join(seq)
+
     parser.add_argument('met_path',
                         help='Path to the meteorology FP(-IT) netCDF files. Must be directory with subdirectories '
                              'Nx and Np or Nv, containing surface and profile paths respectively.')
@@ -1020,10 +1031,10 @@ def _add_common_args(parser):
                                                              'files.')
     parser.add_argument('--mode', choices=_old_modmaker_modes + _new_modmaker_modes, default=_default_mode,
                         help='If one of {old} is chosen, mod_maker uses the old code with time interpolation. If one '
-                             'of {new} is chosen, it uses the new code that generates 8x mod files per day. "{fixedp}" '
-                             'expects fixed pressure level GEOS files; "{eta}" expects native 72 level GEOS files.'
+                             'of {new} is chosen, it uses the new code that generates 8x mod files per day. {fixedp} '
+                             'expect fixed pressure level GEOS files; {eta} expects native 72 level GEOS files.'
                         .format(old=', '.join(_old_modmaker_modes), new=', '.join(_new_modmaker_modes),
-                                fixedp=_new_fixedp_mode, eta=_new_native_mode))
+                                fixedp=english_join('or', _new_fixedp_modes), eta=english_join('or', _new_native_modes)))
 
 
 def parse_args(parser=None):
@@ -1610,7 +1621,7 @@ def extrapolate_to_surface(var_to_interp, INTERP_DATA, SLANT_DATA=None):
 
 
 def mod_maker_new(start_date=None, end_date=None, func_dict=None, GEOS_path=None, chem_path=None, locations=site_dict,
-                  slant=False, muted=False, lat=None, lon=None, alt=None, site_abbrv=None, save_path=None,
+                  slant=False, muted=False, lat=None, lon=None, alt=None, site_abbrv=None, save_path=None, product='fpit',
                   keep_latlon_prec=False, save_in_utc=True, native_files=False, chem_variables=tuple(), **kwargs):
     """
     This code only works with GEOS-5 FP-IT data.
@@ -1647,13 +1658,13 @@ def mod_maker_new(start_date=None, end_date=None, func_dict=None, GEOS_path=None
         chem_path = GEOS_path
 
     if save_path:
-        mod_path = os.path.join(save_path,'fpit')
+        mod_path = os.path.join(save_path,product)
     else: # if a destination path is not given, try saving MOD files in GGGPATH/models/gnd/fpit
         GGGPATH = os.environ['GGGPATH']
         if GGGPATH is None:
             raise RuntimeError('No custom save_path provided, and the GGGPATH environmental variable is not set. '
                                'One of these must be provided.')
-        mod_path = os.path.join(GGGPATH,'models','gnd','fpit')
+        mod_path = os.path.join(GGGPATH,'models','gnd',product)
     if not os.path.exists(mod_path):
         if not muted:
             print('Creating',mod_path)
@@ -2311,23 +2322,23 @@ def driver(date_range, met_path, chem_path=None, save_path=None, keep_latlon_pre
                       HH=12, MM=0, time_step=24, muted=muted, lat=this_lat, lon=this_lon, alt=this_alt,
                       save_path=save_path, ncdf_path=met_path, keep_latlon_prec=keep_latlon_prec, mode=mode)
     elif mode in _new_modmaker_modes:
-        if mode == _new_fixedp_mode:
+        if mode in _new_fixedp_modes:
             eqlat_fxn = equivalent_latitude_functions_geos
             native_files = False
-        elif mode == _new_native_mode:
+        elif mode in _new_native_modes:
             eqlat_fxn = equivalent_latitude_functions_native_geos
             native_files = True
         else:
             raise NotImplementedError('No equivalent latitude function defined for mode == "{}"'.format(mode))
 
         chem_vars = ('CO',) if include_chm else tuple()
-
+        product = mode.replace('-eta', '')
         func_dict = eqlat_fxn(GEOS_path=met_path, start_date=start_date, end_date=end_date, muted=muted)
 
         for this_abbrv, this_lat, this_lon, this_alt in zip(site_abbrv, lat, lon, alt):
             mod_maker_new(start_date=start_date, end_date=end_date, func_dict=func_dict, GEOS_path=met_path,
                           chem_path=chem_path, chem_variables=chem_vars, slant=slant, locations=site_dict, muted=muted,
-                          lat=this_lat, lon=this_lon, alt=this_alt, site_abbrv=this_abbrv, save_path=save_path,
+                          lat=this_lat, lon=this_lon, alt=this_alt, site_abbrv=this_abbrv, save_path=save_path, product=product,
                           keep_latlon_prec=keep_latlon_prec, save_in_utc=save_in_utc, native_files=native_files)
     else:
         raise ValueError('mode "{}" is not one of the allowed values: {}'.format(

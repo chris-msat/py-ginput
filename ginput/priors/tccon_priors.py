@@ -3086,6 +3086,9 @@ def _add_common_cl_args(parser):
                                                      'organized into subdirectories by <product>/<site>/vertical, e.g. '
                                                      'fpit/pa/vertical. If an explicit mod_dir is given, this argument '
                                                      'is not used.')
+    parser.add_argument('--product', default='fpit', choices=('fp', 'fpit'),
+                        help='Which GEOS product was used. Only affects the subdirectory looked for with --mod-root-dir'
+                             ' and created when saving without --flat-outdir.')
     parser.add_argument('-b', '--base-vmr-file', dest='std_vmr_file',
                         help='The summer 35N .vmr file that has base profiles, seasonal cycles, latitude gradients, '
                              'and secular trends for all gases. This is used to fill in the secondary gases in the .vmr '
