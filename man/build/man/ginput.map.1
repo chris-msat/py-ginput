@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "GINPUT.MAP" "1" "Jul 01, 2020" "" "ginput"
+.TH "GINPUT.MAP" "1" "Jul 07, 2020" "" "ginput"
 .SH NAME
 ginput.map \- Ginput: map file documentation
 .
@@ -76,9 +76,9 @@ Where to save the .map files. The .map files are directly saved here. If this is
 given, the .map files are saved to \fI$ROOT_DIR/<product>/<site>/maps\-vertical\fP, e.g. \fI$ROOT_DIR/fpit/pa/maps\-vertical\fP\&.
 If \fB\-\-root\-dir\fP is not given, this argument is required.
 .TP
-\fB\-\-met\-product\fP
+\fB\-\-product\fP
 One of the strings "fp" or "fpit". Used to determine the first level of the directory tree under the \fB\-\-root\-dir\fP,
-otherwise not used.
+otherwise not used. Default is "fpit".
 .TP
 \fB\-k, \-\-keep\-latlon\-prec\fP
 This flag indicates that the .mod and .vmr files use 2 decimals places for the latitude and longitude in their file

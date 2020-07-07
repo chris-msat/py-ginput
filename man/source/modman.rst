@@ -96,7 +96,7 @@ Optional arguments: other
 **-s, --save-path**
     Root directory to save the output .mod files to. See **Description** for how the files are organized. If this is
     not specified, then ginput checks if the environmental variable `GGGPATH` is defined. If so, then
-    `$GGGPATH/models/gnd/fpit` is used as the save path. If not, an error is thrown.
+    `$GGGPATH/models/gnd/<product>` is used as the save path. If not, an error is thrown.
 
 **--keep-latlon-prec**
     By default, the .mod file name includes the lat and lon rounded to the nearest integer. Adding this flag will
@@ -127,8 +127,16 @@ Optional arguments: other
     be addressed.
 
     GGG2020:
+
     * fpit-eta: generate .mod files from GEOS-FPIT data on the native 72-eta level grid. This is the default.
     * fpit: generate .mod files from GEOS-FPIT data on the fixed-pressure level grid. This is legacy and no longer recommended.
+    * fp-eta: generate .mod files from GEOS-FP data on the native 72-eta level grid. This is provided to support
+      collaborators who wish to use the openly available FP product rather that the subscription-required FPIT product,
+      but standard TCCON processing uses FPIT.
+    * fp: generate .mod files from GEOS-FP data on the fixed-pressure level grid. This is not recommended.
+
+    **Note:** the only difference between fpit-eta and fp-eta is what subdirectory the .mod files are saved in and the
+    prefix of the .mod files (`fpit` or `fp`). It does not check whether the input files are actually FP or FPIT.
 
     GGG2014 (use strongly discouraged and not supported):
     * ncep: generate .mod files from NCEP data (pre-GGG2020 approach)

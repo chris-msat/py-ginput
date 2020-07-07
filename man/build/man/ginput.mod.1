@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "GINPUT.MOD" "1" "Jul 01, 2020" "" "ginput"
+.TH "GINPUT.MOD" "1" "Jul 07, 2020" "" "ginput"
 .SH NAME
 ginput.mod \- Ginput: mod file documentation
 .
@@ -139,7 +139,7 @@ are in \fI/data/chem/Nv\fP, then set \fBMET_PATH\fP to \fI/data/geos\fP and \fB\
 \fB\-s, \-\-save\-path\fP
 Root directory to save the output .mod files to. See \fBDescription\fP for how the files are organized. If this is
 not specified, then ginput checks if the environmental variable \fIGGGPATH\fP is defined. If so, then
-\fI$GGGPATH/models/gnd/fpit\fP is used as the save path. If not, an error is thrown.
+\fI$GGGPATH/models/gnd/<product>\fP is used as the save path. If not, an error is thrown.
 .TP
 \fB\-\-keep\-latlon\-prec\fP
 By default, the .mod file name includes the lat and lon rounded to the nearest integer. Adding this flag will
@@ -170,8 +170,21 @@ unsuitable for the generation of GGG2020 .vmr files. Crashes using any mode othe
 be addressed.
 .sp
 GGG2020:
-* fpit\-eta: generate .mod files from GEOS\-FPIT data on the native 72\-eta level grid. This is the default.
-* fpit: generate .mod files from GEOS\-FPIT data on the fixed\-pressure level grid. This is legacy and no longer recommended.
+.INDENT 7.0
+.IP \(bu 2
+fpit\-eta: generate .mod files from GEOS\-FPIT data on the native 72\-eta level grid. This is the default.
+.IP \(bu 2
+fpit: generate .mod files from GEOS\-FPIT data on the fixed\-pressure level grid. This is legacy and no longer recommended.
+.IP \(bu 2
+fp\-eta: generate .mod files from GEOS\-FP data on the native 72\-eta level grid. This is provided to support
+collaborators who wish to use the openly available FP product rather that the subscription\-required FPIT product,
+but standard TCCON processing uses FPIT.
+.IP \(bu 2
+fp: generate .mod files from GEOS\-FP data on the fixed\-pressure level grid. This is not recommended.
+.UNINDENT
+.sp
+\fBNote:\fP the only difference between fpit\-eta and fp\-eta is what subdirectory the .mod files are saved in and the
+prefix of the .mod files (\fIfpit\fP or \fIfp\fP). It does not check whether the input files are actually FP or FPIT.
 .sp
 GGG2014 (use strongly discouraged and not supported):
 * ncep: generate .mod files from NCEP data (pre\-GGG2020 approach)

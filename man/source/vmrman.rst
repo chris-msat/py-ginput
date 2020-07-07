@@ -76,9 +76,13 @@ Arguments
     if you do not specify **--site**.
 
 **-r, --mod-root-dir**
-    The root directory to look for .mod files. This directory is assumed to be organized in `$MOD_ROOT_DIR/product/site/vertical`
-    with .mod files for "site" in that `vertical` subdirectory. Currently, "product" is always "fpit" since standard
-    TCCON processing expects FPIT files. "site" is defined by the **--site** argument, which is "xx" by default.
+    The root directory to look for .mod files. This directory is assumed to be organized in `$MOD_ROOT_DIR/<product>/<site>/vertical`
+    with .mod files for "site" in that `vertical` subdirectory. Currently, "product" is defined by the **--product**
+    argument, default is "fpit". "site" is defined by the **--site** argument, which is "xx" by default.
+
+**--product**
+    Can be "fpit" (default) or "fp". This affects which product subdirectory ginput looks for .mod files from within
+    the mod root directory and which subdirectory it saves .vmr files to when **--flat-outdir** is not present.
 
 **-b, --std-vmr-file**
     The path to the climatological .vmr file that comes with GGG; in GGG2020, this is the `summer_35N.vmr` file in
@@ -96,7 +100,7 @@ Arguments
 
 **-f, --flat-outdir**
     By default, the save directory given is treated as the root save directory, and .vmrs will be saved in
-    subdirectories `site/vmrs-vertical`, similar to .mod files. Giving the **--flat-outdir** flag means that the
+    subdirectories `<product>/<site>/vmrs-vertical`, similar to .mod files. Giving the **--flat-outdir** flag means that the
     .vmrs are saved directly in the given save dir.
 
 **-i, --integral-file**
@@ -133,9 +137,11 @@ files, for only Jan 1st, 2018::
 Create standard TCCON .vmr files for the runlog `pa.grl`, assuming you have the `GGGPATH` environmental variable
 defined and that the climatological .vmr file is in the right place and the .mod files are in
 `$GGGPATH/models/gnd/fpit/<site>/vertical`::
+
     ./run_ginput.py vmr -i $GGGPATH/levels/ap_51_level_0_to_70km.gnd pa.grl
 
 Same as last except the .mod files are all directly in `$GGGPATH/models/gnd`::
+
     ./run_ginput.py vmr -i $GGGPATH/levels/ap_51_level_0_to_70km.gnd pa.grl $GGGPATH/models/gnd
 
 Notes

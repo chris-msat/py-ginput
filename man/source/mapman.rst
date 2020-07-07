@@ -52,9 +52,9 @@ I/O
     given, the .map files are saved to `$ROOT_DIR/<product>/<site>/maps-vertical`, e.g. `$ROOT_DIR/fpit/pa/maps-vertical`.
     If **--root-dir** is not given, this argument is required.
 
-**--met-product**
+**--product**
     One of the strings "fp" or "fpit". Used to determine the first level of the directory tree under the **--root-dir**,
-    otherwise not used.
+    otherwise not used. Default is "fpit".
 
 **-k, --keep-latlon-prec**
     This flag indicates that the .mod and .vmr files use 2 decimals places for the latitude and longitude in their file
