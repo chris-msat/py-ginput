@@ -8,7 +8,7 @@
 * Run `./run_ginput.py --help` to see available subcommands
 * For more detailed help, try `man ginput` after running `make install`. 
   (If that doesn't work, try `man man/build/man/ginput.1` from this 
-  directory.)
+  directory or add `man/build/man/` to your `MANPATH`).
   
 For more install options, run `make help`. 
 
