@@ -1,5 +1,11 @@
 # Ginput Version History
 
+## v1.0.7
+
+This version should introduce no scientific changes. It adds some functionality
+to the command line interface to generate GEOS-FP derived files, fixes some small
+edge-case bugs, and adds manpage documentation.
+
 ## v1.0.6
 
 HF priors now have values < 0.1 ppt set to 0.1 ppt. This allows proper computation of
