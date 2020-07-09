@@ -23,6 +23,18 @@ To verify you have installed and are using `ginput` correctly, we recommend you 
 at least the .mod and .vmr files for Lamont (site code "oc") on 1 Jan 2018 and compare
 against the pregenerated test files. Differences should be less than ~1%. 
 
+## Terms of use
+
+Ginput is licensed under the LGPL v3.0 license. The full legal terms are contained in 
+the COPYING and COPYING.LESSER files. For a short summary, please see
+https://choosealicense.com/licenses/lgpl-3.0/#. If you have any questions about
+use, please contact us (contact information is below).
+
+In addition to the LGPL license, you should cite the ginput paper in any publications
+resulting from the use of ginput. (At time of release, the manuscript is still in preparation,
+so contact us for the citation.) Please also consider contacting us to let us know you are
+using ginput!
+
 ## Python support
 
 Only Python 3 is supported. Python 2 reached end-of-life on 1 Jan 2020. 
