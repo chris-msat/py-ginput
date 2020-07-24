@@ -15,12 +15,23 @@ import sys
 from . import backend_utils as bu
 from .. import tccon_priors
 from ...mod_maker import mod_maker
-from ...common_utils import mod_utils, readers
+from ...common_utils import mod_utils, readers, ioutils
 from ...download import get_GEOS5
 
 float_h5_fill = np.nan
 int_h5_fill = -999999
 string_h5_fill = b'N/A'
+
+def _to_bool(val):
+    if isinstance(val, str):
+        if val.lower() == 'true':
+            return True
+        elif val.lower() == 'false':
+            return False
+        else:
+            raise ValueError('Bad string for boolean: {}'.format(val))
+    else:
+        return bool(val)
 
 # These should match the arg names in driver()
 _req_info_keys = ('gas_name', 'site_file', 'geos_top_dir', 'geos_chm_top_dir', 'mod_top_dir', 'prior_save_file')
@@ -36,12 +47,16 @@ _req_info_help = {'gas_name': 'The name of the gas to generate priors for.',
                                  'if writing .mod files.',
                   'prior_save_file': 'The filename to give the HDF5 file the priors will be saved in.'}
 
-_opt_info_keys = ('integral_file', 'base_vmr_file')
+_opt_info_keys = ('integral_file', 'base_vmr_file', 'trop_eqlat')
 _opt_info_ispath = ('integral_file', 'base_vmr_file')
 _opt_info_help = {'integral_file': 'A path to an integral.gnd file that specifies the altitude grid for the .vmr '
                                    'files. If not present, the .vmr files will be on the native GEOS grid.',
                   'base_vmr_file': 'A path to a summer 35N .vmr file that can be used for the secondary gases. '
-                                   'If not given, the .vmr files will only include the primary gases.'}
+                                   'If not given, the .vmr files will only include the primary gases.',
+                  'trop_eqlat': 'Whether to use tropospheric effective latitude or not (a boolean).'}
+
+_default_values = {'trop_eqlat': True}
+_key_converters = {'trop_eqlat': _to_bool}
 
 _default_file_types = ('2dmet', '3dmet')
 
@@ -102,6 +117,7 @@ def read_info_file(info_filename):
     # Setup the dictionary that will receive the data. Default everything to None; will check that required keys were
     # overwritten at the end.
     info_dict = {k: None for k in _req_info_keys + _opt_info_keys}
+    info_dict.update(_default_values)
     info_file_dir = os.path.abspath(os.path.dirname(info_filename))
 
     with open(info_filename, 'r') as fobj:
@@ -121,6 +137,9 @@ def read_info_file(info_filename):
                 # Make any relative paths relative to the location of the info file.
                 value = value if os.path.isabs(value) else os.path.join(info_file_dir, value)
 
+            if key in _key_converters:
+                value = _key_converters[key](value)
+                
             info_dict[key] = value
 
     # Check that all required keys were read in. Any optional keys not read in will be left as None.
@@ -459,7 +478,7 @@ def mm_helper(kwargs):
     mm_helper_internal(**kwargs)
 
 
-def make_priors(prior_save_file, mod_dir, gas_name, acdates, aclons, aclats, acfiles, zgrid_file=None, nprocs=0):
+def make_priors(prior_save_file, mod_dir, gas_name, acdates, aclons, aclats, acfiles, trop_eqlat=True, zgrid_file=None, nprocs=0):
     """
     Make the priors, saving them to an .h5 file
     
@@ -537,7 +556,7 @@ def make_priors(prior_save_file, mod_dir, gas_name, acdates, aclons, aclats, acf
 
     for k, files in grouped_mod_files.items():
         for f in files:
-            these_args = (f, gas_rec, zgrid_file)
+            these_args = (f, gas_rec, trop_eqlat, zgrid_file)
             prior_args.append(these_args)
 
     atm_files_by_mod = _make_mod_atm_map(acdates=acdate_strings, aclons=aclons, aclats=aclats, acfiles=acfiles)
@@ -564,10 +583,11 @@ def make_priors(prior_save_file, mod_dir, gas_name, acdates, aclons, aclats, acf
         with Pool(processes=nprocs) as pool:
             results = pool.starmap(_prior_helper, prior_args)
 
-    _write_priors_h5(prior_save_file, results, atm_files, mod_files_in_order)
+    _write_priors_h5(prior_save_file, results, atm_files, mod_files_in_order,
+                     root_attrs={'trop_eqlat': trop_eqlat, 'zgrid_file': zgrid_file if zgrid_file is not None else ''})
 
 
-def _prior_helper(mod_file, gas_rec, zgrid=None):
+def _prior_helper(mod_file, gas_rec, trop_eqlat=True, zgrid=None):
     """
     Helper function to run the priors consistently in either serial or parallel mode
 
@@ -586,10 +606,10 @@ def _prior_helper(mod_file, gas_rec, zgrid=None):
     """
     _fbase = os.path.basename(mod_file)
     print('Processing {}'.format(_fbase))
-    return tccon_priors.generate_single_tccon_prior(mod_file, tdel(hours=0), gas_rec, use_eqlat_strat=True, zgrid=zgrid)
+    return tccon_priors.generate_single_tccon_prior(mod_file, tdel(hours=0), gas_rec, use_eqlat_strat=True, use_eqlat_trop=trop_eqlat, zgrid=zgrid)
 
 
-def _write_priors_h5(save_file, prior_results, atm_files, mod_files=None):
+def _write_priors_h5(save_file, prior_results, atm_files, mod_files=None, root_attrs=dict()):
     """
     Write the output HDF5 file for the priors
 
@@ -672,6 +692,12 @@ def _write_priors_h5(save_file, prior_results, atm_files, mod_files=None):
         dset = wobj.create_dataset('atm_files', data=atm_file_array, fillvalue=atm_fill_val)
         dset.attrs.update(atm_attrs)
 
+        # Then go ahead and add the root attributes
+        all_root_attrs = {'history': ioutils.make_creation_info(save_file, 'ginput.priors.backend_analysis.create_test_priors')}
+        all_root_attrs.update(root_attrs)
+        wobj.attrs.update(all_root_attrs)
+
+        # Write the profile and scalar variables
         prior_grp = wobj.create_group('Priors')
         prof_grp = prior_grp.create_group('Profiles')
         for key in profiles[0].keys():
@@ -714,7 +740,7 @@ def _write_priors_h5(save_file, prior_results, atm_files, mod_files=None):
 
 def driver(check_geos, download, makemod, makepriors, site_file, geos_top_dir, geos_chm_top_dir,
            mod_top_dir, prior_save_file, gas_name, nprocs=0, dl_file_types=None, dl_levels=None, integral_file=None,
-           **_):
+           trop_eqlat=True, **_):
     if dl_file_types is None:
         dl_file_types = ('met', 'met', 'chm')
     if dl_levels is None:
@@ -739,7 +765,7 @@ def driver(check_geos, download, makemod, makepriors, site_file, geos_top_dir, g
     if makepriors:
         make_priors(prior_save_file, make_full_mod_dir(mod_top_dir, 'fpit'), gas_name,
                     acdates=acdates, aclons=aclons, aclats=aclats, acfiles=acfiles, nprocs=nprocs, 
-                    zgrid_file=integral_file)
+                    trop_eqlat=trop_eqlat, zgrid_file=integral_file)
     else:
         print('Not making priors')
 
@@ -798,8 +824,9 @@ def print_config_help():
 key = value
 
 where key is one of {keys}. 
-All keys are required; order does not matter. 
+These keys are required; order does not matter. 
 The value expected for each key is:""".format(keys=', '.join(_req_info_keys))
+
     epilogue = """The keys {paths} are file paths. 
 These may be given as absolute paths, or as relative paths. 
 If relative, they will be taken as relative to the 
@@ -807,6 +834,10 @@ location of the info file.""".format(paths=', '.join(_req_info_ispath))
 
     print(prologue + '\n')
     for key, value in _req_info_help.items():
+        print('* {}: {}'.format(key, value))
+
+    print('\nThere are additional optional keys:\n')
+    for key, value in _opt_info_help.items():
         print('* {}: {}'.format(key, value))
 
     print('\n' + epilogue)
