@@ -447,7 +447,10 @@ def hg_commit_info(hg_dir=None):
         # to cwd in check_output
         hg_dir = '.'
     # Get the last commit (-l 1) in the current branch (-f)
-    summary = subprocess.check_output(['hg', 'log', '-f', '-l', '1'], cwd=hg_dir).splitlines()
+    try:
+        summary = subprocess.check_output(['hg', 'log', '-f', '-l', '1'], cwd=hg_dir).splitlines()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return 'unknown', 'unknown', 'unknown'
     log_dict = dict()
     # Since subprocess returns a bytes object (at least on Linux) rather than an encoded string object, all the strings
     # below must be bytes, not unicode strings
@@ -484,9 +487,12 @@ def hg_is_commit_clean(hg_dir=None, ignore_untracked=True, ignore_files=tuple())
     :return: ``True`` if the directory is clean, ``False`` otherwise.
     :rtype: bool
     """
-    hg_dir = _hg_dir_helper(hg_dir)
-    hg_root = subprocess.check_output(['hg', 'root'], cwd=hg_dir).strip()
-    summary = subprocess.check_output(['hg', 'status'], cwd=hg_dir).splitlines()
+    try:
+        hg_dir = _hg_dir_helper(hg_dir)
+        hg_root = subprocess.check_output(['hg', 'root'], cwd=hg_dir).strip()
+        summary = subprocess.check_output(['hg', 'status'], cwd=hg_dir).splitlines()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
 
     def in_ignore(f):
         f = os.path.join(hg_root, f)

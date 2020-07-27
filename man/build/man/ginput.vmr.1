@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "GINPUT.VMR" "1" "Jul 01, 2020" "" "ginput"
+.TH "GINPUT.VMR" "1" "Jul 07, 2020" "" "ginput"
 .SH NAME
 ginput.vmr \- Ginput: vmr file documentation
 .
@@ -102,9 +102,13 @@ The longitude of the site in degrees east (i.e. 90 W would be 270 or \-90).  As 
 if you do not specify \fB\-\-site\fP\&.
 .TP
 \fB\-r, \-\-mod\-root\-dir\fP
-The root directory to look for .mod files. This directory is assumed to be organized in \fI$MOD_ROOT_DIR/product/site/vertical\fP
-with .mod files for "site" in that \fIvertical\fP subdirectory. Currently, "product" is always "fpit" since standard
-TCCON processing expects FPIT files. "site" is defined by the \fB\-\-site\fP argument, which is "xx" by default.
+The root directory to look for .mod files. This directory is assumed to be organized in \fI$MOD_ROOT_DIR/<product>/<site>/vertical\fP
+with .mod files for "site" in that \fIvertical\fP subdirectory. Currently, "product" is defined by the \fB\-\-product\fP
+argument, default is "fpit". "site" is defined by the \fB\-\-site\fP argument, which is "xx" by default.
+.TP
+\fB\-\-product\fP
+Can be "fpit" (default) or "fp". This affects which product subdirectory ginput looks for .mod files from within
+the mod root directory and which subdirectory it saves .vmr files to when \fB\-\-flat\-outdir\fP is not present.
 .TP
 \fB\-b, \-\-std\-vmr\-file\fP
 The path to the climatological .vmr file that comes with GGG; in GGG2020, this is the \fIsummer_35N.vmr\fP file in
@@ -122,7 +126,7 @@ if you do not have a GGGPATH environmental variable defined. If you do and do no
 .TP
 \fB\-f, \-\-flat\-outdir\fP
 By default, the save directory given is treated as the root save directory, and .vmrs will be saved in
-subdirectories \fIsite/vmrs\-vertical\fP, similar to .mod files. Giving the \fB\-\-flat\-outdir\fP flag means that the
+subdirectories \fI<product>/<site>/vmrs\-vertical\fP, similar to .mod files. Giving the \fB\-\-flat\-outdir\fP flag means that the
 \&.vmrs are saved directly in the given save dir.
 .TP
 \fB\-i, \-\-integral\-file\fP
@@ -192,10 +196,17 @@ defined and that the climatological .vmr file is in the right place and the .mod
 .fi
 .UNINDENT
 .UNINDENT
+.sp
+Same as last except the .mod files are all directly in \fI$GGGPATH/models/gnd\fP:
 .INDENT 0.0
-.TP
-.B Same as last except the .mod files are all directly in \fI$GGGPATH/models/gnd\fP::
+.INDENT 3.5
+.sp
+.nf
+.ft C
 \&./run_ginput.py vmr \-i $GGGPATH/levels/ap_51_level_0_to_70km.gnd pa.grl $GGGPATH/models/gnd
+.ft P
+.fi
+.UNINDENT
 .UNINDENT
 .SH NOTES
 .sp
