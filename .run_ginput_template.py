@@ -11,9 +11,12 @@ def parse_args():
     subparsers = parser.add_subparsers(help='The following subcommands execute different parts of ginput')
 
     oco_parser = subparsers.add_parser('oco', help='Generate .h5 file for input into the OCO algorithm')
-    aci.parse_args(oco_parser, oco_or_gosat='oco')
+    aci.parse_args(oco_parser, instrument='oco')
     gosat_parser = subparsers.add_parser('acos', help='Generate .h5 file for input into the GOSAT algorithm')
-    aci.parse_args(gosat_parser, oco_or_gosat='gosat')
+    aci.parse_args(gosat_parser, instrument='gosat')
+    geocarb_parser = subparsers.add_parser('geocarb', help='Generate .h5 file for input into the GeoCarb algorithm')
+    aci.parse_args(gosat_parser, instrument='geocarb')
+    
 
     mm_parser = subparsers.add_parser('mod', help='Generate .mod (model) files for GGG')
     mod_maker.parse_args(mm_parser)

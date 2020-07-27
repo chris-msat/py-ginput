@@ -1142,7 +1142,7 @@ def _construct_mod_dict(acos_data_dict, i_sounding, i_foot):
     return mod_dict
 
 
-def parse_args(parser=None, oco_or_gosat=None):
+def parse_args(parser=None, instrument=None):
     def comma_list(argin):
         return tuple([a.strip() for a in argin.split(',')])
 
@@ -1205,7 +1205,7 @@ def parse_args(parser=None, oco_or_gosat=None):
         return vars(parser.parse_args())
     else:
         # if not main, no need to return, modified in-place. Will be called by exterior command line interface function.
-        parser.set_defaults(instrument=oco_or_gosat)
+        parser.set_defaults(instrument=instrument)
         parser.set_defaults(driver_fxn=cl_driver)
 
 
