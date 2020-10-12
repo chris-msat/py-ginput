@@ -298,7 +298,7 @@ site_dict = {
             (datetime(2002, 4, 1), (datetime(2010, 4, 8))): {'lat': 50.91, 'lon': 11.57, 'alt': 211.6}
         }
     },
-    'ha': {
+    'hw': {
         'name': 'Harwell',
         'loc': 'UK',
         'time_spans': {
@@ -328,6 +328,13 @@ site_dict = {
             (datetime(1995, 1, 1), now): {'lat': 47.4211, 'lon': 10.9858, 'alt': 34.5}
         }
     },
+    'ni': {
+        'name': 'Nicosia',
+        'loc': 'Cyprus',
+        'time_spans': {
+            (datetime(2019,8,1), now): {'lat': 35.141, 'lon': 33.381, 'alt': 185}
+        }
+    }
 }
 
 
