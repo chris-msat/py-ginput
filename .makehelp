@@ -31,7 +31,7 @@ make install: install the ginput Python package and its dependencies.
 make test:
     Carries out full set of tests on ginput. Requires GEOS-FPIT data from
     2018-01-01 to be placed in ./ginput/testing/test_input_data/geosfp-it/Nv
-    (met and chem on eta level files) and ./ginput/test_input_data/geosfp-it/Nx
+    (met and chem on eta level files) and ./ginput/testing/test_input_data/geosfp-it/Nx
     (2D data).
 
 make quicktest:
