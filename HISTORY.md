@@ -1,5 +1,19 @@
 # Ginput Version History
 
+## v1.0.10
+
+.run_ginput_template.py fixed - was incorrectly passing gosat parser
+inplace of the geocarb parser.
+
+## v1.0.9
+
+Update TCCON site definitions: Harwell abbreviation changed to "hw" and
+Nicosia added.
+
+## v1.0.8
+
+Added geocarb option to the satellite interface.
+
 ## v1.0.7
 
 This version should introduce no scientific changes. It adds some functionality
