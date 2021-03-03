@@ -15,7 +15,7 @@ def parse_args():
     gosat_parser = subparsers.add_parser('acos', help='Generate .h5 file for input into the GOSAT algorithm')
     aci.parse_args(gosat_parser, instrument='gosat')
     geocarb_parser = subparsers.add_parser('geocarb', help='Generate .h5 file for input into the GeoCarb algorithm')
-    aci.parse_args(gosat_parser, instrument='geocarb')
+    aci.parse_args(geocarb_parser, instrument='geocarb')
     
 
     mm_parser = subparsers.add_parser('mod', help='Generate .mod (model) files for GGG')
