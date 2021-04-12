@@ -742,9 +742,9 @@ def calculate_area(lat, lon, lat_res=None, lon_res=None, muted=False):
             area[j, i] = np.deg2rad(lon_res)*np.abs(np.sin(Slat)-np.sin(Nlat))
 
     if abs(np.sum(area) - 4*np.pi) > 0.0001: # ensure proper normalization so the total area of Earth is 4*pi
-        if not muted:
-            print('Total earth area is {:g} not 4pi (difference of {:g}), normalizing to 4pi.'
-                  .format(np.sum(area), np.sum(area) - 4*np.pi))
+        #if not muted:
+        #    print('Total earth area is {:g} not 4pi (difference of {:g}), normalizing to 4pi.'
+        #          .format(np.sum(area), np.sum(area) - 4*np.pi))
         area *= 4*np.pi/np.sum(area)
 
     return area
