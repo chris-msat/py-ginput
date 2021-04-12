@@ -1276,6 +1276,7 @@ def equivalent_latitude_functions_from_native_geos_files(geos_nv_files, geos_dat
     :rtype: dict
     """
     func_dict = dict()
+    start = time.time()
     for idx, (geos_file, date) in enumerate(zip(geos_nv_files, geos_dates)):
         with netCDF4.Dataset(geos_file, 'r') as dataset:
             logger.info('Calculating equivalent latitudes for {}/{} GEOS files'.format(idx+1, len(geos_nv_files)))
@@ -1294,6 +1295,7 @@ def equivalent_latitude_functions_from_native_geos_files(geos_nv_files, geos_dat
         # The native 72-level geos files are ordered space-to-surface. The equivalent latitude calculation *may* be okay
         # with that, but I felt it was safer to just go ahead and flip them.
         func_dict[date] = mod_utils.calculate_eq_lat(np.flip(EPV, axis=0), np.flip(PT, axis=0), area)
+    print("It took {:.1f} minutes to generate equivalent latitude functions for {} GEOS files".format((time.time()-start)/60.0,len(geos_nv_files)))
 
     return func_dict
 
@@ -1994,7 +1996,7 @@ def mod_maker_new(start_date=None, end_date=None, func_dict=None, GEOS_path=None
         if not muted:
             print('\ndate {:4d} / {} DONE in {:.0f} seconds'.format(date_ID+1,len(select_dates),time.time()-start_it))
     if not muted:
-        print('ALL DONE in {:.1f} minutes'.format((time.time()-start)/60.0))
+        print('It took {:.1f} minutes to generate .mod files for {} dates'.format((time.time()-start)/60.0,len(select_dates)))
 
     return mod_dicts
 
@@ -2216,6 +2218,11 @@ def mod_maker(site_abbrv=None,start_date=None,end_date=None,mode=None,locations=
 
 
 def runlog_driver(runlog, site_abbrv=None, first_date='2000-01-01', **kwargs):
+    total_geos_files = 0
+    for drange, abbrv, lon, lat, alt in run_utils.iter_runlog_args(runlog, first_date=first_date, site_abbrv=site_abbrv):
+        total_geos_files += (drange[1]-drange[0])/timedelta(hours=3)
+    print("Equivalent latitude functions will be calculated for a total of {} GEOS files".format(int(total_geos_files)))
+
     for drange, abbrv, lon, lat, alt in run_utils.iter_runlog_args(runlog, first_date=first_date, site_abbrv=site_abbrv):
         driver(date_range=drange, alt=alt, lon=lon, lat=lat, site_abbrv=abbrv, **kwargs)
 
