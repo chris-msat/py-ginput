@@ -3104,7 +3104,7 @@ def _add_common_cl_args(parser):
                                                                     'altitude grid to place the priors on.')
     parser.add_argument('-f', '--flat-outdir', action='store_true',
                         help='Write the .vmr files directly to the specified output directory, rather than organizing '
-                             'by site, similarly to .mod files')
+                             'by product/site/vertical or slant.')
 
 
 def parse_args(parser=None):

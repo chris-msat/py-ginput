@@ -381,6 +381,7 @@ def write_mod(mod_path, version, site_lat, data=0, surf_data=0, func=None, muted
                 if not muted:
                     print('Replacing too large H2O at {:.2f} hPa; H2O_WMF={:.3e}; {:.3e}; RH={:.3f}'.format(data['lev'][k],h2o_wmf,svp/data['T'][k],data['RH'][k],1.0))
                 data['RH'][k] = 1.0
+                # JLL 2021-02-06 - is this wrong? Shouldn't it be divided by 'lev' (i.e. pressure)?
                 h2o_wmf = svp*data['RH'][k]/data['T'][k]
                 data['H2O_DMF'][k] = h2o_wmf/(1-h2o_wmf)
 
@@ -1028,13 +1029,16 @@ def _add_common_args(parser):
                              '.mod files are to be used to generate GGG2019+ .vmr files.')
     parser.add_argument('-q', '--quiet', dest='muted', action='store_true', help='Suppress log output to command line.')
     parser.add_argument('--slant', action='store_true', help='Generate slant .mod files, in addition to vertical .mod '
-                                                             'files.')
+                                                             'files. Not compatible with --flat-outdir.')
     parser.add_argument('--mode', choices=_old_modmaker_modes + _new_modmaker_modes, default=_default_mode,
                         help='If one of {old} is chosen, mod_maker uses the old code with time interpolation. If one '
                              'of {new} is chosen, it uses the new code that generates 8x mod files per day. {fixedp} '
                              'expect fixed pressure level GEOS files; {eta} expects native 72 level GEOS files.'
                         .format(old=', '.join(_old_modmaker_modes), new=', '.join(_new_modmaker_modes),
                                 fixedp=english_join('or', _new_fixedp_modes), eta=english_join('or', _new_native_modes)))
+    parser.add_argument('-f', '--flat-outdir', action='store_true',
+                        help='Write the .mod files directly to the specified output directory, rather than organizing '
+                             'by product/site/vertical or slant.')
 
 
 def parse_args(parser=None):
@@ -1624,7 +1628,7 @@ def extrapolate_to_surface(var_to_interp, INTERP_DATA, SLANT_DATA=None):
 
 def mod_maker_new(start_date=None, end_date=None, func_dict=None, GEOS_path=None, chem_path=None, locations=site_dict,
                   slant=False, muted=False, lat=None, lon=None, alt=None, site_abbrv=None, save_path=None, product='fpit',
-                  keep_latlon_prec=False, save_in_utc=True, native_files=False, chem_variables=tuple(), **kwargs):
+                  keep_latlon_prec=False, save_in_utc=True, native_files=False, chem_variables=tuple(), flat_outdir=False, **kwargs):
     """
     This code only works with GEOS-5 FP-IT data.
     It generates MOD files for all sites between start_date and end_date on GEOS-5 times (every 3 hours)
@@ -1659,14 +1663,22 @@ def mod_maker_new(start_date=None, end_date=None, func_dict=None, GEOS_path=None
         # Assume that the chemistry files are in the same folder as the met files
         chem_path = GEOS_path
 
-    if save_path:
-        mod_path = os.path.join(save_path,product)
-    else: # if a destination path is not given, try saving MOD files in GGGPATH/models/gnd/fpit
+    if save_path is None:
         GGGPATH = os.environ['GGGPATH']
         if GGGPATH is None:
             raise RuntimeError('No custom save_path provided, and the GGGPATH environmental variable is not set. '
                                'One of these must be provided.')
-        mod_path = os.path.join(GGGPATH,'models','gnd',product)
+        save_path = os.path.join(GGGPATH,'models','gnd')
+        
+    if flat_outdir and slant:
+        # Currently the vertical and slant files get the same names, so if we're not allowed to save into separate
+        # subdirectories, they will overwrite each other
+        raise NotImplementedError('Cannot request slant path files when .mod files be saved directly to `save_dir` (`flat_outdir=True`)')
+    elif flat_outdir:
+        mod_path = save_path
+    else:
+        mod_path = os.path.join(save_path,product)
+    
     if not os.path.exists(mod_path):
         if not muted:
             print('Creating',mod_path)
@@ -1951,11 +1963,13 @@ def mod_maker_new(start_date=None, end_date=None, func_dict=None, GEOS_path=None
             utc_offset = timedelta(hours=site_dict[site]['lon_180']/15.0) if not save_in_utc else timedelta(hours=0)
             local_date = UTC_date + utc_offset
 
-            vertical_mod_path =  os.path.join(mod_path,site,'vertical')
+            vertical_mod_path = mod_path if flat_outdir else os.path.join(mod_path,site,'vertical')
             if not os.path.exists(vertical_mod_path):
                 os.makedirs(vertical_mod_path)
 
             if slant:
+                # We already check at the beginning of this function that flat_outdir = False if slant = True
+                # so we don't need to handle the flat_outdir = True case here.
                 slant_mod_path =  os.path.join(mod_path,site,'slant')
                 if not os.path.exists(slant_mod_path):
                     os.makedirs(slant_mod_path)
@@ -2228,7 +2242,7 @@ def runlog_driver(runlog, site_abbrv=None, first_date='2000-01-01', **kwargs):
 
 
 def driver(date_range, met_path, chem_path=None, save_path=None, keep_latlon_prec=False, save_in_utc=True, muted=False,
-           slant=False, alt=None, lon=None, lat=None, site_abbrv=None, mode=_default_mode, include_chm=True, **kwargs):
+           slant=False, alt=None, lon=None, lat=None, site_abbrv=None, mode=_default_mode, include_chm=True, flat_outdir=False, **kwargs):
     """
     Function that when called executes the full mod maker process as if called from the command line
 
@@ -2313,6 +2327,10 @@ def driver(date_range, met_path, chem_path=None, save_path=None, keep_latlon_pre
      thos files are located.
     :type include_chm: bool
 
+    :param flat_outdir: set to ``True`` to save .mod files directly into `save_path` rather than organizing into 
+     subdirectories by product, site, and vertical/slant.
+    :type flat_outdir: bool
+
     :param kwargs: unused, swallows extra keyword arguments
 
     :return: nothing, writes .mod files to the output directory.
@@ -2346,7 +2364,7 @@ def driver(date_range, met_path, chem_path=None, save_path=None, keep_latlon_pre
             mod_maker_new(start_date=start_date, end_date=end_date, func_dict=func_dict, GEOS_path=met_path,
                           chem_path=chem_path, chem_variables=chem_vars, slant=slant, locations=site_dict, muted=muted,
                           lat=this_lat, lon=this_lon, alt=this_alt, site_abbrv=this_abbrv, save_path=save_path, product=product,
-                          keep_latlon_prec=keep_latlon_prec, save_in_utc=save_in_utc, native_files=native_files)
+                          keep_latlon_prec=keep_latlon_prec, save_in_utc=save_in_utc, native_files=native_files, flat_outdir=flat_outdir)
     else:
         raise ValueError('mode "{}" is not one of the allowed values: {}'.format(
             mode, ', '.join(_old_modmaker_modes + _new_modmaker_modes)

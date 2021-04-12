@@ -1,5 +1,12 @@
 # Ginput Version History
 
+## v1.0.11 (WIP)
+
+Two small quality-of-life improvements to `mod_maker`:
+
+1. Some of the messages printed updated to be clear they are not time predictions
+2. --flat-outdir option added
+
 ## v1.0.10
 
 .run_ginput_template.py fixed - was incorrectly passing gosat parser
