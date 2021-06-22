@@ -381,8 +381,7 @@ def write_mod(mod_path, version, site_lat, data=0, surf_data=0, func=None, muted
                 if not muted:
                     print('Replacing too large H2O at {:.2f} hPa; H2O_WMF={:.3e}; {:.3e}; RH={:.3f}'.format(data['lev'][k],h2o_wmf,svp/data['T'][k],data['RH'][k],1.0))
                 data['RH'][k] = 1.0
-                # JLL 2021-02-06 - is this wrong? Shouldn't it be divided by 'lev' (i.e. pressure)?
-                h2o_wmf = svp*data['RH'][k]/data['T'][k]
+                h2o_wmf = svp*data['RH'][k]/data['lev'][k]
                 data['H2O_DMF'][k] = h2o_wmf/(1-h2o_wmf)
 
             for key in prof_var_order:
