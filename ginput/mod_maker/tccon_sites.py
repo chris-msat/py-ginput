@@ -334,6 +334,13 @@ site_dict = {
         'time_spans': {
             (datetime(2019,8,1), now): {'lat': 35.141, 'lon': 33.381, 'alt': 185}
         }
+    },
+    'xh': {
+        'name': 'Xianghe',
+        'loc': 'China',
+        'time_spans': {
+            (datetime(2018,1,1), now): {'lat': 39.75, 'lon': 116.96, 'alt': 50}
+        }
     }
 }
 
