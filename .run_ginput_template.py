@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import argparse
 
-from ginput.priors import acos_interface as aci, tccon_priors, map_maker
+from ginput.priors import acos_interface as aci, tccon_priors, map_maker, mlo_smo_prep
 from ginput.mod_maker import mod_maker
 from ginput.download import get_GEOS5
 
@@ -16,6 +16,9 @@ def parse_args():
     aci.parse_args(gosat_parser, instrument='gosat')
     geocarb_parser = subparsers.add_parser('geocarb', help='Generate .h5 file for input into the GeoCarb algorithm')
     aci.parse_args(geocarb_parser, instrument='geocarb')
+
+    noaa_parser = subparsers.add_parser('update_hourly', help='Update monthly input CO2 files with new NOAA hourly data')
+    mlo_smo_prep.parse_args(noaa_parser)
     
 
     mm_parser = subparsers.add_parser('mod', help='Generate .mod (model) files for GGG')

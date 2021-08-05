@@ -1,3 +1,5 @@
+from abc import ABC, abstractmethod, abstractclassmethod
+from argparse import ArgumentParser
 from enum import Enum
 from dateutil.relativedelta import relativedelta
 import numpy as np
@@ -24,6 +26,11 @@ class MloBackgroundMode(Enum):
 
 class InsituProcessingError(Exception):
     pass
+
+
+class RunSettings:
+    def __init__(self, save_missing_geos_to=None, **kwargs):
+        self.save_missing_geos_to = save_missing_geos_to
 
     
 MLO_UTC_OFFSET = pd.Timedelta(hours=-10)
@@ -66,9 +73,9 @@ def read_hourly_insitu(hourly_file):
     return df
 
 
-def standardize_rapid_df(df, year_col=None, month_col=None, day_col=None, hour_col=None, minute_col=None, 
+def standardize_rapid_df(df, site_col=None, year_col=None, month_col=None, day_col=None, hour_col=None, minute_col=None, 
                          value_col=None, unc_col=None, flag_col=None, time_prefix=''):
-    
+    site_col = _find_column(df, 'site', site_col)
     year_col = _find_column(df, f'{time_prefix}year', year_col)
     month_col = _find_column(df, f'{time_prefix}month', month_col)
     day_col = _find_column(df, f'{time_prefix}day', day_col)
@@ -83,8 +90,8 @@ def standardize_rapid_df(df, year_col=None, month_col=None, day_col=None, hour_c
         minute_col = 'minute'
     # xx = df[flag_col] == '...'
     # df = df.loc[xx, [year_col, month_col, day_col, hour_col, minute_col, value_col, unc_col, flag_col]].copy()
-    df = df.loc[:, [year_col, month_col, day_col, hour_col, minute_col, value_col, unc_col, flag_col]].copy()
-    df.rename(columns={year_col: 'year', month_col: 'month', day_col: 'day', hour_col: 'hour', minute_col: 'minute', value_col: 'value', unc_col: 'uncertainty', flag_col: 'flag'}, inplace=True)
+    df = df.loc[:, [site_col, year_col, month_col, day_col, hour_col, minute_col, value_col, unc_col, flag_col]].copy()
+    df.rename(columns={site_col: 'site', year_col: 'year', month_col: 'month', day_col: 'day', hour_col: 'hour', minute_col: 'minute', value_col: 'value', unc_col: 'uncertainty', flag_col: 'flag'}, inplace=True)
     df.index = _dtindex_from_columns(df)
     # assume large negative values are fills
     # df.loc[df['value'] < -90, 'value'] = np.nan
@@ -92,8 +99,13 @@ def standardize_rapid_df(df, year_col=None, month_col=None, day_col=None, hour_c
     return df
 
 
-def filter_rapid_df(df, ):
-    xx_flag = df['flag'] == '...'
+def filter_rapid_df(df):
+    # Only check the first two columns of the flag, as the third one is "extra information"
+    # and will be set to "P" for preliminary data. Since we're always working with preliminary
+    # data, need to ignore that. If there's other flags there, for now I'm going to ignore them
+    # and assume that they do not impact the data significantly given the other selection both
+    # NOAA and this code does.
+    xx_flag = df['flag'].apply(lambda x: x[:2] == '..')
 
     n_points = df.shape[0]
     n_flagged_out = np.sum(~xx_flag)
@@ -220,7 +232,7 @@ def _mlo_background_time_prelim(mlo_df: pd.DataFrame):
     return mlo_df.loc[xx,:]
 
 
-def compute_wind_for_times(wind_file: str, times: pd.DatetimeIndex, wind_alt: int = 10) -> pd.DataFrame:
+def compute_wind_for_times(wind_file: str, times: pd.DatetimeIndex, wind_alt: int = 10, run_settings: RunSettings = RunSettings()) -> pd.DataFrame:
     """Compute winds for specific times from a file already interpolated to a specific lat/lon
     
     Parameters
@@ -257,7 +269,7 @@ def compute_wind_for_times(wind_file: str, times: pd.DatetimeIndex, wind_alt: in
     18 meters were suitable.
     """
     wind_dataset = get_smo_winds_from_file(wind_file, wind_alt=wind_alt)
-    _check_geos_times(times, wind_dataset)
+    _check_geos_times(times, wind_dataset, run_settings=run_settings)
     
     u = wind_dataset['u'][:]
     v = wind_dataset['u'][:]
@@ -295,7 +307,7 @@ def compute_wind_for_times(wind_file: str, times: pd.DatetimeIndex, wind_alt: in
     return pd.DataFrame({'velocity': velocity, 'direction': direction, 'u': u, 'v': v}, index=times)
 
 
-def _check_geos_times(data_times, geos_dataset):
+def _check_geos_times(data_times, geos_dataset, run_settings: RunSettings = RunSettings()):
     data_times = pd.DatetimeIndex(data_times)
     data_start = data_times.min().floor('D')
     data_end = data_times.max().ceil('D')
@@ -303,13 +315,17 @@ def _check_geos_times(data_times, geos_dataset):
     expected_times = set(pd.date_range(data_start, data_end, freq='3H'))
     missing_times = expected_times.difference(geos_times)
     n_missing = len(missing_times)
+    if run_settings.save_missing_geos_to:
+        with open(run_settings.save_missing_geos_to, 'w') as f:
+            for mtime in missing_times:
+                f.write('{}\n'.format(mtime))
     if len(missing_times) > 0:
         raise InsituProcessingError('Missing data from {n} GEOS times between {start} and {end} (inclusive).'.format(n=n_missing, start=data_start, end=data_end))
 
 
 
-def merge_insitu_with_wind(insitu_df, wind_file, wind_alt=10):
-    wind_df = compute_wind_for_times(wind_file, times=insitu_df.index, wind_alt=wind_alt)
+def merge_insitu_with_wind(insitu_df, wind_file, wind_alt=10, run_settings: RunSettings = RunSettings()):
+    wind_df = compute_wind_for_times(wind_file, times=insitu_df.index, wind_alt=wind_alt, run_settings=run_settings)
     return insitu_df.merge(wind_df, left_index=True, right_index=True)
 
 
@@ -406,14 +422,7 @@ def convert_noaa_monthly_insitu(monthly_insitu_file, out_file):
 
 def get_smo_winds_from_file(winds_file: str, wind_alt: int = 10) -> xr.Dataset:
     if winds_file.endswith('.nc'):
-        with xr.open_dataset(winds_file) as ds:
-            u_var = 'U{}M'.format(wind_alt)
-            v_var = 'V{}M'.format(wind_alt)
-    
-            u = ds[u_var][:]
-            v = ds[v_var][:]
-
-            return xr.Dataset({'u': u, 'v': v}, coords={'lon': ds.lon, 'lat': ds.lat})
+        raise NotImplementedError('Reading from a pre-interpolated GEOS summary is not supported')
     else:
         return _resample_winds_from_geos_file_list(winds_file, wind_alt=wind_alt)
 
@@ -445,75 +454,11 @@ def _resample_winds_from_geos_file_list(winds_file, wind_alt=10, lon=SMO_LON, la
             geos_data['u'][ifile] = ds[u_var].interp(lon=lon, lat=lat).item()
             geos_data['v'][ifile] = ds[v_var].interp(lon=lon, lat=lat).item()
 
-    logger.info('  * Done with {n} of {n} files'.format(n=nfiles))
+    logger.info('Done with {n} of {n} GEOS files'.format(n=nfiles))
 
     geos_times = geos_data.pop('times')
     geos_data = {k: xr.DataArray(v, coords=[geos_times], dims=['time']) for k, v in geos_data.items()}
     return xr.Dataset(geos_data, coords={'lon': lon, 'lat': lat})
-
-
-def create_interpolated_geos_surf_file(geos_list_file, save_file, lon=SMO_LON, lat=SMO_LAT, previous_interp_file=None, clobber=False):
-    if not clobber and os.path.exists(save_file):
-        raise InsituProcessingError('Cannot save to "{}", already exists'.format(save_file))
-
-    with open(geos_list_file) as f:
-        geos_files = f.read().splitlines()
-        ds = _interp_geos_surface_to_lat_lon(geos_files, lon=lon, lat=lat, previous_file=previous_interp_file)
-        ds.to_netcdf(save_file)
-    
-
-
-def _interp_geos_surface_to_lat_lon(geos_files, lon, lat, variables='all', previous_file=None):
-    # Open one file to get the variables or check that all variables
-    # requested are available
-    variables = _get_variable_list(geos_files[0], variables)
-    n = len(geos_files)
-    data = {v: np.full(n, np.nan) for v in variables}
-    times = np.zeros(n, dtype=_get_geos_time_dtype(geos_files[0]))
-    
-    nfiles = len(geos_files)
-    logger.info('Interpolating data from {} surface geos files to lon={}, lat={}'.format(nfiles, lon, lat))
-    for i, f in enumerate(geos_files):
-        if i % 100 == 0 and i > 0:
-            logger.info('  * Done with {i} of {n} files'.format(i=i, n=nfiles))
-        with xr.open_dataset(f) as ds: 
-            values = ds.interp(lon=lon, lat=lat)
-            times[i] = values.time.item()
-            for v in variables:
-                data[v][i] = values[v].item()
-    logger.info('  * Done with {n} of {n} files'.format(n=nfiles))
-    
-    
-    # Convert to dataarrays to track coordinates
-    with xr.open_dataset(geos_files[0]) as ds: 
-        data = {k: xr.DataArray(v, coords=[times], dims=['time'], attrs=ds[k].attrs) for k, v in data.items()}
-
-    new_dataset = xr.Dataset(data, coords={'lon': lon, 'lat': lat})
-
-    if previous_file is not None:
-        with xr.open_dataset(previous_file) as old_dataset:
-            if new_dataset.time.min() <= old_dataset.time.max():
-                raise InsituProcessingError('Cannot concatenate new GEOS files with previous summary file "{}" as the times overlap'.format(previous_file))
-
-            return xr.concat([old_dataset, new_dataset], dim='time')
-    else:
-        return new_dataset
-    
-
-def _get_geos_time_dtype(fname):
-    with xr.open_dataset(fname) as ds: 
-        return ds.time.dtype
-    
-def _get_variable_list(example_file, variables):
-    with xr.open_dataset(example_file) as ds: 
-        available_vars = set(ds.data_vars.keys())
-        if variables == 'all':
-            return tuple(sorted(available_vars))
-        elif all(v in available_vars for v in variables):
-            return tuple(variables)
-        else:
-            missing = ', '.join(set(variables).difference(available_vars))
-            raise ValueError('Some requested variables were not available in file {}: {}'.format(example_file, missing))
 
 
 # -------------- #
@@ -521,7 +466,19 @@ def _get_variable_list(example_file, variables):
 # -------------- #
 
 
-class InsituMonthlyAverager:
+class InsituMonthlyAverager(ABC):
+    @abstractclassmethod
+    def class_site():
+        pass
+
+    @abstractmethod
+    def select_background():
+        pass
+
+    def __init__(self, clobber: bool = False, run_settings: RunSettings = RunSettings()) -> None:
+        self._clobber = clobber
+        self._run_settings = run_settings
+
     @staticmethod
     def get_new_hourly_data(monthly_df, hourly_df):
         first_month = monthly_df.index.max() + relativedelta(months=1)
@@ -551,14 +508,14 @@ class InsituMonthlyAverager:
             
         tt = (hourly_df.index >= first_month) & (hourly_df.index < curr_month)
         hourly_df = filter_rapid_df(hourly_df.loc[tt, :].copy())
-        return hourly_df
+        return hourly_df, pd.date_range(first_month, curr_month, freq='MS', closed='left')
 
 
     @classmethod
     def write_monthly_insitu(cls, output_file, monthly_df, previous_monthly_file, new_hourly_file, new_months, clobber=False):
         if monthly_df.shape[1] != 4:
-            raise TypeError('The monthly dataframe must have 4 columns (site, year, month, value)')
-        if clobber and os.path.exists(output_file):
+            raise InsituProcessingError('The monthly dataframe must have 4 columns (site, year, month, value)')
+        if not clobber and os.path.exists(output_file):
             raise IOError('Output file already exists')
 
         new_header = cls._make_monthly_header(previous_monthly_file=previous_monthly_file, new_hourly_file=new_hourly_file, new_months=new_months)
@@ -609,88 +566,224 @@ class InsituMonthlyAverager:
         header[0] = '# header_lines: {}'.format(len(header))
         return header
 
+    @staticmethod
+    def check_output_clobber(output_file, previous_file, clobber):
+        if os.path.exists(output_file) and not clobber:
+            raise InsituProcessingError('Cannot overwrite existing output file without `clobber=True` (the --clobber flag on the command line)')
+        elif os.path.exists(output_file) and os.path.samefile(output_file, previous_file):
+            raise InsituProcessingError('Cannot directly overwrite the previous monthly output file, even with clobber set')
 
-class MloMonthlyAverager(InsituMonthlyAverager):
-    def __init__(self, background_method=MloBackgroundMode.TIME_AND_PRELIM, clobber=False):
-        self._background_method = background_method
-        self._clobber = clobber
+    @staticmethod
+    def check_site(monthly_df, hourly_df, site):
+        def inner_check(df):
+            df_sites = df['site'].unique()
+            ok = df_sites.size == 1 and df_sites[0] == site
+            return ok, df_sites
+
+        monthly_ok, monthly_sites = inner_check(monthly_df)
+        if not monthly_ok:
+            raise InsituProcessingError('Previous monthly file does not contain only {site} data. Sites present: {all_sites}'.format(site=site, all_sites=', '.join(monthly_sites)))
         
-    def convert(self, mlo_hourly_file, previous_monthly_file, output_monthly_file):
-        logger.info('Reading previous MLO monthly file ({})'.format(previous_monthly_file))
+        hourly_ok, hourly_sites = inner_check(hourly_df)
+        if not hourly_ok:
+            raise InsituProcessingError('Given hourly file does not contain only {site} data. Sites present: {all_sites}'.format(site=site, all_sites=', '.join(hourly_sites)))
+
+
+    def convert(self, noaa_hourly_file, previous_monthly_file, output_monthly_file):
+        self.check_output_clobber(output_monthly_file, previous_monthly_file, clobber=self._clobber)
+
+        logger.info('Reading previous {} monthly file ({})'.format(self.class_site(), previous_monthly_file))
         monthly_df = read_surface_file(previous_monthly_file)
 
-        logger.info('Reading hourly MLO in situ file ({})'.format(mlo_hourly_file))
-        mlo_df = read_hourly_insitu(mlo_hourly_file)
-        mlo_df = self.get_new_hourly_data(monthly_df=monthly_df, hourly_df=mlo_df)
+        logger.info('Reading hourly {} in situ file ({})'.format(self.class_site(), noaa_hourly_file))
+        hourly_df = read_hourly_insitu(noaa_hourly_file)
+        self.check_site(monthly_df, hourly_df, self.class_site())
+        hourly_df, new_month_index = self.get_new_hourly_data(monthly_df=monthly_df, hourly_df=hourly_df)
         
         logger.info('Doing background selection')
-        mlo_df = mlo_background_selection(mlo_df, method=self._background_method)
+        hourly_df = self.select_background(hourly_df)
         
         logger.info('Doing monthly averaging')
-        mlo_df = monthly_avg_rapid_data(mlo_df)
+        new_monthly_df = monthly_avg_rapid_data(hourly_df)
+        new_monthly_df = new_monthly_df.reindex(new_month_index)  # ensure that all months are represented, even if some have no data
+        new_monthly_df['year'] = new_month_index.year
+        new_monthly_df['month'] = new_month_index.month
         
         logger.info('Writing to {}'.format(output_monthly_file))
-        mlo_df['site'] = 'MLO'
-        mlo_df = mlo_df[['site', 'year', 'month', 'value']]
+        new_monthly_df['site'] = self.class_site()
+        new_monthly_df = new_monthly_df[['site', 'year', 'month', 'value']]
 
-        first_new_date = mlo_df.index.min()
-        last_new_date = mlo_df.index.max()
-        mlo_df = pd.concat([monthly_df, mlo_df], axis=0)
+        first_new_date = new_monthly_df.index.min()
+        last_new_date = new_monthly_df.index.max()
+        new_monthly_df = pd.concat([monthly_df, new_monthly_df], axis=0)
         
         if output_monthly_file is None:
-            return mlo_df
+            return new_monthly_df
         else:
             self.write_monthly_insitu(
                 output_file=output_monthly_file, 
-                monthly_df=mlo_df, 
+                monthly_df=new_monthly_df, 
                 previous_monthly_file=previous_monthly_file,
-                new_hourly_file=mlo_hourly_file, 
+                new_hourly_file=noaa_hourly_file, 
                 new_months=(first_new_date, last_new_date),
                 clobber=self._clobber
             )
             logger.info('New monthly averages written to {}'.format(output_monthly_file))
+
+
+class MloMonthlyAverager(InsituMonthlyAverager):
+    def __init__(self, background_method=MloBackgroundMode.TIME_AND_PRELIM, clobber=False, run_settings: RunSettings = RunSettings()):
+        self._background_method = background_method
+        # self._clobber = clobber
+        super().__init__(clobber=clobber, run_settings=run_settings)
+
+    @classmethod
+    def class_site(cls):
+        return 'MLO'
+
+    def select_background(self, hourly_df):
+        return mlo_background_selection(hourly_df, method=self._background_method)
+        
+    # def convert(self, mlo_hourly_file, previous_monthly_file, output_monthly_file):
+    #     self.check_output_clobber(output_monthly_file, previous_monthly_file, clobber=self._clobber)
+
+    #     logger.info('Reading previous MLO monthly file ({})'.format(previous_monthly_file))
+    #     monthly_df = read_surface_file(previous_monthly_file)
+
+    #     logger.info('Reading hourly MLO in situ file ({})'.format(mlo_hourly_file))
+    #     mlo_df = read_hourly_insitu(mlo_hourly_file)
+    #     self.check_site(monthly_df, mlo_df, 'MLO')
+    #     mlo_df = self.get_new_hourly_data(monthly_df=monthly_df, hourly_df=mlo_df)
+        
+    #     logger.info('Doing background selection')
+    #     mlo_df, new_month_index = mlo_background_selection(mlo_df, method=self._background_method)
+        
+    #     logger.info('Doing monthly averaging')
+    #     mlo_df = monthly_avg_rapid_data(mlo_df)
+    #     mlo_df = mlo_df.reindex(new_month_index)  # ensure that all months are represented, even if some have no data
+        
+    #     logger.info('Writing to {}'.format(output_monthly_file))
+    #     mlo_df['site'] = 'MLO'
+    #     mlo_df = mlo_df[['site', 'year', 'month', 'value']]
+
+    #     first_new_date = mlo_df.index.min()
+    #     last_new_date = mlo_df.index.max()
+    #     mlo_df = pd.concat([monthly_df, mlo_df], axis=0)
+        
+    #     if output_monthly_file is None:
+    #         return mlo_df
+    #     else:
+    #         self.write_monthly_insitu(
+    #             output_file=output_monthly_file, 
+    #             monthly_df=mlo_df, 
+    #             previous_monthly_file=previous_monthly_file,
+    #             new_hourly_file=mlo_hourly_file, 
+    #             new_months=(first_new_date, last_new_date),
+    #             clobber=self._clobber
+    #         )
+    #         logger.info('New monthly averages written to {}'.format(output_monthly_file))
         
         
 class SmoMonthlyAverager(InsituMonthlyAverager):
-    def __init__(self, smo_wind_file, clobber=False):
+    def __init__(self, smo_wind_file: str, clobber: bool = False, run_settings: RunSettings = RunSettings()):
         self._smo_wind_file = smo_wind_file
-        self._clobber = clobber
-        
-    def convert(self, smo_hourly_file, previous_monthly_file, output_monthly_file):
-        logger.info('Reading previous SMO monthly file ({})'.format(previous_monthly_file))
-        monthly_df = read_surface_file(previous_monthly_file)
+        # self._clobber = clobber
+        super().__init__(clobber=clobber, run_settings=run_settings)
 
-        logger.info('Reading hourly SMO in situ file ({})'.format(smo_hourly_file))
-        smo_df = read_hourly_insitu(smo_hourly_file)
-        smo_df = self.get_new_hourly_data(monthly_df=monthly_df, hourly_df=smo_df)
+    @classmethod
+    def class_site(cls):
+        return 'SMO'
+
+    def select_background(self, hourly_df):
+        hourly_df = noaa_prelim_flagging(hourly_df, hr_std_dev_max=0.3)
+        hourly_df = merge_insitu_with_wind(hourly_df, self._smo_wind_file, run_settings=self._run_settings)
+        hourly_df = smo_wind_filter(hourly_df)
+        return hourly_df
         
-        logger.info('Doing background selection')
-        smo_df = noaa_prelim_flagging(smo_df, hr_std_dev_max=0.3)
-        smo_df = merge_insitu_with_wind(smo_df, self._smo_wind_file)
-        smo_df = smo_wind_filter(smo_df)
+    # def convert(self, smo_hourly_file, previous_monthly_file, output_monthly_file):
+    #     self.check_output_clobber(output_monthly_file, previous_monthly_file, clobber=self._clobber)
+
+    #     logger.info('Reading previous SMO monthly file ({})'.format(previous_monthly_file))
+    #     monthly_df = read_surface_file(previous_monthly_file)
+
+    #     logger.info('Reading hourly SMO in situ file ({})'.format(smo_hourly_file))
+    #     smo_df = read_hourly_insitu(smo_hourly_file)
+    #     self.check_site(monthly_df, smo_df, 'SMO')
+    #     smo_df, new_month_index = self.get_new_hourly_data(monthly_df=monthly_df, hourly_df=smo_df)
         
-        logger.info('Doing monthly averaging')
-        smo_df = monthly_avg_rapid_data(smo_df)
+    #     logger.info('Doing background selection')
+    #     smo_df = noaa_prelim_flagging(smo_df, hr_std_dev_max=0.3)
+    #     smo_df = merge_insitu_with_wind(smo_df, self._smo_wind_file)
+    #     smo_df = smo_wind_filter(smo_df)  # ensure that all months are represented, even if some have no data
         
-        logger.info('Writing to {}'.format(output_monthly_file))
-        smo_df['site'] = 'SMO'
-        smo_df = smo_df[['site', 'year', 'month', 'value']]
+    #     logger.info('Doing monthly averaging')
+    #     smo_df = monthly_avg_rapid_data(smo_df)
+    #     smo_df = smo_df.reindex(new_month_index)  
         
-        first_new_date = smo_df.index.min()
-        last_new_date = smo_df.index.max()
-        smo_df = pd.concat([monthly_df, smo_df], axis=0)
+    #     logger.info('Writing to {}'.format(output_monthly_file))
+    #     smo_df['site'] = 'SMO'
+    #     smo_df = smo_df[['site', 'year', 'month', 'value']]
         
-        if output_monthly_file is None:
-            return smo_df
-        else:
-            self.write_monthly_insitu(
-                output_file=output_monthly_file, 
-                monthly_df=smo_df, 
-                previous_monthly_file=previous_monthly_file,
-                new_hourly_file=smo_hourly_file, 
-                new_months=(first_new_date, last_new_date),
-                clobber=self._clobber
-            )
-            logger.info('New monthly averages written to {}'.format(output_monthly_file))
+    #     first_new_date = smo_df.index.min()
+    #     last_new_date = smo_df.index.max()
+    #     smo_df = pd.concat([monthly_df, smo_df], axis=0)
+        
+    #     if output_monthly_file is None:
+    #         return smo_df
+    #     else:
+    #         self.write_monthly_insitu(
+    #             output_file=output_monthly_file, 
+    #             monthly_df=smo_df, 
+    #             previous_monthly_file=previous_monthly_file,
+    #             new_hourly_file=smo_hourly_file, 
+    #             new_months=(first_new_date, last_new_date),
+    #             clobber=self._clobber
+    #         )
+    #         logger.info('New monthly averages written to {}'.format(output_monthly_file))
 
 
+def driver(site, previous_monthly_file, hourly_insitu_file, output_monthly_file, geos_2d_file_list=None, clobber=False, save_missing_geos_to=None):
+    run_settings = RunSettings(save_missing_geos_to=save_missing_geos_to)
+
+    conversion_classes = {
+        'mlo': MloMonthlyAverager(clobber=clobber, run_settings=run_settings), 
+        'smo': SmoMonthlyAverager(smo_wind_file=geos_2d_file_list, clobber=clobber, run_settings=run_settings)
+    }
+    if site not in conversion_classes:
+        raise InsituProcessingError('Unknown site: {}. Options are: {}'.format(site, ', '.join(conversion_classes.keys())))
+    elif site == 'smo' and geos_2d_file_list is None:
+        raise InsituProcessingError('When processing with site == "smo", geos_2d_file_list must be provided')
+
+    converter = conversion_classes[site]
+    converter.convert(hourly_insitu_file, previous_monthly_file, output_monthly_file)
+
+
+
+def parse_args(p: ArgumentParser):
+    if p is None:
+        p = ArgumentParser()
+        is_main = True
+    else:
+        is_main = False
+
+    p.description = 'Update monthly average surface CO2 files from new MLO/SMO hourly data'
+    p.add_argument('site', choices=('mlo', 'smo'), help='Which site is being processed.')
+    p.add_argument('previous_monthly_file', help='Path to the previous monthly average CO2 file for this site.')
+    p.add_argument('hourly_insitu_file', help='Path to the latest file of hourly in situ analyzer data from NOAA')
+    p.add_argument('output_monthly_file', help='Path to write the updated monthly averages to. Cannot be the same as the '
+                                               'previous_monthly_file')
+    p.add_argument('-g', '--geos-2d-file-list', help='Path to a file containing a list of paths to GEOS surface files, '
+                                                     'one per line. This is required when processing SMO data. There must '
+                                                     'be one GEOS file for every 3 hours in every month being added. That is, '
+                                                     'if adding data for Aug 2021, all 737 GEOS 2D files from 2021-08-01 00:00 '
+                                                     'to 2021-09-01 00:00 (inclusive) must be listed.')
+    p.add_argument('--save-missing-geos-to', default=None,
+                   help='Write times for missing GEOS surface files to a file. If none are missing, the file will be empty.')
+    p.add_argument('-c', '--clobber', action='store_true', help='By default, the output file will not overwrite any existing '
+                                                                'file at that path. Setting this flag will cause it to overwrite '
+                                                                'existing files UNLESS that file is the previous monthly file. '
+                                                                'Overwriting that file is always forbidden.')
+
+    p.set_defaults(driver_fxn=driver)
+    if is_main:
+        return vars(p.parse_args())
