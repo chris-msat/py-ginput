@@ -327,14 +327,14 @@ class MloSmoTraceGasRecord(TraceGasRecord):
         # extrapolated.
         return self._last_record_date(self.conc_seasonal)
 
-    def __init__(self, first_date=None, last_date=None, lag=None, mlo_file=None, smo_file=None,
-                 strat_age_scale=1.0, recalculate_strat_lut=None, save_strat=None):
-        has_custom_dates = first_date is not None or last_date is not None
+    def __init__(self, first_date=None, last_date=None, truncate_date=None, lag=None, mlo_file=None, smo_file=None,
+                 strat_age_scale=1.0, recalculate_strat_lut=None, save_strat=None, recalc_if_custom_dates=True):
+        has_custom_dates = first_date is not None or last_date is not None or truncate_date is not None
         first_date, last_date, self.sbc_lag, mlo_file, smo_file = self._init_helper(first_date, last_date, lag, mlo_file, smo_file)
         self.mlo_file = mlo_file
         self.smo_file = smo_file
         self.strat_age_scale = strat_age_scale
-        self.conc_seasonal = self.get_mlo_smo_mean(mlo_file, smo_file, first_date, last_date)
+        self.conc_seasonal = self.get_mlo_smo_mean(mlo_file, smo_file, first_date, last_date, truncate_date)
 
         # Deseasonalize the data by taking a 12 month rolling average. Only do that on the dmf_mean field,
         # leave the latency
@@ -349,6 +349,9 @@ class MloSmoTraceGasRecord(TraceGasRecord):
             # File does not exist, would have to recalculate no matter what the request was.
             recalculate_strat_lut = True
             logger.important('Strat LUT file ({}) does not exist, must recompute'.format(self.get_strat_lut_file()))
+        elif has_custom_dates and recalc_if_custom_dates:
+            recalculate_strat_lut = True
+            logger.important('Custom start/end/truncate dates specified, recalculating strat LUT')
         elif recalculate_strat_lut is None:
             # Determine if the dependencies have changed, if so, recalculate.
             recalculate_strat_lut = self._have_strat_array_deps_changed()
@@ -560,7 +563,7 @@ class MloSmoTraceGasRecord(TraceGasRecord):
         return df
 
     @classmethod
-    def get_mlo_smo_mean(cls, mlo_file, smo_file, first_date, last_date):
+    def get_mlo_smo_mean(cls, mlo_file, smo_file, first_date, last_date, truncate_date):
         """
         Generate the Mauna Loa/Samoa mean trace gas record from the files stored in this repository.
 
@@ -584,6 +587,9 @@ class MloSmoTraceGasRecord(TraceGasRecord):
          15th, then July 1st would be used instead.
         :type last_date: datetime-like
 
+        :param truncate_date: the last date to use *real data* for in the record, after this date the MLO/SMO time
+         series will be extrapolated. Note that this is inclusive.
+
         :return: the data frame containing the mean trace gas concentration ('dmf_mean'), a flag ('interp_flag') set
          to 1 for any months that had to be interpolated and 2 for months that had to be extrapolated, and the latency
          ('latency') in years that a concentration had to be extrapolated. Index by timestamp.
@@ -596,6 +602,11 @@ class MloSmoTraceGasRecord(TraceGasRecord):
         df_smo = cls.read_insitu_gas(smo_file)
         df_combined = pd.concat([df_mlo, df_smo], axis=1).dropna()
         df_combined = pd.DataFrame(df_combined[cls._gas_name].mean(axis=1), columns=['dmf_mean'])
+
+        if truncate_date is not None:
+            if df_combined.index.max() < truncate_date:
+                raise GasRecordDateError('MLO/SMO records do not extend up to the truncation date, {}'.format(truncate_date))
+            df_combined = df_combined.loc[df_combined.index <= truncate_date]
 
         # Fill in any missing months. Add a flag so we can keep track of whether they've had to be interpolated or
         # not. Having a consistent monthly frequency makes the rest of the code easier - we can just always assume that
@@ -801,7 +812,8 @@ class MloSmoTraceGasRecord(TraceGasRecord):
         last_safe_jdate = (last_date + cls._max_safe_extrap_forward).to_julian_date()
         if np.any(extrap_julian_dates > last_safe_jdate):
             logger.warning('Trying to extrapolate to a date more than {time} after the end of the MLO/SMO record '
-                           '({end}). Likely okay, but consider updating the MLO/SMO {gas} record if possible.'
+                           '({end}). Likely okay, but consider updating the MLO/SMO {gas} record if possible. '
+                           '(This warning can be disregarded if the MLO/SMO record was truncated.)'
                            .format(time=mod_utils.relativedelta2string(cls._max_safe_extrap_forward), end=last_date,
                                    gas=cls._gas_name))
 
@@ -1497,7 +1509,7 @@ class HFTropicsRecord(MloSmoTraceGasRecord):
     ch4_hf_slopes_file = os.path.join(_data_dir, 'ch4_hf_slopes.nc')
 
     @classmethod
-    def get_mlo_smo_mean(cls, mlo_file, smo_file, first_date, last_date):
+    def get_mlo_smo_mean(cls, mlo_file, smo_file, first_date, last_date, truncate_date):
         """
         Generate the Mauna Loa/Samoa mean trace gas record.
 
@@ -1519,6 +1531,8 @@ class HFTropicsRecord(MloSmoTraceGasRecord):
          the actual latest date used would be the next first of the month to follow this date. I.e. if this is June
          15th, then July 1st would be used instead.
         :type last_date: datetime-like
+
+        :param truncate_date: unused, since HF has no MLO/SMO data.
 
         :return: the data frame containing the mean trace gas concentration ('dmf_mean'), a flag ('interp_flag') set
          to 1 for any months that had to be interpolated and 2 for months that had to be extrapolated, and the latency
@@ -1633,7 +1647,7 @@ class HFTropicsRecord(MloSmoTraceGasRecord):
         #   Saad et al. 2014, AMT, doi: 10.5194/amt-7-2907-2014
         #   Washenfelder et al. 2003, GRL, doi: 10.1029/2003GL017969
         if ch4_record is None:
-            ch4_record = CH4TropicsRecord(first_date=out_dates.min() + cls._age_spectra_length, last_date=out_dates.max())
+            ch4_record = CH4TropicsRecord(first_date=out_dates.min() + cls._age_spectra_length, last_date=out_dates.max(), recalc_if_custom_dates=False)
 
         bin_names, ch4_hf_slopes, ch4_hf_fit_params = cls._load_ch4_hf_slopes()
 

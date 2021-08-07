@@ -1,6 +1,20 @@
 # Ginput Version History
 
-## v1.0.11 (WIP)
+## v1.1.0
+
+**acos_interface version 1.2**
+
+Primary change: the MLO/SMO data ingested can optionally be truncated at a certain
+date and forced to be extrapolated after that. The `acos_interface` now uses that
+option by default to truncate the data to two months before the latest date in the
+input met file.
+
+In conjunction, a new module (and subcommand) has been added to prepare NOAA hourly
+in situ CO2 data from MLO & SMO into monthly average files. This can permit more
+frequent update of the MLO/SMO data to avoid falling out of sync with the real CO2
+trend.
+
+Fixed incorrect calculation of oversaturated H2O VMRs in `mod_maker`.
 
 Two small quality-of-life improvements to `mod_maker`:
 

@@ -12,6 +12,7 @@ from __future__ import print_function, division
 
 import argparse
 import datetime as dt
+from dateutil.relativedelta import relativedelta
 import h5py
 from itertools import repeat, product
 import logging
@@ -27,7 +28,7 @@ from ..mod_maker import mod_maker
 from ..priors import tccon_priors
 from .. import __version__
 
-__acos_int_version__ = '1.1'
+__acos_int_version__ = '1.2'
 
 _acos_tstring_fmt = '%Y-%m-%dT%H:%M:%S.%fZ'
 # Values lower than this will be replaced with NaNs when reading in the resampled met data
@@ -124,7 +125,7 @@ _def_errh = ErrorHandler(suppress_error=False)
 
 
 def acos_interface_main(instrument, met_resampled_file, geos_files, output_file, mlo_co2_file=None, smo_co2_file=None,
-                        use_trop_eqlat=False, cache_strat_lut=False, nprocs=0, error_handler=_def_errh):
+                        use_trop_eqlat=False, cache_strat_lut=False, truncate_mlo_smo_by=0, nprocs=0, error_handler=_def_errh):
     """
     The primary interface to create CO2 priors for the ACOS algorithm
 
@@ -153,6 +154,11 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
      always be calculated from the MLO/SMO record and the age spectra and will never be saved.
     :type cache_strat_lut: bool
 
+    :param truncate_mlo_smo_by: optional, number of months before the latest date in the ``met_resampled_file`` to
+     truncate the MLO/SMO data to (and extrapolate beyond). The default is 2, e.g. if the latest date in the met file
+     is in Aug 2021, the MLO/SMO data will only be used up to June 2021 - but they *must* include data up to that
+     month, or an error is raised.
+
     :return: None, writes results to the HDF5 ``output_file``.
     """
 
@@ -173,14 +179,17 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
         met_data, prior_flags = read_oco_resampled_met(met_resampled_file, error_handler=error_handler)
         gases = ('co2',)
         prior_group = 'priors'
+        record_group = 'mlo_smo_record'
     elif instrument == 'gosat':
         met_data, prior_flags = read_gosat_resampled_met(met_resampled_file, error_handler=error_handler)
         gases = ('co2',)
         prior_group = 'priors'
+        record_group = 'mlo_smo_record'
     elif instrument == 'geocarb':
         met_data, prior_flags = read_geocarb_resampled_met(met_resampled_file, error_handler=error_handler)
         gases = ('co', 'ch4', 'co2')
         prior_group = '{}_priors'
+        record_group = 'mlo_smo_{}_record'
         check_mlo_smo_gas_file(mlo_co2_file, 'MLO')
         check_mlo_smo_gas_file(smo_co2_file, 'SMO')
     else:
@@ -199,6 +208,23 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
 
     prior_flags = prior_flags.reshape(-1)
 
+    # Before we spent a lot of time calculating the equivalent latitude, let's determine
+    # the truncation date
+    if truncate_mlo_smo_by is not None:
+        max_date = np.max(met_data['dates'])
+        check_date = dt.datetime.today() + dt.timedelta(days=30)
+        if max_date > check_date:
+            # If there's some crazy fill value in the met file that causes the maximum date
+            # to be in the future, that would cause our truncation to misbehave. 
+            # So far, I've only seen fill values be ~1993, so this shouldn't happen.
+            raise ValueError('A date in met file "{}" is more than 30 days in the future from today. This breaks the MLO/SMO data truncation!'.format(met_resampled_file))
+
+        truncate_mlo_smo_date = mod_utils.start_of_month(max_date) - relativedelta(months=truncate_mlo_smo_by)
+        truncate_mlo_smo_date = dt.datetime(truncate_mlo_smo_date.year, truncate_mlo_smo_date.month, truncate_mlo_smo_date.day)
+    else:
+        truncate_mlo_smo_date = None
+        
+
     eqlat_array = compute_sounding_equivalent_latitudes(sounding_pv=pv_array, sounding_theta=theta_array,
                                                         sounding_datenums=datenum_array, sounding_qflags=qflag_array,
                                                         geos_files=geos_files, nprocs=nprocs, prior_flags=prior_flags,
@@ -209,7 +235,11 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
 
     # Create the priors
     if cache_strat_lut:
-        regen_lut = None
+        # If we're not truncating the MLO/SMO data, we can rely on the internal code
+        # to determine if we need to regenerate the LUT. If we are truncating the
+        # data, then we should force it to regenerate (even though the internal logic
+        # should handle that).
+        regen_lut = None if truncate_mlo_smo_by is None else True
         save_lut = True
     else:
         regen_lut = True
@@ -224,7 +254,7 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
         gas_mlo_file = fmt_gas_file(mlo_co2_file, gas)
         gas_smo_file = fmt_gas_file(smo_co2_file, gas)
 
-        record_kws = dict(mlo_file=gas_mlo_file, smo_file=gas_smo_file, recalculate_strat_lut=regen_lut, save_strat=save_lut)
+        record_kws = dict(mlo_file=gas_mlo_file, smo_file=gas_smo_file, recalculate_strat_lut=regen_lut, save_strat=save_lut, truncate_date=truncate_mlo_smo_date)
         if gas == 'co':
             record_kws = dict()
         record_class = tccon_priors.gas_records[gas]
@@ -283,6 +313,9 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
 
         # Write the priors to the file requested.
         write_prior_h5(output_file, profiles, units, prior_group=prior_group.format(gas))
+        if gas != 'co':
+            insitu_record_to_h5_group(output_file, gas_record.conc_seasonal, gas, record_group=record_group.format(gas))
+        
 
 
 def _prior_helper(i_sounding, i_foot, qflag, mod_data, gas_record, var_mapping, var_type_info, use_trop_eqlat=False,
@@ -940,6 +973,7 @@ def write_prior_h5(output_file, profile_variables, units, prior_group='priors'):
 
     :return: none, writes to file on disk.
     """
+
     with h5py.File(output_file, 'a') as h5obj:
         h5grp = h5obj.create_group(prior_group)
         for var_name, var_data in profile_variables.items():
@@ -958,6 +992,31 @@ def write_prior_h5(output_file, profile_variables, units, prior_group='priors'):
             var_unit = units[var_name]
             dset = h5grp.create_dataset(var_name, data=filled_data, fillvalue=this_fill_val)
             dset.attrs['units'] = var_unit
+
+
+def insitu_record_to_h5_group(output_file, df, gas, record_group='mlo_smo_record'):
+    def get_unit(col):
+        if col == 'dmf_mean':
+            return {'co2': 'ppm', 'ch4': 'ppb', 'co': 'ppb'}[gas.lower()]
+        if col == 'interp_flag':
+            return '0 = not interpolated/extrapolated; 1 = interpolated; 2 = extrapolated.'
+        if col == 'latency':
+            return 'years'
+        
+        return ''
+
+    with h5py.File(output_file, 'a') as h5obj:
+        grp = h5obj.create_group(record_group)
+        dates = _convert_to_acos_time_strings(df.index.to_pydatetime())
+        dset = grp.create_dataset('date', data=dates, fillvalue=_string_fill)
+        dset.attrs['description'] = 'Date associated with the MLO/SMO record'
+        
+        
+        for colname, column in df.iteritems():
+            column = column.to_numpy().copy()
+            column[np.isnan(column)] = _fill_val
+            dset = grp.create_dataset(colname, data=column, fillvalue=_fill_val)
+            dset.attrs['units'] = get_unit(colname)
 
 
 def _convert_acos_time_strings(time_string_array, format='datetime', flag_array=None, error_handler=_def_errh):
@@ -1182,6 +1241,12 @@ def parse_args(parser=None, instrument=None):
                                                              'given, it overrides --record-dir for the Mauna Loa file.')
     parser.add_argument('--smo-co2-file', default=None, help='Path to the American Samoa CO2 monthly flask file. Same '
                                                              'behavior and requirements as the Mauna Loa file.')
+    parser.add_argument('--truncate-mlo-smo-by', default=0, type=int, 
+                        help='Number of months to truncate the MLO and SMO data by relative to the latest month '
+                             'in the met_resampled_file. Note that the MLO and SMO data must have data up to and '
+                             'including the month that they will be truncated at. Default is %(default)d.')
+    parser.add_argument('--no-truncate-mlo-smo', action='store_const', const=None, dest='truncate_mlo_smo_by',
+                        help='Override the default to truncate MLO/SMO data.')
     parser.add_argument('-v', '--verbose', dest='log_level', default=0, action='count',
                         help='Increase logging verbosity')
     parser.add_argument('-q', '--quiet', dest='log_level', const=-1, action='store_const',
