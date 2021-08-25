@@ -1,5 +1,16 @@
 # Ginput Version History
 
+## v1.1.1
+
+Two small bugfixes to the `update_mlo_smo` program:
+
+1. When updating the monthly CO2 files, fill values at the end of the NOAA hourly
+   file (present if they produce a file for the rest of the current year) are ignored
+   so that NaNs are not introduced at the end of the monthly file.
+2. Added a flag when updating the SMO monthly file to allow missing GEOS surface files.
+   By default, an error is raised if any are missing; this flag allows that check to 
+   be bypassed.
+
 ## v1.1.0
 
 **acos_interface version 1.2**
