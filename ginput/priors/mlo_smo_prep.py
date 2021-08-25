@@ -7,6 +7,7 @@ import os
 import pandas as pd
 import xarray as xr
 
+from ..common_utils import mod_utils
 from ..common_utils.ioutils import make_dependent_file_hash
 from ..common_utils.ggg_logging import logger, setup_logger
 
@@ -672,6 +673,19 @@ class InsituMonthlyAverager(ABC):
             
         tt = (hourly_df.index >= first_month) & (hourly_df.index < curr_month)
         hourly_df = _filter_rapid_df(hourly_df.loc[tt, :].copy())
+        
+        # The NOAA file may include times out through the end of the year, with fill values
+        # for dates that haven't been measured before. _filter_rapid_df will remove those
+        # values, so we can limit the end date based on the hourly dataframe.
+        #
+        # I'm adding one hour to the last time in the hourly_df to handle the case where that
+        # last time is the very last hour in the month (e.g. 23:00 Dec 31st). In that example, the
+        # curr_month would be January and we should keep that because Dec is complete.
+        last_hourly_time = pd.Timestamp(mod_utils.start_of_month(hourly_df.index.max() + relativedelta(hours=1)))
+        if last_hourly_time < curr_month:
+            curr_month = last_hourly_time
+            tt = hourly_df.index < curr_month
+            hourly_df = hourly_df.loc[tt,:].copy()
         return hourly_df, pd.date_range(first_month, curr_month, freq='MS', closed='left')
 
 
