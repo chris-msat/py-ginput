@@ -318,7 +318,7 @@ def _mlo_background_time_prelim(mlo_df: pd.DataFrame) -> pd.DataFrame:
     return mlo_df.loc[xx,:]
 
 
-def compute_wind_for_times(wind_file: str, times: pd.DatetimeIndex, wind_alt: int = 10, run_settings: RunSettings = RunSettings()) -> pd.DataFrame:
+def compute_wind_for_times(wind_file: str, times: pd.DatetimeIndex, wind_alt: int = 10, run_settings: RunSettings = RunSettings(), allow_missing_geos_files: bool = False) -> pd.DataFrame:
     """Compute winds for specific times from a file already interpolated to a specific lat/lon
     
     Parameters
@@ -355,7 +355,7 @@ def compute_wind_for_times(wind_file: str, times: pd.DatetimeIndex, wind_alt: in
     18 meters were suitable.
     """
     wind_dataset = get_smo_winds_from_file(wind_file, wind_alt=wind_alt)
-    _check_geos_times(times, wind_dataset, run_settings=run_settings)
+    _check_geos_times(times, wind_dataset, run_settings=run_settings, allow_missing_geos_files=allow_missing_geos_files)
     
     u = wind_dataset['u'][:]
     v = wind_dataset['u'][:]
@@ -393,7 +393,7 @@ def compute_wind_for_times(wind_file: str, times: pd.DatetimeIndex, wind_alt: in
     return pd.DataFrame({'velocity': velocity, 'direction': direction, 'u': u, 'v': v}, index=times)
 
 
-def _check_geos_times(data_times, geos_dataset, run_settings: RunSettings = RunSettings()):
+def _check_geos_times(data_times, geos_dataset, run_settings: RunSettings = RunSettings(), allow_missing_geos_files: bool = False):
     """Check that all 3-hourly GEOS times needed for `data_times` are included in `geos_dataset`.
     """
     data_times = pd.DatetimeIndex(data_times)
@@ -408,11 +408,15 @@ def _check_geos_times(data_times, geos_dataset, run_settings: RunSettings = RunS
             for mtime in sorted(missing_times):
                 f.write('{}\n'.format(mtime))
     if len(missing_times) > 0:
-        raise InsituProcessingError('Missing data from {n} GEOS times between {start} and {end} (inclusive).'.format(n=n_missing, start=data_start, end=data_end))
+        msg = 'Missing data from {n} GEOS times between {start} and {end} (inclusive).'.format(n=n_missing, start=data_start, end=data_end)
+        if allow_missing_geos_files:
+            logger.warning(msg)
+        else:
+            raise InsituProcessingError(msg)
 
 
 
-def merge_insitu_with_wind(insitu_df: pd.DataFrame, wind_file: str, wind_alt: float = 10, run_settings: RunSettings = RunSettings()) -> pd.DataFrame:
+def merge_insitu_with_wind(insitu_df: pd.DataFrame, wind_file: str, wind_alt: float = 10, run_settings: RunSettings = RunSettings(), allow_missing_geos_files: bool = False) -> pd.DataFrame:
     """Merge an in situ hourly dataframe with SMO data with GEOS surface winds
 
     Parameters
@@ -439,7 +443,7 @@ def merge_insitu_with_wind(insitu_df: pd.DataFrame, wind_file: str, wind_alt: fl
         The `insitu_df` with columns for wind speed, velocity, u-component, and v-component
         added, each interpolated to the times in the `insitu_df`.
     """
-    wind_df = compute_wind_for_times(wind_file, times=insitu_df.index, wind_alt=wind_alt, run_settings=run_settings)
+    wind_df = compute_wind_for_times(wind_file, times=insitu_df.index, wind_alt=wind_alt, run_settings=run_settings, allow_missing_geos_files=allow_missing_geos_files)
     return insitu_df.merge(wind_df, left_index=True, right_index=True)
 
 
@@ -649,7 +653,6 @@ class InsituMonthlyAverager(ABC):
         first_month = monthly_df.index.max() + relativedelta(months=1)
         curr_month = first_month
         hourly_df_timestamps = set(hourly_df.index)
-        
         while True:
             next_month = curr_month + relativedelta(months=1)
             expected_timestamps = set(pd.date_range(curr_month, next_month, freq='H', closed='left'))
@@ -872,8 +875,9 @@ class MloMonthlyAverager(InsituMonthlyAverager):
         
         
 class SmoMonthlyAverager(InsituMonthlyAverager):
-    def __init__(self, smo_wind_file: str, clobber: bool = False, run_settings: RunSettings = RunSettings()):
+    def __init__(self, smo_wind_file: str, clobber: bool = False, run_settings: RunSettings = RunSettings(), allow_missing_geos_files: bool = False):
         self._smo_wind_file = smo_wind_file
+        self._allow_missing_geos_files = allow_missing_geos_files
         # self._clobber = clobber
         super().__init__(clobber=clobber, run_settings=run_settings)
 
@@ -883,17 +887,17 @@ class SmoMonthlyAverager(InsituMonthlyAverager):
 
     def select_background(self, hourly_df):
         hourly_df = noaa_prelim_flagging(hourly_df, hr_std_dev_max=0.3)
-        hourly_df = merge_insitu_with_wind(hourly_df, self._smo_wind_file, run_settings=self._run_settings)
+        hourly_df = merge_insitu_with_wind(hourly_df, self._smo_wind_file, run_settings=self._run_settings, allow_missing_geos_files=self._allow_missing_geos_files)
         hourly_df = smo_wind_filter(hourly_df)
         return hourly_df
 
 
-def driver(site, previous_monthly_file, hourly_insitu_file, output_monthly_file, geos_2d_file_list=None, clobber=False, save_missing_geos_to=None):
+def driver(site, previous_monthly_file, hourly_insitu_file, output_monthly_file, geos_2d_file_list=None, allow_missing_geos_files=False, clobber=False, save_missing_geos_to=None):
     run_settings = RunSettings(save_missing_geos_to=save_missing_geos_to)
 
     conversion_classes = {
         'mlo': MloMonthlyAverager(clobber=clobber, run_settings=run_settings), 
-        'smo': SmoMonthlyAverager(smo_wind_file=geos_2d_file_list, clobber=clobber, run_settings=run_settings)
+        'smo': SmoMonthlyAverager(smo_wind_file=geos_2d_file_list, clobber=clobber, run_settings=run_settings, allow_missing_geos_files=allow_missing_geos_files)
     }
     if site not in conversion_classes:
         raise InsituProcessingError('Unknown site: {}. Options are: {}'.format(site, ', '.join(conversion_classes.keys())))
@@ -925,6 +929,9 @@ def parse_args(p: ArgumentParser):
                                                      'to 2021-09-01 00:00 (inclusive) must be listed.')
     p.add_argument('--save-missing-geos-to', default=None,
                    help='Write times for missing GEOS surface files to a file. If none are missing, the file will be empty.')
+    p.add_argument('--allow-missing-geos-files', action='store_true', help='Prevent this program from erroring if GEOS files '
+                                                                           'are missing, will still issue a warning and list '
+                                                                           'the missing files if --save-missing-geos-to is given.')
     p.add_argument('-c', '--clobber', action='store_true', help='By default, the output file will not overwrite any existing '
                                                                 'file at that path. Setting this flag will cause it to overwrite '
                                                                 'existing files UNLESS that file is the previous monthly file. '
