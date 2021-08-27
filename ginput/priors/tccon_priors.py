@@ -600,12 +600,17 @@ class MloSmoTraceGasRecord(TraceGasRecord):
         """
         df_mlo = cls.read_insitu_gas(mlo_file)
         df_smo = cls.read_insitu_gas(smo_file)
-        df_combined = pd.concat([df_mlo, df_smo], axis=1).dropna()
+        df_combined = pd.concat([df_mlo, df_smo], axis=1)
+        if truncate_date is not None and df_combined.index.max() < truncate_date: 
+            # Do this before dropping NaNs, as we need to allow for the possibility that there is not NOAA
+            # data for a month at the end of the record (that is, there *should* be NOAA data, but their instrument
+            # was down or something)
+            raise GasRecordDateError('MLO/SMO records do not extend up to the truncation date, {}'.format(truncate_date))
+        df_combined = df_combined.dropna()
         df_combined = pd.DataFrame(df_combined[cls._gas_name].mean(axis=1), columns=['dmf_mean'])
 
         if truncate_date is not None:
-            if df_combined.index.max() < truncate_date:
-                raise GasRecordDateError('MLO/SMO records do not extend up to the truncation date, {}'.format(truncate_date))
+            # We already did the check that the data reaches the truncate_date above
             df_combined = df_combined.loc[df_combined.index <= truncate_date]
 
         # Fill in any missing months. Add a flag so we can keep track of whether they've had to be interpolated or

@@ -175,6 +175,11 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
         else:
             return gas_file.format(gas=this_gas)
 
+    if mlo_co2_file is not None and not os.path.exists(mlo_co2_file):
+        raise IOError('Given path for mlo_co2_file ({}) does not exist'.format(mlo_co2_file))
+    if smo_co2_file is not None and not os.path.exists(smo_co2_file):
+        raise IOError('Given path for smo_co2_file ({}) does not exist'.format(smo_co2_file))
+
     if instrument == 'oco':
         met_data, prior_flags = read_oco_resampled_met(met_resampled_file, error_handler=error_handler)
         gases = ('co2',)
