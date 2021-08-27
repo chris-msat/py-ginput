@@ -1,10 +1,12 @@
 from abc import ABC, abstractmethod, abstractclassmethod
 from argparse import ArgumentParser
 from enum import Enum
+from logging import warning
 from dateutil.relativedelta import relativedelta
 import numpy as np
 import os
 import pandas as pd
+import re
 import xarray as xr
 
 from ..common_utils import mod_utils
@@ -28,15 +30,27 @@ class MloBackgroundMode(Enum):
 class InsituProcessingError(Exception):
     pass
 
-
-class RunSettings:
-    def __init__(self, save_missing_geos_to=None, **kwargs):
-        self.save_missing_geos_to = save_missing_geos_to
-
     
 MLO_UTC_OFFSET = pd.Timedelta(hours=-10)
 SMO_LON = -170.5644
 SMO_LAT = 14.2474
+DEFAULT_LAST_MONTH = pd.Timestamp.today().replace(day=1, hour=0, minute=0, second=0, microsecond=0, nanosecond=0) - relativedelta(months=1)
+
+
+class RunSettings:
+    def __init__(self, 
+                 save_missing_geos_to=None, 
+                 last_month=DEFAULT_LAST_MONTH, 
+                 allow_missing_hourly_times=False, 
+                 skip_creation_date_check=False,
+                 limit_by_creation_date=True,
+                 **kwargs):
+        self.save_missing_geos_to = save_missing_geos_to
+        self.last_month = last_month
+        self.allow_missing_hourly_times = allow_missing_hourly_times
+        self.skip_creation_date_check = skip_creation_date_check
+        self.limit_by_creation_date = limit_by_creation_date
+
 
 
 def read_surface_file(surface_file: str, datetime_index: Optional[Tuple[str, str]]=('year', 'month')) -> pd.DataFrame:
@@ -73,7 +87,7 @@ def read_surface_file(surface_file: str, datetime_index: Optional[Tuple[str, str
     return df
 
 
-def read_hourly_insitu(hourly_file: str) -> pd.DataFrame:
+def read_hourly_insitu(hourly_file: str, limit_to_creation_time: bool = True, allow_missing_creation_time: bool = False) -> pd.DataFrame:
     """Read and standardize an hourly in situ file
 
     Parameters
@@ -90,6 +104,17 @@ def read_hourly_insitu(hourly_file: str) -> pd.DataFrame:
     """
     df = read_surface_file(hourly_file, datetime_index=None)
     df = _standardize_rapid_df(df, minute_col=False, unc_col='std_dev')
+    if limit_to_creation_time:
+        try:
+            creation_time = get_hourly_file_creation_date(hourly_file)
+        except InsituProcessingError:
+            if allow_missing_creation_time:
+                logger.warning('Could not find creation time in the hourly file, will not be able to truncate to actual data!')
+                return df
+            else:
+                raise
+        tt = df.index < creation_time
+        df = df.loc[tt, :].copy()
     return df
 
 
@@ -583,6 +608,21 @@ def _resample_winds_from_geos_file_list(winds_file, wind_alt=10, lon=SMO_LON, la
     return xr.Dataset(geos_data, coords={'lon': lon, 'lat': lat})
 
 
+def get_hourly_file_creation_date(hourly_file: str) -> pd.Timestamp:
+    creation_date = None
+    with open(hourly_file) as f:
+        for line in f:
+            m = re.match(r'#\s+description_creation-time:\s+(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', line)
+            if m is not None:
+                creation_date = pd.to_datetime(m.group(1))
+
+    if creation_date is None:
+        msg = 'Could not find "description_creation-time" in file "{}", cannot enforce that the file contains data through the last expected month'.format(hourly_file)
+        raise InsituProcessingError(msg)
+    else:
+        return creation_date
+
+
 # -------------- #
 # DRIVER CLASSES #
 # -------------- #
@@ -624,7 +664,8 @@ class InsituMonthlyAverager(ABC):
         self._run_settings = run_settings
 
     @staticmethod
-    def get_new_hourly_data(monthly_df: pd.DataFrame, hourly_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DatetimeIndex]:
+    def get_new_hourly_data(monthly_df: pd.DataFrame, hourly_df: pd.DataFrame, last_expected_month: pd.Timestamp,
+                            allow_missing_times: bool = False, creation_time: Optional[pd.Timestamp] = None) -> Tuple[pd.DataFrame, pd.DatetimeIndex]:
         """Get the subset of `hourly_df` that has new data to append to the end of `monthly_df`
 
         Parameters
@@ -635,6 +676,14 @@ class InsituMonthlyAverager(ABC):
         hourly_df
             A dataframe of new hourly data, not yet filtered for good-quality data. It must contain all hours
             for the months it is to add.
+
+        last_expected_month
+            The last month required to have data in the hourly file. Note that this data may be all fill values,
+            it only requires that this month and all months after the end of the previous monthly data be present.
+
+        allow_missing_times
+            By default, an error is raised if any of the expected data is not present in the hourly file. Setting
+            this to `True` reduces that error to a warning.
 
         Returns
         -------
@@ -647,13 +696,22 @@ class InsituMonthlyAverager(ABC):
 
         Raises
         ------
-        * :class:`InsituProcessingError` if `hourly_df` has no new data *or* does not start immediately after 
-          `monthly_df`.
+        * :class:`InsituProcessingError` if `hourly_df` does not contain the required data between the end of the
+          previous monthly data and the last expected month. If `allow_missing_times` is `True`, then this is not
+          raised and a warning is logged instead.
         """
+        if not last_expected_month.is_month_start:
+            raise ValueError('last_expected_month must be a timestamp at the start of a month')
+
+        # First verify that all expected months are complete. This assumes that the input dataframe has not
+        # been filtered and has a value for every hour. If that's not the case, `allow_missing_times` can be
+        # set to permit missing times.
         first_month = monthly_df.index.max() + relativedelta(months=1)
         curr_month = first_month
         hourly_df_timestamps = set(hourly_df.index)
-        while True:
+
+        import pdb; pdb.set_trace()
+        while curr_month <= last_expected_month:
             next_month = curr_month + relativedelta(months=1)
             expected_timestamps = set(pd.date_range(curr_month, next_month, freq='H', closed='left'))
             
@@ -662,35 +720,32 @@ class InsituMonthlyAverager(ABC):
             if intersection != expected_timestamps:
                 n_found = len(intersection)
                 n_expected = len(expected_timestamps)
-                logger.info('Found {found} of {expected} expected hourly timestamps for {month}, assuming month is incomplete'.format(
+                msg = 'Found {found} of {expected} expected hourly timestamps for {month}, month is incomplete. (Note that the hourly file truncated to the creation time, unless that attribute cannot be found.)'.format(
                     found=n_found, expected=n_expected, month=curr_month.strftime('%B %Y')
-                ))
-                
-                break
-                
-            else:
-                curr_month = next_month
-                
-        if curr_month == first_month:
-            raise InsituProcessingError('The hourly data does not include any new full months of data or does not start right after the previous monthly file.')
-            
-        tt = (hourly_df.index >= first_month) & (hourly_df.index < curr_month)
-        hourly_df = _filter_rapid_df(hourly_df.loc[tt, :].copy())
-        
-        # The NOAA file may include times out through the end of the year, with fill values
-        # for dates that haven't been measured before. _filter_rapid_df will remove those
-        # values, so we can limit the end date based on the hourly dataframe.
-        #
-        # I'm adding one hour to the last time in the hourly_df to handle the case where that
-        # last time is the very last hour in the month (e.g. 23:00 Dec 31st). In that example, the
-        # curr_month would be January and we should keep that because Dec is complete.
-        last_hourly_time = pd.Timestamp(mod_utils.start_of_month(hourly_df.index.max() + relativedelta(hours=1)))
-        if last_hourly_time < curr_month:
-            curr_month = last_hourly_time
-            tt = hourly_df.index < curr_month
-            hourly_df = hourly_df.loc[tt,:].copy()
-        return hourly_df, pd.date_range(first_month, curr_month, freq='MS', closed='left')
+                )
 
+                if allow_missing_times:
+                    logger.warning(msg)
+                else:
+                    raise InsituProcessingError(msg)
+                
+            curr_month = next_month
+
+        cutoff_date = last_expected_month + relativedelta(months=1)
+        if creation_time is not None:
+            creation_month = pd.Timestamp(creation_time.year, creation_time.month, 1)
+            cutoff_date = min(cutoff_date, creation_month)
+            
+        tt = (hourly_df.index >= first_month) & (hourly_df.index < cutoff_date)
+        hourly_df = _filter_rapid_df(hourly_df.loc[tt, :].copy())
+        return hourly_df, pd.date_range(first_month, cutoff_date, freq='MS', closed='left')
+
+    @staticmethod
+    def check_hourly_file_creation_date(hourly_file: str, last_expected_month: pd.Timestamp = DEFAULT_LAST_MONTH) -> None:
+        cutoff_date = last_expected_month + relativedelta(months=1)
+        creation_date = get_hourly_file_creation_date(hourly_file)
+        if creation_date < cutoff_date:
+            raise InsituProcessingError('Hourly file creation time ({}) is before the last cutoff time ({} = last expected date + 1 month).'.format(creation_date, cutoff_date))
 
     @classmethod
     def write_monthly_insitu(cls, output_file: str, monthly_df: pd.DataFrame, previous_monthly_file: str, new_hourly_file: str, 
@@ -820,14 +875,34 @@ class InsituMonthlyAverager(ABC):
             Writes to `output_monthly_file`
         """
         self._check_output_clobber(output_monthly_file, previous_monthly_file, clobber=self._clobber)
+        if not self._run_settings.skip_creation_date_check:
+            self.check_hourly_file_creation_date(noaa_hourly_file, self._run_settings.last_month)
 
         logger.info('Reading previous {} monthly file ({})'.format(self.class_site(), previous_monthly_file))
         monthly_df = read_surface_file(previous_monthly_file)
 
         logger.info('Reading hourly {} in situ file ({})'.format(self.class_site(), noaa_hourly_file))
-        hourly_df = read_hourly_insitu(noaa_hourly_file)
+        hourly_df = read_hourly_insitu(noaa_hourly_file, allow_missing_creation_time=self._run_settings.skip_creation_date_check)
+        if self._run_settings.limit_by_creation_date:
+            try:
+                hourly_file_creation_date = get_hourly_file_creation_date(noaa_hourly_file)
+            except InsituProcessingError as err:
+                if self._run_settings.skip_creation_date_check:
+                    logger.warning(str(err))
+                    hourly_file_creation_date = None
+                else:
+                    raise
+        else:
+            hourly_file_creation_date = None
+
         self._check_site(monthly_df, hourly_df, self.class_site())
-        hourly_df, new_month_index = self.get_new_hourly_data(monthly_df=monthly_df, hourly_df=hourly_df)
+        hourly_df, new_month_index = self.get_new_hourly_data(
+            monthly_df=monthly_df, 
+            hourly_df=hourly_df, 
+            last_expected_month=self._run_settings.last_month,
+            allow_missing_times=self._run_settings.allow_missing_hourly_times,
+            creation_time=hourly_file_creation_date
+        )
         
         logger.info('Doing background selection')
         hourly_df = self.select_background(hourly_df)
@@ -892,8 +967,16 @@ class SmoMonthlyAverager(InsituMonthlyAverager):
         return hourly_df
 
 
-def driver(site, previous_monthly_file, hourly_insitu_file, output_monthly_file, geos_2d_file_list=None, allow_missing_geos_files=False, clobber=False, save_missing_geos_to=None):
-    run_settings = RunSettings(save_missing_geos_to=save_missing_geos_to)
+def driver(site, previous_monthly_file, hourly_insitu_file, output_monthly_file, last_month=DEFAULT_LAST_MONTH, geos_2d_file_list=None, 
+           allow_missing_geos_files=False, allow_missing_hourly_times=False, skip_creation_check=False, limit_by_creation_date=True,
+           clobber=False, save_missing_geos_to=None):
+    run_settings = RunSettings(
+        save_missing_geos_to=save_missing_geos_to, 
+        last_month=last_month, 
+        allow_missing_hourly_times=allow_missing_hourly_times,
+        skip_creation_date_check=skip_creation_check,
+        limit_by_creation_date=limit_by_creation_date
+    )
 
     conversion_classes = {
         'mlo': MloMonthlyAverager(clobber=clobber, run_settings=run_settings), 
@@ -910,11 +993,23 @@ def driver(site, previous_monthly_file, hourly_insitu_file, output_monthly_file,
 
 
 def parse_args(p: ArgumentParser):
+    def month(s):
+        m = re.match(r'(\d{4})(\d{2})', s)
+        if not m:
+            raise ValueError('Bad string representation for last month: "{}". Must be in YYYY-MM format.'.format(s))
+        year = int(m.group(1))
+        mon = int(m.group(2))
+
+        return pd.Timestamp(year, mon, 1)
+
+        
     if p is None:
         p = ArgumentParser()
         is_main = True
     else:
         is_main = False
+
+    last_month_str = DEFAULT_LAST_MONTH.strftime('%Y%m')
 
     p.description = 'Update monthly average surface CO2 files from new MLO/SMO hourly data'
     p.add_argument('site', choices=('mlo', 'smo'), help='Which site is being processed.')
@@ -922,6 +1017,24 @@ def parse_args(p: ArgumentParser):
     p.add_argument('hourly_insitu_file', help='Path to the latest file of hourly in situ analyzer data from NOAA')
     p.add_argument('output_monthly_file', help='Path to write the updated monthly averages to. Cannot be the same as the '
                                                'previous_monthly_file')
+    p.add_argument('-l', '--last-month', default=last_month_str, type=month,
+                   help='The last month that should be added to the output monthly file, given in YYYYMM format. The default is %(default)s. '
+                        'The default value is based on today\'s date; it is set to last month.')
+    p.add_argument('--allow-missing-hourly-times', action='store_true',
+                   help='By default, if the input hourly file is missing any single hour between the end of the '
+                        'previous monthly file and the end of the month specified by --last-month, an error is raised. '
+                        'Setting this flag reduces that error to a warning.')
+    p.add_argument('--skip-creation-check', action='store_true',
+                   help='By default, the hourly file is searched for a line containing "description_creation-time" that '
+                        'gives the time that the hourly file was created. This is checked against the --last-month value '
+                        'to ensure that the hourly file theoretically contains data through that month. Set this flag '
+                        'to override that check, either because the required attribute is not present in the hourly file '
+                        'or to force creation of the new monthly file even if the hourly file is not new enough.')
+    p.add_argument('--no-limit-by-creation-date', dest='limit_by_creation_date', action='store_false',
+                   help='By default, data in the hourly file will only be used up to the start of the month it was created in. '
+                        'Set this flag to use all data in the hourly file, if either the creation date is not specified in the file '
+                        'or for whatever reason it is too limiting. Use this flag with caution as it can easily result in data from '
+                        'the current month that has not undergone QA/QC by NOAA being used!')
     p.add_argument('-g', '--geos-2d-file-list', help='Path to a file containing a list of paths to GEOS surface files, '
                                                      'one per line. This is required when processing SMO data. There must '
                                                      'be one GEOS file for every 3 hours in every month being added. That is, '
