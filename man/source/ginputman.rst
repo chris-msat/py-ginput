@@ -6,7 +6,7 @@ Ginput
 Synopsis
 --------
 
-run_ginput.py tccon-mod | tccon-rlmod | mod | rlmod | vmr | rlvmr | getg5 | get-rl-g5 | map | oco | acos | geocarb [ SUBCOMMAND OPTIONS ]
+run_ginput.py tccon-mod | tccon-rlmod | mod | rlmod | vmr | rlvmr | getg5 | get-rl-g5 | map | oco | acos | geocarb | update_hourly [ SUBCOMMAND OPTIONS ]
 
 
 Description
@@ -69,3 +69,4 @@ each bullet point, e.g. **man ginput.mod**. This assumes the man pages have been
     * **ginput.vmr** for subcommands **vmr** and **rlvmr** (generate .vmr files)
     * **ginput.map** for subcommand **map** (generate .map files)
     * **ginput.acos** for subcommands **acos**, **oco**, and **geocarb** (satellite prior interfaces)
+    * **ginput.upnoaa** for subcommand **update_hourly** (updating MLO/SMO monthly average files)

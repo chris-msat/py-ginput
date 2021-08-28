@@ -354,6 +354,14 @@ def compute_wind_for_times(wind_file: str, times: pd.DatetimeIndex, wind_alt: in
         Which surface wind altitude (2, 10, or 50 meters usually) to use. This will 
         look for variables named e.g. U10M and V10M in the GEOS file(s), with the 
         number changing based on the altitude.
+
+    run_settings
+        A :class:`RunSettings` instance that carries configuration.
+
+    allow_missing_geos_files
+        Set to `True` to allow this function to complete if any of the expected 
+        GEOS files were missing. By default an error is raised.
+    
         
     Returns
     -------
@@ -393,7 +401,7 @@ def compute_wind_for_times(wind_file: str, times: pd.DatetimeIndex, wind_alt: in
     #   135 -> 135 or (-1,1) -> (-1,1)
     #   180 -> 90 or (-1,0) -> (0,1)
     #   225 -> 45 or (-1,-1) -> (1,1)
-    #   270 -https://agupubs.onlinelibrary.wiley.com/doi/epdf/10.1029/JD094iD12p14817> 0 or (0,-1) -> (1,0)
+    #   270 -> 0 or (0,-1) -> (1,0)
     #   280 -> 350 
     #   305 -> 325
     #   315 -> 315 or (1,-1) -> (1,-1)

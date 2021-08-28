@@ -8,6 +8,7 @@ Synopsis
 
 run_ginput.py oco | acos | geocarb [ --use-trop-eqlat ] [ --cache-strat-lut ] [ --raise-errors ] [ -v | --verbose ] [ -q | --quiet ]
                                    [ --mlo-co2-file CO2_FILE ] [ --smo-co2-file CO2_FILE ] 
+                                   [ --truncate-mlo-smo-by NMONTHS] [--no-truncate-mlo-smo]
                                    [ -n | --nprocs NPROCS ] [ --raise-errors ]
                                    GEOS_FILES   MET_FILE   OUTPUT_FILE
 
@@ -46,12 +47,23 @@ Arguments
     of the table have changed. This can speed up the code because the calculating the CH4 lookup table especially takes significant time,
     but it requires that the code be able to write to its own installation directory, so is disabled by default.
 
-**--mlo-flask-file**, **--smo-flask-file**
+**--mlo-co2-file CO2_FILE**, **--smo-co2-file CO2_FILE**
     These arguments allow you to specify which file the Mauna Loa (mlo) and American Samoa (smo) NOAA monthly average flask data are
     read from. If not specified, the default files included with ginput are read (./ginput/data/{ML,SMO}_monthly_obs_{co2,ch4}.txt).
     Note that for OCO and GOSAT these may be specified normally, i.e. /data/priors/ml_monthly_obs_co2.txt. However, if producing
     GeoCARB priors, these paths `must` include the substring `{gas}` which will be replaced with "co2" or "ch4", depending on which
     gas's priors are being produced.
+
+**--truncate-mlo-smo-by NMONTHS**
+    To enforce consistent priors generation when using MLO/SMO input files that are updating frequently, the MLO/SMO data can be truncated
+    at a specific date, such that any future re-runs of the priors code with MLO/SMO files that have additional data still produce the same
+    priors. The default behavior is to use MLO/SMO data up to and including the month for which priors are being generated. Setting this 
+    option to a value >0 will move the last required month back in time. For example, using `--truncate-mlo-smo-by 1` when producing 
+    priors for a granule in May 2017 will require MLO/SMO data up through April 2017.
+
+**--no-truncate-mlo-smo**
+    Setting this flag disables the MLO/SMO truncation; instead all available MLO/SMO data will be used and whatever extrapolation is needed 
+    will be done. This also disables the check that MLO/SMO data includes a certain minimum date.
 
 **-n, --nprocs**
     Number of processes to use in parallel when computing the priors. The default is to run in serial. Passing a number >=1 will use

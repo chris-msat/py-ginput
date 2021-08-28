@@ -18,11 +18,11 @@
 # -- Project information -----------------------------------------------------
 
 project = 'ginput'
-copyright = '2020, Joshua Laughner, Sebastien Roche, and Matthaeus Kiel'
+copyright = '2021, Joshua Laughner, Sebastien Roche, and Matthaeus Kiel'
 author = 'Joshua Laughner, Sebastien Roche, and Matthaeus Kiel'
 
 # The full version, including alpha/beta/rc tags
-release = '1.0.0'
+release = '1.1.2'
 
 
 # -- General configuration ---------------------------------------------------
@@ -66,5 +66,6 @@ man_pages = [
     ('mapman', 'ginput.map', 'Ginput: map file documentation', [author], 1),
     ('aciman', 'ginput.acos', 'Ginput: ACOS interface documentation',
      [author], 1), 
+    ('upnoaaman', 'ginput.upnoaa', 'Ginput: Update MLO/SMO monthly files', [author], 1)
 ]
 

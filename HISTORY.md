@@ -1,5 +1,24 @@
 # Ginput Version History
 
+## v1.1.2
+
+Additional bugfixes to `update_mlo_smo` program, as well as a small fix to the main
+priors code.
+
+`update_mlo_smo`:
+
+* Now uses the dataset creation time listed in the NOAA hourly file header to 
+  determine what the last actually useful data row is. 
+* Fixed behavior that caused it to break on hourly files that do not list data
+  after the creation date.
+* Can specify what the last month that should be added to the monthly average file
+  is; by default, it is the last month (calculated from the date the program is run).
+
+Main priors code:
+
+* When checking if the MLO/SMO input files reach late enough to satisfy the truncation
+  requirement, months with NaNs in the input files now count towards this criterion.
+
 ## v1.1.1
 
 Two small bugfixes to the `update_mlo_smo` program:

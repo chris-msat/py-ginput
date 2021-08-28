@@ -1,0 +1,150 @@
+.\" Man page generated from reStructuredText.
+.
+.TH "GINPUT.UPNOAA" "1" "Aug 27, 2021" "" "ginput"
+.SH NAME
+ginput.upnoaa \- Ginput: Update MLO/SMO monthly files
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.SH SYNOPSIS
+.INDENT 0.0
+.TP
+.B run_ginput.py update_hourly [\-l MONTH | \-\-last\-month MONTH]
+[\-\-allow\-missing\-hourly\-times]
+[\-\-allow\-missing\-creation\-date]
+[\-g LIST_FILE | \-\-geos\-2d\-file\-list LIST_FILE]
+[\-\-save\-missing\-geos\-to LOG_FILE]
+[\-\-no\-limit\-by\-avail\-data]
+[\-\-allow\-missing\-geos\-files]
+[\-c | \-\-clobber]
+{mlo,smo} PREVIOUS_MONTHLY_FILE
+HOURLY_INSITU_FILE OUTPUT_MONTHLY_FILE
+.UNINDENT
+.SH DESCRIPTION
+.sp
+NOAA provides hourly averages of surface CO2 measurements from Mauna Loa and American Samoa observatories. The
+ginput code expects monthly averages, so this subprogram does filtering, background selection, and averaging
+on the hourly files and updates a preexisting monthly average file.
+.SH ARGUMENTS
+.INDENT 0.0
+.TP
+\fB{mlo,smo}\fP
+A required positional argument specifying which site (Mauna Loa = mlo, American Samoa = smo) is being processed. Note that
+if \fIsmo\fP is specified, the \fI\-\-geos\-2d\-file\-list\fP argument is required.
+.TP
+\fBPREVIOUS_MONTHLY_FILE\fP
+A required positional argument that is the path to the previous file of monthly averages for the NOAA site specified by the
+first positional argument.
+.TP
+\fBHOURLY_INSITU_FILE\fP
+A required positional argument that is the path to the NOAA hourly file containing the new data to average and append to the
+end of the monthly file specified in the second positional argument.
+.TP
+\fBOUTPUT_MONTHLY_FILE\fP
+A required positional argument that gives the path to save the updated monthly average file to. Existing files will
+not be overwritten unless the \fI\-\-clobber\fP flag is given; even with the \fI\-\-clobber\fP flag, overwriting the \fBPREVIOUS_MONTHLY_FILE\fP
+is not allowed.
+.TP
+\fB\-\-allow\-missing\-creation\-date\fP
+This program expect to find a line in the \fIHOURLY_INSITU_FILE\fP header that contains the "description_creation\-time" attribute.
+If it cannot find that, it raises an error, as that attribute is used to distinguish between data that is fill values because
+there will never be data and fill values because that data has not been measured yet. If the "description_creation\-time"
+attribute is missing from the \fIHOURLY_INSITU_FILE\fP, you can use this flag (\fI\-\-allow\-missing\-creation\-date\fP) to bypass the check
+for that attribute.
+.sp
+\fBUse this flag with caution\fP, as ignoring a missing creation date can cause NOAA data that has not undergone QA/QC by the NOAA
+CCGG group to be incorporated into the monthly averages, or allow monthly averages to be created before all the data for that
+month is available.
+.TP
+\fB\-\-allow\-missing\-geos\-files\fP
+If this flag is present, then the error raised if any required GEOS FP\-IT 2D surface file needed to update an \fIsmo\fP file is missing
+is reduced to a warning, and the program is allowed to complete.
+.sp
+Generally, if only a few GEOS files are missing, the impact should be minor. However, if a significant number (> ~5) are missing,
+the effect may be noticeable as this could result in non\-background mole fractions being included in the monthly means.
+.TP
+\fB\-\-allow\-missing\-hourly\-times\fP
+By default, this program expects that the \fIHOURLY_INSITU_FILE\fP has a row for every hour in the months being averaged, even if
+those rows contain fill values. If not, it assumes that the data for that month is not fully available yet, and raises an error.
+Setting this flag reduces that error to a warning and allows the program to proceed.
+.TP
+\fB\-c\fP, \fB\-\-clobber\fP
+By default, if \fIOUTPUT_MONTHLY_FILE\fP exists, it will not be overwritten. Setting this flag overrides that and will overwrite
+\fIOUTPUT_MONTHLY_FILE\fP except in one case: \fIOUTPUT_MONTHLY_FILE\fP may never be the same as \fIPREVIOUS_MONTHLY_FILE\fP as a safety
+measure.
+.TP
+\fB\-g LIST_FILE\fP, \fB\-\-geos\-2d\-file\-list LIST_FILE\fP
+This option takes one argument, a path to a file that specifies the location of GEOS FP\-IT 2D files, with one GEOS file per line.
+This is a required option when updating the \fIsmo\fP file, as the Samoa data needs surface winds to do background selection. The list
+of GEOS files must include all GEOS files for the month(s) being added plus the first GEOS file of the next month. For example,
+if adding June 2021 to the monthly file, then all GEOS files between 2021\-06\-01 00:00Z and 2021\-07\-01 00:00Z must be listed.
+.sp
+If one or more GEOS files are missing, an error is raised unless the \fI\-\-allow\-missing\-geos\-file\fP flag is given. A list of missing
+GEOS files can be saved to a log file with the \fI\-\-save\-missing\-geos\-to\fP option.
+.TP
+\fB\-l MONTH\fP, \fB\-\-last\-month MONTH\fP
+Specify the last month to be added to the monthly average file, in YYYYMM format. The default value is today\(aqs month minus one,
+i.e. if the code is being run on 27 Aug 2021, then the default value is 202107 (July 2021). Requesting a month later than the
+last full month of data in the hourly file (determined from the creation time given as the "description_creation\-time" metadata
+attribute) will result in an error.
+.TP
+\fB\-\-no\-limit\-by\-avail\-data\fP
+By default, this program only uses data in the MLO or SMO hourly file from before the files\(aq creation timestamp. This ensures
+that (a) only data that has undergone preliminary QA/QC by NOAA is included and (b) months with only partial data (because
+the rest of the month\(aqs data has not been returned yet) are not created.
+.sp
+Setting this flag turns off the checks on available data, and will extend the monthly file to the month set by \fI\-\-last\-month\fP or
+its default even if that requires filling in months for which data is not present in the hourly file.
+.sp
+\fBUse this flag with extreme caution.\fP It can result in non\-QA/QC\(aqd data being introduced into the monthly averages, or monthly
+averages being produced with little or no hourly data. This flag is only intended to overcome extreme latency in the NOAA data.
+.TP
+\fB\-\-save\-missing\-geos\-to LOG_FILE\fP
+If given along with the \fI\-\-geos\-2d\-file\-list\fP option, then a list of which GEOS times are missing will be written to \fILOG_FILE\fP,
+useful for troubleshooting exactly which GEOS files are missing from the input list when updating \fIsmo\fP files.
+.UNINDENT
+.SH ERROR CONDITIONS
+.sp
+This program tries to be conservative about whether data from the hourly files is safe to include or not. Cases that would result in
+errors include:
+.INDENT 0.0
+.IP \(bu 2
+One or more hours are missing in the \fIHOURLY_INSITU_FILE\fP from months to be updated. (Can be overridden with the \fI\-\-allow\-missing\-hourly\-times\fP flag)
+.IP \(bu 2
+The creation date of the hourly file is the same month or an earlier month than \fI\-\-last\-month\fP\&. (Can be overridden with the
+\fI\-\-no\-limit\-by\-avail\-data\fP flag)
+.IP \(bu 2
+The hourly file ends before the last expected month given by \fI\-\-last\-month\fP\&. (Can be overridden by the \fI\-\-no\-limit\-avail\-data\fP flag.)
+.IP \(bu 2
+If the file creation timestamp is missing from the \fIHOURLY_INSITU_FILE\fP header. (Can be overridden by the \fI\-\-allow\-missing\-creation\-date\fP flag.)
+.UNINDENT
+.SH AUTHOR
+Joshua Laughner, Sebastien Roche, and Matthaeus Kiel
+.SH COPYRIGHT
+2021, Joshua Laughner, Sebastien Roche, and Matthaeus Kiel
+.\" Generated by docutils manpage writer.
+.
