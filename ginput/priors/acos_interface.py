@@ -219,7 +219,7 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
     # Also fix the end date of the MLO/SMO record relative to the data date, rather than
     # the execution date. Requested by SDOS on 14 Oct 2021.
     record_end_date = mod_utils.start_of_month(max_date) + relativedelta(years=2, months=1)
-    print('max_date =', max_date, '   record_end_date =', record_end_date)
+    
     if truncate_mlo_smo_by is not None:
         check_date = dt.datetime.today() + dt.timedelta(days=30)
         if max_date > check_date:
