@@ -1,5 +1,10 @@
 # Ginput Version History
 
+## v1.1.3
+
+Per SDOS request, `acos_interface.py` modified to limit MLO/SMO extrapolation to 
+2 year + 1 month from the data date, rather than execution date.
+
 ## v1.1.2
 
 Additional bugfixes to `update_mlo_smo` program, as well as a small fix to the main

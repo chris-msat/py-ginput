@@ -215,8 +215,12 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
 
     # Before we spent a lot of time calculating the equivalent latitude, let's determine
     # the truncation date
+    max_date = np.max(met_data['dates'])
+    # Also fix the end date of the MLO/SMO record relative to the data date, rather than
+    # the execution date. Requested by SDOS on 14 Oct 2021.
+    record_end_date = mod_utils.start_of_month(max_date) + relativedelta(years=2, months=1)
+    print('max_date =', max_date, '   record_end_date =', record_end_date)
     if truncate_mlo_smo_by is not None:
-        max_date = np.max(met_data['dates'])
         check_date = dt.datetime.today() + dt.timedelta(days=30)
         if max_date > check_date:
             # If there's some crazy fill value in the met file that causes the maximum date
@@ -259,7 +263,12 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
         gas_mlo_file = fmt_gas_file(mlo_co2_file, gas)
         gas_smo_file = fmt_gas_file(smo_co2_file, gas)
 
-        record_kws = dict(mlo_file=gas_mlo_file, smo_file=gas_smo_file, recalculate_strat_lut=regen_lut, save_strat=save_lut, truncate_date=truncate_mlo_smo_date)
+        record_kws = dict(mlo_file=gas_mlo_file, 
+                          smo_file=gas_smo_file, 
+                          recalculate_strat_lut=regen_lut, 
+                          save_strat=save_lut, 
+                          truncate_date=truncate_mlo_smo_date,
+                          last_date=record_end_date)
         if gas == 'co':
             record_kws = dict()
         record_class = tccon_priors.gas_records[gas]
