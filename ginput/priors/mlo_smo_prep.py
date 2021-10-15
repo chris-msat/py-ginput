@@ -15,6 +15,8 @@ from ..common_utils.ggg_logging import logger, setup_logger
 
 from typing import Tuple, Optional
 
+__version__ = '1.0.1'
+
 class MloPrelimMode(Enum):
     TIME_STRICT_DIFF_EITHER = 0
     TIME_STRICT_DIFF_BOTH = 1
@@ -381,7 +383,7 @@ def compute_wind_for_times(wind_file: str, times: pd.DatetimeIndex, wind_alt: in
     _check_geos_times(times, wind_dataset, run_settings=run_settings, allow_missing_geos_files=allow_missing_geos_files)
     
     u = wind_dataset['u'][:]
-    v = wind_dataset['u'][:]
+    v = wind_dataset['v'][:]
         
     u = u.interp(time=times)
     v = v.interp(time=times)
@@ -814,7 +816,7 @@ class InsituMonthlyAverager(ABC):
                     first_new_month = new_months[0].strftime('%Y-%m')
                     last_new_month = new_months[1].strftime('%Y-%m')
                     history_lines = [
-                        '#    Added {} to {}:'.format(first_new_month, last_new_month),
+                        '#    Added {} to {} using mlo_smo_prep version {}:'.format(first_new_month, last_new_month, __version__),
                         '#        - Previous monthly file: {} (SHA1 = {})'.format(previous_monthly_file, make_dependent_file_hash(previous_monthly_file)),
                         '#        - New hourly file: {} (SHA1 = {})'.format(new_hourly_file, make_dependent_file_hash(new_hourly_file))
                     ]

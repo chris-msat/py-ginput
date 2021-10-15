@@ -1,6 +1,16 @@
 # Ginput Version History
 
+## v1.1.4
+
+Bugfix in the update-hourly subcommand for SMO files; versions 1.1.0 to 1.1.3
+have an error in the wind filtering that effectively accepts data in the wind
+sector 0 to 180 rather than 330 to 160 deg CW from north. This has only a small
+impact on the monthly average CO2 DMFs for SMO (< 0.02 ppm max) and a very small
+impact on the priors (< 0.001 ppm with my test OCO-2 and GOSAT granules).
+
 ## v1.1.3
+
+**acos_interface version 1.2.1**
 
 Per SDOS request, `acos_interface.py` modified to limit MLO/SMO extrapolation to 
 2 year + 1 month from the data date, rather than execution date.
