@@ -1,5 +1,19 @@
 # Ginput Version History
 
+## v1.1.5
+
+**acos_interface version 1.2.2**
+
+Two fixes:
+
+1. HDO priors are now calculated as an absolute value to avoid introducing negative
+   DMFs when the H2O DMF is too small.
+2. The MLO-SMO derived priors now include an option to turn off the altitude grid adjustment
+   that was introduced during development while using the fixed pressure level GEOS FP-IT files.
+   The satellite interface turns off that grid adjustment in all cases. This was implemented 
+   due to the discovery of an edge case in OCO-2 granule `211102032132s` where this grid adjustment
+   erroneously moved the bottom altitude layer to altitude 0.
+
 ## v1.1.4
 
 Bugfix in the update-hourly subcommand for SMO files; versions 1.1.0 to 1.1.3

@@ -28,7 +28,7 @@ from ..mod_maker import mod_maker
 from ..priors import tccon_priors
 from .. import __version__
 
-__acos_int_version__ = '1.2.1'
+__acos_int_version__ = '1.2.2'
 
 _acos_tstring_fmt = '%Y-%m-%dT%H:%M:%S.%fZ'
 # Values lower than this will be replaced with NaNs when reading in the resampled met data
@@ -401,8 +401,12 @@ def _prior_helper(i_sounding, i_foot, qflag, mod_data, gas_record, var_mapping, 
         return profiles, None, prior_flags[i_sounding, i_foot]
 
     try:
+        # 2021-11-08: adjusting the altitude grid caused undesired behavior in granule 210902202558s.
+        # Specifially, altitude grids in one part of the world had their first level set to altitude = 0,
+        # which significantly overestimated the seasonal drawdown. The simple fix for now is to turn off
+        # that adjustment.
         priors_dict, priors_units, priors_constants = tccon_priors.generate_single_tccon_prior(
-            mod_data, dt.timedelta(hours=0), gas_record, use_eqlat_trop=use_trop_eqlat,
+            mod_data, dt.timedelta(hours=0), gas_record, use_eqlat_trop=use_trop_eqlat, use_adjusted_zgrid=False
         )
     except Exception as err:
         new_err = err.__class__(err.args[0] + ' Occurred at sounding = {}, footprint = {}'.format(i_sounding+1, i_foot+1))

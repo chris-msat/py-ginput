@@ -648,7 +648,7 @@ class MloSmoTraceGasRecord(TraceGasRecord):
 
         return df_combined
 
-    def add_trop_prior(self, prof_gas, obs_date, obs_lat, mod_data, **kwargs):
+    def add_trop_prior(self, prof_gas, obs_date, obs_lat, mod_data, use_adjusted_zgrid=True, **kwargs):
         """
         Add the tropospheric component of the prior.
 
@@ -656,7 +656,7 @@ class MloSmoTraceGasRecord(TraceGasRecord):
         that ``gas_record`` will be given this instance.
         """
         return add_trop_prior_standard(gas_record=self, prof_gas=prof_gas, obs_date=obs_date, obs_lat=obs_lat,
-                                       mod_data=mod_data, **kwargs)
+                                       mod_data=mod_data, use_adjusted_zgrid=use_adjusted_zgrid, **kwargs)
 
     def add_strat_prior(self, prof_gas, retrieval_date, mod_data, **kwargs):
         """
@@ -2378,7 +2378,7 @@ def adjust_zgrid(z_grid, z_trop, z_obs):
 #########################
 
 def add_trop_prior_standard(prof_gas, obs_date, obs_lat, gas_record, mod_data, ref_lat=45.0, use_theta_eqlat=True,
-                            profs_latency=None, prof_aoa=None, prof_world_flag=None, prof_gas_date=None):
+                            profs_latency=None, prof_aoa=None, prof_world_flag=None, prof_gas_date=None, use_adjusted_zgrid=True):
     """
     Add troposphere concentration to the prior profile using the standard approach.
 
@@ -2431,8 +2431,12 @@ def add_trop_prior_standard(prof_gas, obs_date, obs_lat, gas_record, mod_data, r
     theta_grid = mod_data['profile']['PT']
     pres_grid = mod_data['profile']['Pressure']
     z_trop = mod_utils.interp_tropopause_height_from_pressure(mod_data['scalar']['TROPPB'], pres_grid, z_grid)
+    if use_adjusted_zgrid:
+        logger.debug('Adjusting z-grid')
+        z_grid = adjust_zgrid(z_grid, z_trop, z_obs)
+    else:
+        logger.debug('Not adjusting z-grid')
 
-    z_grid = adjust_zgrid(z_grid, z_trop, z_obs)
     n_lev = np.size(z_grid)
     prof_gas = _init_prof(prof_gas, n_lev)
     profs_latency = _init_prof(profs_latency, n_lev)
@@ -2451,6 +2455,7 @@ def add_trop_prior_standard(prof_gas, obs_date, obs_lat, gas_record, mod_data, r
             raise TypeError('theta_grid and pres_grid must be given if use_theta_eqlat is True')
         obs_lat, midtrop_theta = get_trop_eq_lat(theta_grid, pres_grid, obs_lat, obs_date)
     else:
+        logger.debug('Using geographic latitude, not deriving from potential temperature')
         midtrop_theta = np.nan
 
     xx_trop = z_grid <= z_trop
@@ -2707,7 +2712,7 @@ def calculate_meso_co(alt_profile, eqlat_profile, pres_profile, temp_profile, pr
 
 
 def generate_single_tccon_prior(mod_file_data, utc_offset, concentration_record, zgrid=None,
-                                use_eqlat_trop=True, use_eqlat_strat=True):
+                                use_eqlat_trop=True, use_eqlat_strat=True, use_adjusted_zgrid=True):
     """
     Driver function to generate the TCCON prior profiles for a single observation.
 
@@ -2741,6 +2746,11 @@ def generate_single_tccon_prior(mod_file_data, utc_offset, concentration_record,
      latitude of the observation instead. This allows you to skip the (fairly processor intensive) equivalent latitude
      calculation when preparing the .mod files, but can lead to ~2% differences in CO2 near the tropopause (in March).
     :type use_eqlat_strat: bool
+
+    :param use_adjusted_zgrid: when ``True``, the altitude grid near the surface will be stretched or compressed in an
+     effort to match the lowest level of the 3D altitude grid to the surface altitude. When ``False``, the altitude grid
+     is used as-is. 
+    :type use_adjusted_zgrid: bool
 
     :return: a dictionary containing all the profiles (including many for debugging) and a dictionary containing the
      units of the values in each profile.
@@ -2779,8 +2789,9 @@ def generate_single_tccon_prior(mod_file_data, utc_offset, concentration_record,
 
     # gas_prof is modified in-place
     _, ancillary_trop = concentration_record.add_trop_prior(gas_prof, obs_utc_date, obs_lat, mod_file_data,
-                                                            use_theta_eqlat=use_eqlat_trop, profs_latency=latency_profs,
-                                                            prof_world_flag=stratum_flag, prof_gas_date=gas_date_prof)
+                                                            use_theta_eqlat=use_eqlat_trop, use_adjusted_zgrid=use_adjusted_zgrid,
+                                                            profs_latency=latency_profs, prof_world_flag=stratum_flag, 
+                                                            prof_gas_date=gas_date_prof)
     aoa_prof_trop = ancillary_trop['age_of_air'] if 'age_of_air' in ancillary_trop else np.full_like(gas_prof, np.nan)
     trop_ref_lat = ancillary_trop['ref_lat'] if 'ref_lat' in ancillary_trop else np.nan
     trop_eqlat = ancillary_trop['trop_lat'] if 'trop_lat' in ancillary_trop else np.nan
