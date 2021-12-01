@@ -12,7 +12,7 @@ setup(
     url='',
     install_requires=[
         'astropy>=3.1.2',
-        'cfunits>=3.0.0',
+        'cfunits>=3.3.2',
         'ephem>=3.7.6.0',
         'h5py>=2.9.0',
         'jplephem>=2.9',
