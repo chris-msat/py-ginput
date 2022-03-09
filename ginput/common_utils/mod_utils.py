@@ -20,10 +20,6 @@ from numpy import ma
 import os
 import pandas as pd
 import re
-import dask
-import dask.array as da
-from dask.diagnostics import ProgressBar as dask_progress
-from scipy.interpolate import griddata
 
 from numpy.core._multiarray_umath import arctan, tan, sin, cos
 from scipy.interpolate import interp1d, interp2d
@@ -896,6 +892,12 @@ def calculate_eq_lat_field(EPV, PT, area):
     :func:`numpy.diag`. (I suspect what is happening is that the interpolator sorts the input values when constructing
     the grid, but I have not tested this. -JLL)
     """
+    # scipy/dask import here to avoid making it a requirement in setup.py as this is not the main/standard function
+    import dask
+    import dask.array as da
+    from dask.diagnostics import ProgressBar as dask_progress
+    from scipy.interpolate import griddata
+
     nlev, nlat, nlon = PT.shape
     # Get rid of fill values, this fills the bottom of profiles with the first valid value
     PT[PT > 1e4] = np.nan

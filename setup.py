@@ -25,7 +25,6 @@ setup(
         'sgp4>=1.4',
         'skyfield>=1.10',
         'xarray>=0.12.1',
-        'dask>=2.30.0'
     ],
     packages=find_packages(),
 )
