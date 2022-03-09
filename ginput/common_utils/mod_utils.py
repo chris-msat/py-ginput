@@ -20,6 +20,10 @@ from numpy import ma
 import os
 import pandas as pd
 import re
+import dask
+import dask.array as da
+from dask.diagnostics import ProgressBar as dask_progress
+from scipy.interpolate import griddata
 
 from numpy.core._multiarray_umath import arctan, tan, sin, cos
 from scipy.interpolate import interp1d, interp2d
@@ -867,6 +871,102 @@ def get_eqlat_profile(interpolator, epv, theta):
         el[i] = interpolator(pv, pt)
 
     return el
+
+
+def calculate_eq_lat_field(EPV, PT, area):
+    """
+    Calculate 3D equivalent latitude from same shape potential vorticity and potiential temperature fields
+
+    :param EPV: a 3D grid of potential vorticity
+    :type EPV: :class:`numpy.ndarray`
+
+    :param PT: a 3D grid of potential temperature
+    :type PT:  :class:`numpy.ndarray`
+
+    :param area: the 2D grid of surface area (in steradians) that corresponds to the 2D slices of the 4D grid.
+    :type area: :class:`numpy.ndarray`
+
+    :return: a 2D interpolator for equivalent latitude, requires potential vorticity and potential temperature as inputs
+    :rtype: :class:`scipy.interpolate.interp2d`
+
+    Note: when querying the interpolator for equivalent latitude, it is often best to call it with scalar values, even
+    though that is slower than calling it with the full vector of PV and PT that you wish to get EL for. The problem is
+    that scipy 2D interpolators, when given vectors as input, return a grid. This would be fine, except that the values
+    corresponding to the vector of PV and PT are not always along the diagonal and so cannot be extracted with
+    :func:`numpy.diag`. (I suspect what is happening is that the interpolator sorts the input values when constructing
+    the grid, but I have not tested this. -JLL)
+    """
+    nlev, nlat, nlon = PT.shape
+    # Get rid of fill values, this fills the bottom of profiles with the first valid value
+    PT[PT > 1e4] = np.nan
+    EPV[EPV > 1e8] = np.nan
+    for i in range(nlat):
+        pd.DataFrame(PT[:, i, :]).fillna(method='bfill', axis=0, inplace=True)
+        pd.DataFrame(EPV[:, i, :]).fillna(method='bfill', axis=0, inplace=True)
+
+    # Define a fixed potential temperature grid, with increasing spacing
+    # this is done arbitrarily to get sufficient levels for the interpolation to work well, and not too much for the
+    # computations to take less time
+    if np.min(PT) > 300 or np.max(PT) < 1000:
+        raise ValueError('Potential temperature range is smaller than the [300, 1000] K assumed to create the '
+                         'interpolation grid')
+
+    theta_array = _construct_grid((round_to_zero(np.nanmin(PT)), 300.0, 2), (300.0, 350.0, 5.0), (350.0, 500.0, 10.0),
+                                 (500.0, 750.0, 20.0), (750.0, 1000.0, 30.0), (1000.0, round_to_zero(np.nanmax(PT)), 100.0))
+    #theta_array = np.geomspace(round_to_zero(np.nanmin(PT)),round_to_zero(np.nanmax(PT)),130)
+    new_nlev = np.size(theta_array)
+
+    # Get PV on the fixed PT levels ~ 2 seconds per date
+    new_EPV = np.zeros([new_nlev, nlat, nlon])
+    for i in range(nlat):
+        for j in range(nlon):
+            new_EPV[:, i, j] = np.interp(theta_array, PT[:, i, j], EPV[:, i, j])
+
+    # Compute equivalent latitudes
+    EL = np.zeros([new_nlev, 100])
+    EPV_thresh = np.zeros([new_nlev, 100])
+    for k in range(new_nlev): # loop over potential temperature levels
+        maxPV = np.max(new_EPV[k]) # global max PV
+        minPV = np.min(new_EPV[k]) # global min PV
+
+        # define 100 PV values between the min and max PV
+        #EPV_thresh[k] = np.unique(np.concatenate([-1.0*np.geomspace(1,np.abs(minPV),50),[0],np.geomspace(1,maxPV,50)]))
+        EPV_thresh[k] = np.linspace(minPV,maxPV,100)
+
+        for l,thresh in enumerate(EPV_thresh[k]):
+            area_total = np.sum(area[new_EPV[k]>=thresh])
+            EL[k,l] = np.arcsin(1-area_total/(2*np.pi))*90.0*2/np.pi
+
+    # pv_array has much less elements than in calculate_eq_lat in order to be used with griddata
+    pv_array = np.unique(np.concatenate([
+        -1*np.geomspace(1e3,-1*round_to_zero(np.nanmin(EPV_thresh)),100),
+        _construct_grid((-1000.0, -500.0, 20.0), (-500.0, -100.0, 10.0),(-100.0, -10.0, 1.0), (-10.0, -1.0, 0.1), (-1.0, 1.0, 0.01), (1.0, 10.0, 0.1),
+                        (10.0, 100.0, 1.0), (100.0, 500.0, 10.0), (500.0, 1000.0, 20.0), (0.0,0.1)),
+        np.geomspace(1000,round_to_zero(np.nanmax(EPV_thresh)),100),
+    ]))
+
+    # Compute EL on the fixed pv_array and theta_array
+    interp_EL = np.zeros([new_nlev,len(pv_array)])
+    for k in range(new_nlev):
+        interp_EL[k] = np.interp(pv_array,EPV_thresh[k],EL[k])
+
+    pv_grid, theta_grid = np.meshgrid(pv_array,theta_array)
+
+    nonan = ~np.isnan(interp_EL) # there are no nans there, it's just to flatten the arrays
+    flat_pv = pv_grid[nonan]
+    flat_theta = theta_grid[nonan]
+    flat_eqlat = interp_EL[nonan]
+
+    # Use griddata to compute the equivalent latitude level by level
+    # compute the different levels in parallel with dask
+    eq_lat = []
+    for ilev in range(nlev):
+        eq_lat.append(dask.delayed(griddata)((flat_pv, flat_theta), flat_eqlat, (EPV[ilev], PT[ilev])))
+
+    with dask_progress():
+        eq_lat = np.stack(dask.compute(*eq_lat))
+
+    return eq_lat
 
 
 def _format_geosfp_name(product, file_type, levels, date_time, add_subdir=False):

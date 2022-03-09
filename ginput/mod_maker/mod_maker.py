@@ -1303,6 +1303,57 @@ def equivalent_latitude_functions_from_native_geos_files(geos_nv_files, geos_dat
     return func_dict
 
 
+def add_equivalent_latitude_to_native_geos_files(geos_nv_files, geos_dates, muted=False):
+    """
+    Add an 'eqlat' variable to native GEOS FP(-IT) files with the equivalent latitudes.
+
+    :param geos_nv_files: a list of the native GEOS files to construct eq. lat. interpolators for
+    :type geos_nv_files: list(str)
+
+    :param geos_dates: the datetimes of the GEOS files given as the first argument. Must be in the same order, i.e.
+     ``geos_dates[i]`` must be the datetime of ``geos_nv_files[i]``.
+    :type geos_dates: list(datetime-like)
+
+    :param muted: set to ``True`` to disable some logging to console.
+    :type muted: bool
+
+    :return: a dictionary of equivalent latitude interpolators. THe keys will be the dates of the GEOS files, there will
+     be one interpolator per GEOS file.
+    :rtype: dict
+    """
+    for idx, (geos_file, date) in enumerate(zip(geos_nv_files, geos_dates)):
+        with netCDF4.Dataset(geos_file, 'r+') as dataset:
+            logger.info('Calculating equivalent latitudes for {}/{} GEOS files'.format(idx+1, len(geos_nv_files)))
+            lat = dataset['lat'][:]
+            lat[np.abs(lat) < 0.001] = 0.0
+            lon = dataset['lon'][:]
+            pres = mod_utils.convert_geos_eta_coord(dataset['DELP'][0])
+            EPV = dataset['EPV'][0] * 1e6
+            PT = mod_utils.calculate_potential_temperature(pres, dataset['T'][0])
+
+            if 'eqlat' not in dataset.variables:
+                dataset.createVariable('eqlat',np.float32,('time','lev','lat','lon'))
+                att_dict = {
+                    'units':'degrees_north',
+                    'long_name':'equivalent latitude',
+                    'standard_name':'equivalent_latitude',
+                    'scale_factor':1.0,
+                    'add_offset':0.0,
+                }
+                dataset['eqlat'].setncatts(att_dict)
+
+            # Get the area of each grid cell
+            lat_res = float(dataset.LatitudeResolution)
+            lon_res = float(dataset.LongitudeResolution)
+            area = mod_utils.calculate_area(lat, lon, lat_res, lon_res, muted=muted)
+
+            # The native 72-level geos files are ordered space-to-surface. The equivalent latitude calculation *may* be okay
+            # with that, but I felt it was safer to just go ahead and flip them.
+            eqlat = mod_utils.calculate_eq_lat_field(np.flip(EPV, axis=0), np.flip(PT, axis=0), area)
+
+            dataset['eqlat'][0] = np.flip(eqlat, axis=0)
+            
+
 def lat_lon_interp(data_old,lat_old,lon_old,lat_new,lon_new,IDs_list):
     """
     Use RectSphereBivariateSpline to interpolate in a latitude-longitude grid (rectangle over of sphere)
