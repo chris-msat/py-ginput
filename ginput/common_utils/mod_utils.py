@@ -953,18 +953,18 @@ def calculate_eq_lat_field(EPV, PT, area):
     nonan = ~np.isnan(interp_EL) # there are no nans there, it's just to flatten the arrays
     flat_pv = pv_grid[nonan]
     flat_theta = theta_grid[nonan]
-    flat_eqlat = interp_EL[nonan]
+    flat_EL = interp_EL[nonan]
 
     # Use griddata to compute the equivalent latitude level by level
     # compute the different levels in parallel with dask
-    eq_lat = []
+    final_EL = []
     for ilev in range(nlev):
-        eq_lat.append(dask.delayed(griddata)((flat_pv, flat_theta), flat_eqlat, (EPV[ilev], PT[ilev])))
+        final_EL.append(dask.delayed(griddata)((flat_pv, flat_theta), flat_EL, (EPV[ilev], PT[ilev])))
 
     with dask_progress():
-        eq_lat = np.stack(dask.compute(*eq_lat))
+        final_EL = np.stack(dask.compute(*final_EL))
 
-    return eq_lat
+    return final_EL
 
 
 def _format_geosfp_name(product, file_type, levels, date_time, add_subdir=False):
