@@ -873,7 +873,7 @@ def calculate_eq_lat_field(EPV, PT, area):
     """
     Calculate 3D equivalent latitude from same shape potential vorticity and potiential temperature fields
 
-    :param EPV: a 3D grid of potential vorticity
+    :param EPV: a 3D grid of Ertel's potential vorticity
     :type EPV: :class:`numpy.ndarray`
 
     :param PT: a 3D grid of potential temperature
@@ -882,15 +882,11 @@ def calculate_eq_lat_field(EPV, PT, area):
     :param area: the 2D grid of surface area (in steradians) that corresponds to the 2D slices of the 4D grid.
     :type area: :class:`numpy.ndarray`
 
-    :return: a 2D interpolator for equivalent latitude, requires potential vorticity and potential temperature as inputs
-    :rtype: :class:`scipy.interpolate.interp2d`
+    :param method: the interpolation method used by griddata, one of ['linear','nearest','cubic']
+    :type method: str
 
-    Note: when querying the interpolator for equivalent latitude, it is often best to call it with scalar values, even
-    though that is slower than calling it with the full vector of PV and PT that you wish to get EL for. The problem is
-    that scipy 2D interpolators, when given vectors as input, return a grid. This would be fine, except that the values
-    corresponding to the vector of PV and PT are not always along the diagonal and so cannot be extracted with
-    :func:`numpy.diag`. (I suspect what is happening is that the interpolator sorts the input values when constructing
-    the grid, but I have not tested this. -JLL)
+    :return: the 3D equivalent latitude
+    :rtype: :class:`numpy.ndarray`
     """
     # scipy/dask import here to avoid making it a requirement in setup.py as this is not the main/standard function
     import dask
@@ -947,7 +943,7 @@ def calculate_eq_lat_field(EPV, PT, area):
         np.geomspace(1000,round_to_zero(np.nanmax(EPV_thresh)),100),
     ]))
 
-    # Compute EL on the fixed pv_array and theta_array
+    # Interpolate EL (equivalent latitude) on the fixed pv_array and theta_array
     interp_EL = np.zeros([new_nlev,len(pv_array)])
     for k in range(new_nlev):
         interp_EL[k] = np.interp(pv_array,EPV_thresh[k],EL[k])
