@@ -26,6 +26,7 @@ _default_file_type = 'met'
 _std_out_paths = {'surf': 'Nx', 'p': 'Np', 'eta': 'Nv'}
 _level_types = tuple(_std_out_paths.keys())
 _default_level_type = 'p'
+_default_grid_type = 'L'
 
 
 def execute(cmd, cwd=os.getcwd()):
@@ -42,7 +43,7 @@ def execute(cmd, cwd=os.getcwd()):
 
 
 def URLlist_FP(start, end, timestep=timedelta(hours=3), outpath='', filetype=_default_file_type,
-               levels=_default_level_type):
+               levels=_default_level_type,gridtype=_default_grid_type):
     """
     GEOS5-FP data has one global file every 3 hours (from 00:00 to 21:00 UTC each day)
     start: datetime object, start of the desired date range
@@ -81,7 +82,7 @@ def URLlist_FP(start, end, timestep=timedelta(hours=3), outpath='', filetype=_de
 
 
 def URLlist_FPIT(start, end, timestep=timedelta(hours=3), outpath='', filetype=_default_file_type,
-                 levels=_default_level_type):
+                 levels=_default_level_type,gridtype=_default_grid_type):
     """
     GEOS5-FP-IT data has one global file every 3 hours (from 00:00 to 21:00 UTC each day)
     start: datetime object, start of the desired date range
@@ -120,9 +121,56 @@ def URLlist_FPIT(start, end, timestep=timedelta(hours=3), outpath='', filetype=_
             f.write(fmt.format(yr=curdate.year, doy=curdate.timetuple().tm_yday, ymd=datetime.strftime(curdate, '%Y%m%d'), hr=curdate.hour))
             curdate += timestep
 
+def URLlist_GEOSIT(start, end, timestep=timedelta(hours=3), outpath='', filetype=_default_file_type,
+                 levels=_default_level_type,gridtype=_default_grid_type):
+    """
+    GEOS5-IT data has one global file every 3 hours (from 00:00 to 21:00 UTC each day)
+    start: datetime object, start of the desired date range
+    end: datetime object, end of the desired date range
+    timestep: use the model time resolution to get all files, or a multiple of it to get less files
+    outpath: full path to the file in which the list of URLs will be written
+    gridtype: GEOS-IT has two types of files, on the cubed-sphere grid ("C") or on lat-lon grid ("L")
+    """
+    filetype = filetype.lower()
+    levels = levels.lower()
+
+    if gridtype == "L":
+        grid_key = "L576x361"
+    elif gridtype == "C":
+        grid_key = "C180x180x6"
+
+    if filetype == 'met':
+        if levels == 'p':
+            fmt = "http://goldsfs1.gesdisc.eosdis.nasa.gov/data/GEOSIT/GEOSIT_ASM_I3_{gridtype}_P42.5.27.1/{yr}/{doy:0>3}/.hidden/GEOS.it.asm.asm_inst_3hr_glo_{grid_key}_p42.GEOS5271.{ymd}T{hr:0>2}00.V01.nc4\n"
+        elif levels == 'eta':
+            fmt = "http://goldsfs1.gesdisc.eosdis.nasa.gov/data/GEOSIT/GEOSIT_ASM_I3_{gridtype}_V72.5.27.1/{yr}/{doy:0>3}/.hidden/GEOS.it.asm.asm_inst_3hr_glo_{grid_key}_v72.GEOS5271.{ymd}T{hr:0>2}00.V01.nc4\n"
+        elif levels == 'surf':
+            fmt = "http://goldsfs1.gesdisc.eosdis.nasa.gov/data/GEOSIT/GEOSIT_ASM_I1_{gridtype}_SLV.5.27.1/{yr}/{doy:0>3}/.hidden/GEOS.it.asm.asm_inst_1hr_glo_{grid_key}_slv.GEOS5271.{ymd}T{hr:0>2}00.V01.nc4\n"
+        else:
+            raise ValueError('No GEOSIT URL format defined for filetype == {} and levels == {}'.format(filetype, levels))
+    elif filetype == 'chm':
+        if levels == 'eta':
+            fmt = "http://goldsfs1.gesdisc.eosdis.nasa.gov/data/GEOSIT/GEOSIT_CHM_I3_{gridtype}_V72.5.27.1/{yr}/{doy:0>3}/.hidden/GEOS.it.asm.chm_inst_3hr_glo_{grid_key}_v72.GEOS5271.{ymd}T{hr:0>2}00.V01.nc4\n"
+        else:
+            raise ValueError('Chemistry files only available on eta levels')
+    else:
+        raise ValueError('No GEOS-IT URL format defined for filetype == {}'.format(filetype))
+
+    if outpath=='': # if no specified full path to make the file, just write a file in the current directory
+        outpath = 'getGEOSIT.dat'
+
+    print('Writing URL list in:',outpath)
+
+    curdate = start
+    with open(outpath, 'w') as f:
+        while curdate < end:
+            f.write(fmt.format(gridtype=gridtype,grid_key=grid_key,yr=curdate.year, doy=curdate.timetuple().tm_yday, ymd=datetime.strftime(curdate, '%Y-%m-%d'), hr=curdate.hour))
+            curdate += timestep
+
+
 
 # Define this here so that we can reference it for the command line help and in the driver function
-_func_dict = {'FP':URLlist_FP, 'FPIT':URLlist_FPIT}
+_func_dict = {'FP':URLlist_FP, 'FPIT':URLlist_FPIT, 'GEOSIT':URLlist_GEOSIT}
 
 
 def _parse_file_types(clinput):
@@ -153,6 +201,8 @@ def _add_common_args(parser):
     parser.add_argument('-l', '--levels', default=None, choices=_level_types,
                         help='Which level type to download. Note that only "eta" levels are available for the "chm" '
                              'file type.')
+    parser.add_argument('-g','--gridtypes',default="L",choices=["L","C"],
+                        help='used to specify the grid type when downloading GEOS-IT files, L for lat-lon and C for cubed-sphere')
 
 
 def parse_args(parser=None):
@@ -240,7 +290,7 @@ def runlog_driver(runlog, path='', mode='FP', filetypes=_default_file_type, leve
 
 
 def driver(date_range, mode='FP', path='.', filetypes=_default_file_type, levels=_default_level_type,
-           log_file=sys.stdout, verbosity=0, **kwargs):
+           gridtypes=_default_grid_type,log_file=sys.stdout, verbosity=0, **kwargs):
     """
     Run get_GEOS5 as if called from the command line.
 
@@ -270,11 +320,14 @@ def driver(date_range, mode='FP', path='.', filetypes=_default_file_type, levels
      above about the relationship between ``filetypes`` and ``levels``.
     :type levels: str, list(str), or None
 
+    :param gridtypes: the type of grid when using GEOS-IT files "L" for lat-lon and "C" for cubed-sphere
+
     :param kwargs: unused, swallows extra keyword arguments.
 
     :return: none, downloads GEOS files to ``path``.
     """
     filetypes, levels = check_types_levels(filetypes, levels)
+    gridtypes = (gridtypes,)
     verbosity_dict = {-1: '--quiet', 0: '--no-verbose', 1: '--verbose'}
     if verbosity < -1:
         verbosity = -1
@@ -283,13 +336,13 @@ def driver(date_range, mode='FP', path='.', filetypes=_default_file_type, levels
     wget_cmd = 'wget {} -N -i getGEOS.dat'.format(verbosity_dict[verbosity])
 
     start, end = date_range
-    for ftype, ltype in zip(filetypes, levels):
+    for ftype, ltype, gtype in zip(filetypes, levels, gridtypes):
         outpath = os.path.join(path, _std_out_paths[ltype])
         if not os.path.exists(outpath):
             logger.info('Creating {}'.format(outpath))
             os.makedirs(outpath)
 
-        _func_dict[mode](start, end, filetype=ftype, levels=ltype, outpath=os.path.join(outpath, 'getGEOS.dat'))
+        _func_dict[mode](start, end, filetype=ftype, levels=ltype, gridtype=gtype, outpath=os.path.join(outpath, 'getGEOS.dat'))
         for line in execute(wget_cmd.split(), cwd=outpath):
             print(line, end="", file=log_file)
 
