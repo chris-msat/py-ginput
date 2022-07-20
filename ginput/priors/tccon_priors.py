@@ -253,6 +253,9 @@ class MloSmoTraceGasRecord(TraceGasRecord):
      modification to account for the needs of the age spectra.
     :type last_date: datetime-like
 
+    :param truncate_date: the last date to use *real data* for in the record, after this date the MLO/SMO time
+     series will be extrapolated. Note that this is inclusive.
+
     :param lag: optional, the lag between Mauna Loa/Samoa measurements and the stratospheric boundary condition. Default
      is two months, i.e. the stratospheric boundary condition for a given date is assumed to be that measured at MLO/SMO
      two months previously.

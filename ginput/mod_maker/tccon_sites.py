@@ -47,6 +47,7 @@ The requested date range overlaps multiple time spans for the following sites:
 
 now = datetime.now()
 
+
 site_dict = {
     'pa': {
         'name': 'Park Falls',
@@ -536,3 +537,34 @@ def tccon_site_info_for_date(date, site_abbrv=None, site_dict_in=None, use_close
         return new_site_dict
     else:
         return new_site_dict[site_abbrv]
+
+
+def site_dict_to_flat_json(now_as_null=True, json_file=None, **json_kws):
+    import json
+
+    output = []
+    for site_id, site_info in site_dict.items():
+        for (start, end), coords in site_info['time_spans'].items():
+            start = start.strftime('%Y-%m-%d')
+            if end == now and now_as_null:
+                end = None
+            else:
+                end = end.strftime('%Y-%m-%d')
+
+            output.append({
+                'site_id': site_id,
+                'name': site_info['name'],
+                'location': site_info['loc'],
+                'latitude': coords['lat'],
+                'longitude': coords['lon'] if coords['lon'] <= 180 else coords['lon'] - 360,
+                'start_date': start,
+                'end_date': end
+            })
+
+    if json_file:
+        with open(json_file, 'w') as f:
+            json.dump(output, f, **json_kws)
+    else:
+        return json.dumps(output, **json_kws)
+        
+
