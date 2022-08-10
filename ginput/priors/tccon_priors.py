@@ -2057,12 +2057,16 @@ class HDORecord(TraceGasRecord):
     _gas_unit = 'mol/mol'
     _gas_seas_cyc_coeff = None
 
+    @staticmethod
+    def compute_hdo_from_h2o(h2o_dmf):
+        return np.abs(h2o_dmf * 0.14 * (8.0 + np.log10(h2o_dmf)))
+
     def add_trop_prior(self, prof_gas, obs_date, obs_lat, mod_data, **kwargs):
         h2o_dmf = mod_data['profile']['H2O']
         # Corrected on 2021-11-02 to eliminate negative HDO values. This does not
         # affect GGG because gsetup does its own calculation of H2O and HDO from
         # the .mod files.
-        prof_gas[:] = np.abs(h2o_dmf * 0.14 * (8.0 + np.log10(h2o_dmf)))
+        prof_gas[:] = self.compute_hdo_from_h2o(h2o_dmf)
         return prof_gas, dict()
 
     def add_strat_prior(self, prof_gas, retrieval_date, mod_data, **kwargs):

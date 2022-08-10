@@ -11,9 +11,75 @@ from . import mod_utils
 from .mod_utils import ModelError
 
 
-def read_out_file(out_file, as_dataframes=False):
+def read_out_file(out_file, as_dataframes=False, replace_fills=False):
+    """Read a GGG output file
+
+    This function can read most GGG output files, including .col files and post processing
+    text files (but not the .private.nc file). It expects a file where:
+
+    * the first line is a sequence of numbers, with the first one being the number of header
+      lines
+    * the last header line is a space-separated list of column names
+    * the rest of the file is a space-separated data table.
+
+    Parameters
+    ----------
+    out_file : str
+        Path to the file to read
+
+    as_dataframes : bool
+        If `True`, then the output file is read in as a dataframe. If `False`, it is converted
+        to a dictionary when returning.
+
+    replace_fills : bool or float
+        If `False`, fill values are kept as is. If `True`, this will look for a line in the header
+        with the format `"missing:  <number>`. Any number within floating point rounding of that 
+        number are replaced with NaNs. If this is a number, then any values greater than or equal
+        to that number are treated as fills and replaced with NaNs. This last is the safest; GGG
+        post processing typically uses numbers >1e35 as "missing" values, so usually any value greater
+        than that can be replaced. 
+
+        Note that `TypeError` occurences during comparison are ignored. This allows e.g. the "spectrum"
+        column to be skipped, but means that any formatting issues that cause a column to be read in
+        as an series of objects, rather than a numeric type, can cause that column to be skipped.
+
+    Returns
+    -------
+    pandas.DataFrame or dict
+        The contents of the file as a dataframe or dict, depending on `as_dataframes`.
+    """
     n_header_lines = mod_utils.get_num_header_lines(out_file)
     df = pd.read_csv(out_file, header=n_header_lines-1, sep='\s+')
+
+    if replace_fills is True:
+        # Get the fill value from the header
+        with open(out_file) as f:
+            fill_value = None
+            for _ in range(n_header_lines):
+                line = f.readline()
+                if line.startswith('missing:'):
+                    fill_value = float(line.split(':', 1)[1])
+                    break
+
+            if fill_value is None:
+                raise IOError('Could not find fill value in the header of {}'.format(out_file))
+
+            is_fill = lambda val: np.isclose(val, fill_value)
+
+    elif replace_fills is not False:
+        fill_value = replace_fills
+        replace_fills = True
+        is_fill = lambda val: val >= fill_value
+
+    if replace_fills:
+        for colname, coldata in df.iteritems():
+            try:
+                xx_fills = is_fill(coldata)
+            except TypeError:
+                continue
+            else:
+                df.loc[xx_fills, colname] = np.nan
+
     if not as_dataframes:
         return df.to_dict()
     else:
@@ -337,7 +403,7 @@ def read_runlog(runlog_file, as_dataframes=False, remove_commented_lines=True):
 
         # Remove comments if requested.
         if remove_commented_lines:
-            df = df[~(df['comment'] == ':')]
+            df = df[~(df['comment'].apply(lambda x: x == ':'))]
 
         # Always remove the comment column itself
         df = df[column_names]

@@ -244,7 +244,11 @@ def read_mav_file(filename, key='vmr', rtype='dict'):
             elif i == 2:
                 header_dict['mod_file'] = line.strip()
             else:
-                head_key, value = [x.strip() for x in line.split(':')]
+                try:
+                    head_key, value = [x.strip() for x in line.split(':')]
+                except ValueError:
+                    # Can't split into two parts by splitting on the colon - just skip
+                    continue
                 try:
                     value = float(value)
                 except ValueError:
