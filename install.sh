@@ -55,10 +55,10 @@ done
 
 if $env_exists; then
     echo "$envname already exists, will update installed packages"
-    conda env update --name "$envname" --file environment.yml
+    conda env update --name "$envname" --file environment-py310.yml
 else
     echo "Will create conda environment '$envname'"
-    conda env create --name "$envname" --file environment.yml
+    conda env create --name "$envname" --file environment-py310.yml
 fi
 
 

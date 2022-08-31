@@ -499,6 +499,10 @@ class MloSmoTraceGasRecord(TraceGasRecord):
         if np.ndim(dates) != 1:
             raise ValueError('dates must have exactly 1 dimension')
 
+        # JLL 2022-08-30: Python 3.10/numpy 1.23/pandas 1.4.3 no longer allows subtracting a timestamp from an object array of timestamps,
+        # apparently. Converting to a DatetimeIndex fixes that. I did it here rather than where dates is created because the original
+        # dates goes on to get inserted into a numpy array of other dates.
+        dates = pd.DatetimeIndex(dates)
         earlier_timedeltas = dates - first_record_date
         later_timedeltas = dates - last_record_date
         earlier_latency = np.array([mod_utils.timedelta_to_frac_year(td) for td in earlier_timedeltas if td < dt.timedelta(0)])
@@ -884,8 +888,10 @@ class MloSmoTraceGasRecord(TraceGasRecord):
             n_ages = age.size
             n_theta = theta.size
 
+            # JLL 2022-08-30: the 2022.6.0 version of xarray disallows using dataarrays as coordinates
+            # for other dataarrays. Hence the need to access the underlying data attribute of theta.
             out_array = xr.DataArray(np.full((n_dates, n_ages, n_theta), np.nan),
-                                     coords=[('date', out_dates), ('age', age), ('theta', theta)])
+                                     coords=[('date', out_dates), ('age', age), ('theta', theta.data)])
 
             # Put the lagged record, without any age spectrum applied, as the zero age data, for all higher variables
             # using broadcasting
@@ -904,10 +910,12 @@ class MloSmoTraceGasRecord(TraceGasRecord):
                     # is necessary for the convolution to work. Note that the age spectra aren't assigned to any
                     # specific date, we just need the adjacent points in the age spectra and gas record to have the same
                     # spacing in time.
-                    # To handle the reindexing properly, we need to keep the original indices in until we handle the
+                    # To handle the reindexing properly, we need to keep the original rows in until we handle the
                     # interpolation to the new values. For this part we need to use the decimal years as the index
+                    # and (as of 2022-08-30, pandas 1.4.3), remove columns that we don't need to allow the index
+                    # interpolation method to work
                     tmp_index = np.unique(np.concatenate([df_lagged['dec_year'], new_index]))
-                    df_asi = df_lagged.set_index('dec_year', drop=False).reindex(tmp_index).interpolate(method='index').reindex(new_index)
+                    df_asi = df_lagged.set_index('dec_year', drop=False)[['dmf_mean']].reindex(tmp_index).interpolate(method='index').reindex(new_index)
 
                     # Now we can do the convolution. Note: in Arlyn's original R code, she had to flip the age spectrum
                     # to act as the convolution kernel, but testing showed that in order to get the same answer using
@@ -964,7 +972,9 @@ class MloSmoTraceGasRecord(TraceGasRecord):
         # of the code that created this file.
         save_dict = dict()
         for name, darray in self.conc_strat.items():
-            new_coords = [(name + '_' + dim, coord) for dim, coord in darray.coords.items()]
+            # JLL 2022-08-30: another case where xarray v. 2022.06 does not allow data arrays as coordinates,
+            # so convert all to numpy arrays.
+            new_coords = [(name + '_' + dim, coord.data) for dim, coord in darray.coords.items()]
             new_array = xr.DataArray(darray.data, coords=new_coords)
             save_dict[name] = new_array
 
@@ -1025,7 +1035,7 @@ class MloSmoTraceGasRecord(TraceGasRecord):
 
         with xr.open_dataset(lut_file) as ds:
             for name, darray in ds.items():
-                new_coords = [(dim.split('_')[1], coord) for dim, coord in darray.coords.items()]
+                new_coords = [(dim.split('_')[1], coord.data) for dim, coord in darray.coords.items()]
                 strat_dict[name] = xr.DataArray(darray.data, coords=new_coords)
 
         return strat_dict
@@ -1101,13 +1111,14 @@ class MloSmoTraceGasRecord(TraceGasRecord):
         gas_by_region = dict()
 
         # We only want to interpolate dimensions that an actual effect on the lookup table. So if the theta dimension
-        # has length 1, we can't interpolate along that dimension. Put any vectors interpolating along to get the
-        # interpolation to return a 1D vector rather than a ND array. See xarray docs on advanced interpolation
-        # (http://xarray.pydata.org/en/stable/interpolation.html#advanced-interpolation). Use an ordered dictionary so
-        # interpolation happens in the same order all the time.
-        interp_dims = OrderedDict([('date', date), ('age', xr.DataArray(ages, dims='level'))])
+        # has length 1, we can't interpolate along that dimension. We used to use xarray.DataArrays for ages and theta
+        # to create a dummy dimension "level" so that we could index along that later. However, that stopped working 
+        # with v. 2022.06 of xarray. Now we just use regular interpolation and numpy advanced indexing to extract the
+        # diagonal. A numpy array *should* be fine to return. We use an ordered dictionary to ensure interpolation 
+        # happens in the same order all the time (though shouldn't be an issue for Python versions past ~3.6).
+        interp_dims = OrderedDict([('date', date), ('age', ages)])
         if self.strat_has_theta_dep:
-            interp_dims['theta'] = xr.DataArray(theta, dims='level')
+            interp_dims['theta'] = theta
 
         for region in self.age_spec_regions:
             region_arr = self.conc_strat[region]
@@ -1122,12 +1133,12 @@ class MloSmoTraceGasRecord(TraceGasRecord):
             for dim_name, dim_coords in interp_dims.items():
                 tmp_arr = tmp_arr.interp(method='linear', kwargs={'fill_value': 'extrapolate'}, **{dim_name: dim_coords})
             # needed to handle cases without theta dependence - removes theta dimension
-            tmp_arr = tmp_arr.squeeze()
+            tmp_arr = tmp_arr.squeeze().data
 
             # Interpolating each dimension in sequence like this leaves each dimension that had a non-scalar target for
             # interpolation, so we need to get the diagonal which is the actual profile.
             # Also we make diag_inds instead of using np.diag b/c the latter doesn't work in >2 dimensions.
-            diag_inds = tuple([np.arange(tmp_arr.level.size)]*tmp_arr.ndim)
+            diag_inds = tuple([np.arange(tmp_arr.shape[0])]*tmp_arr.ndim)
             gas_by_region[region] = tmp_arr[diag_inds]
 
         gas_conc = gas_by_region['midlat']
