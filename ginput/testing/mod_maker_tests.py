@@ -12,6 +12,7 @@ from . import test_utils
 from ..common_utils import mod_utils, readers
 from ..priors import tccon_priors, map_maker
 from ..mod_maker.mod_maker import driver as mmdriver
+from .. import __version__
 
 
 _mydir = os.path.abspath(os.path.dirname(__file__))
@@ -215,6 +216,7 @@ class FileComparer(object):
 class TestModMaker(unittest.TestCase, FileComparer):
     @classmethod
     def setUpClass(cls):
+        print('Testing version {} from file {}'.format(__version__, __file__))
         # Clean up any old output files
         _clean_up_files_recursive(test_utils.mod_output_dir, r'.*\.mod$')
         _clean_up_files_recursive(test_utils.vmr_output_dir, r'.*\.vmr$')
