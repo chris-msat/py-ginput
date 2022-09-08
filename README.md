@@ -1,5 +1,7 @@
 # Ginput: GGG meteorology and a priori VMR preprocessor
 
+[![DOI](https://data.caltech.edu/badge/534420806.svg)](https://data.caltech.edu/badge/latestdoi/534420806)
+
 ## Copyright notice
 
 Copyright (c) 2022-23 California Institute of Technology (“Caltech”). U.S. Government sponsorship acknowledged.
