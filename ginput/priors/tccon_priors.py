@@ -2739,8 +2739,8 @@ def generate_single_tccon_prior(mod_file_data, utc_offset, concentration_record,
     :type mod_file_data: str or dict
 
     :param utc_offset: a timedelta giving the difference between the ``file_date`` and UTC time. For example, if the
-     ``file_date`` was given in US Pacific Standard Time, this should be ``timedelta(hours=-8). This is used to correct
-     the date to UTC to ensure the CO2 from the right time is used.
+     ``file_date`` was given in US Pacific Standard Time, this should be ``timedelta(hours=-8)``. This is used to
+     correct the date to UTC to ensure the CO2 from the right time is used.
 
     :param concentration_record: which species to generate the prior profile for. Must be the proper subclass of
      TraceGasTropicsRecord for the given species. The latter is useful if you are making multiple calls to this

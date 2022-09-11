@@ -697,7 +697,7 @@ class InsituMonthlyAverager(ABC):
 
         Raises
         ------
-        * :class:`InsituProcessingError` if `hourly_df` does not contain the required data between the end of the
+        :class:`InsituProcessingError` if `hourly_df` does not contain the required data between the end of the
           previous monthly data and the last expected month. If `allow_missing_times` is `True`, then this is not
           raised and a warning is logged instead.
         """
