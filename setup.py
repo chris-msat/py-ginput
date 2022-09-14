@@ -27,4 +27,5 @@ setup(
         'xarray>=0.12.1',
     ],
     packages=find_packages(),
+    include_package_data=True,
 )
