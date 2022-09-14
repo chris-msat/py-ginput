@@ -1,5 +1,9 @@
 # Ginput Version History
 
+## v1.1.7
+
+Installing with pip also includes the ginput/data folder without needing to use the editable mode
+
 ## v1.1.5
 
 **acos_interface version 1.2.2**
