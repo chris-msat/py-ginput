@@ -8,7 +8,7 @@ setup(
     desciption='Python code that creates the .mod and .vmr files used in GGG',
     author='Joshua Laughner, Sebastien Roche, Matthaeus Kiel',
     author_email='jlaugh@caltech.edu',
-    version='1.1.6',  # make sure stays in sync with the version in ginput/__init__.py
+    version='1.1.7',  # make sure stays in sync with the version in ginput/__init__.py
     url='',
     install_requires=[
         'astropy>=3.1.2',
@@ -27,4 +27,5 @@ setup(
         'xarray>=0.12.1',
     ],
     packages=find_packages(),
+    include_package_data=True,
 )
