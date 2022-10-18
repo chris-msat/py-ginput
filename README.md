@@ -58,9 +58,13 @@ they are reasonable.
 ## Documentation
 
 Man pages are created in `man/build/man/` during installation and can be accessed with e.g. `man man/build/man/ginput.1`.
-These may also be added to your MANPATH so that e.g. `man ginput` works, but this is system dependent.
+These may also be added to your MANPATH so that e.g. `man ginput` works, but this is system dependent. Some additional
+documentation is provided on the TCCON wiki:
 
-Online documentation is being developed.
+* [Running ginput](https://tccon-wiki.caltech.edu/Main/UsingGinput)
+* [Code structure](https://tccon-wiki.caltech.edu/Main/GinputCodeStructure)
+
+Full online documentation is being developed.
 
 ## Terms of use
 
