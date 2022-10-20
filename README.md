@@ -4,9 +4,9 @@
 
 ## Copyright notice
 
-Copyright (c) 2022-23 California Institute of Technology (“Caltech”). U.S. Government sponsorship acknowledged.
-
-All rights reserved.
+Copyright (c) 2022, by the California Institute of Technology. ALL RIGHTS RESERVED. United States Government Sponsorship acknowledged. Any commercial use must be negotiated with the Office of Technology Transfer at the California Institute of Technology.
+ 
+This software may be subject to U.S. export control laws. By accepting this software, the user agrees to comply with all applicable U.S. export laws and regulations. User has the responsibility to obtain export licenses, or other export authority as may be required before exporting such information to foreign countries or providing access to foreign persons.
 
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
 
@@ -38,6 +38,33 @@ so you may prefer to use GEOS-FP.
 To verify you have installed and are using `ginput` correctly, we recommend you generate
 at least the .mod and .vmr files for Lamont (site code "oc") on 1 Jan 2018 and compare
 against the pregenerated test files. Differences should be less than ~1%. 
+
+If you have GEOS FP-IT files available on your system, the script 
+`ginput/testing/test_input_data/geosfp-it/link_geos_fpit_files.sh` will help link them 
+to the correct location in this repo to run the automatic test case. `cd` to 
+`ginput/testing/test_input_data/geosfp-it/` and run `./link_geos_fpit_files.sh --help`
+to see its usage. This requires the following files:
+
+* The 8 model level assimilated quantity files for 2018-01-01 (`GEOS.fpit.asm.inst3_3d_asm_Nv.GEOS5124.20180101*.nc4`)
+* The 8 2D assimilated quantity files for 2018-01-01 (`GEOS.fpit.asm.inst3_2d_asm_Nx.GEOS5124.20180101*.nc4`)
+* The 8 model level chemistry files for 2018-01-01 (`GEOS.fpit.asm.inst3_3d_chm_Nv.GEOS5124.20180101*.nc4`)
+
+To run the test, the easiest way is to activate the conda environment that `ginput` was installed
+in (`ginput-auto-default` if installed with `make install`) and run `make test`. This will take
+several minutes to run. If tests fail because the output .mod/.vmr/.map files do not match the expected,
+plots will be generated in `ginput/testing/plots` for you to inspect the differences and verify that
+they are reasonable.
+
+## Documentation
+
+Man pages are created in `man/build/man/` during installation and can be accessed with e.g. `man man/build/man/ginput.1`.
+These may also be added to your MANPATH so that e.g. `man ginput` works, but this is system dependent. Some additional
+documentation is provided on the TCCON wiki:
+
+* [Running ginput](https://tccon-wiki.caltech.edu/Main/UsingGinput)
+* [Code structure](https://tccon-wiki.caltech.edu/Main/GinputCodeStructure)
+
+Full online documentation is being developed.
 
 ## Terms of use
 
