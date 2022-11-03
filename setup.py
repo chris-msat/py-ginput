@@ -5,7 +5,7 @@ _mydir = os.path.dirname(__file__)
 
 setup(
     name='GInput',
-    desciption='Python code that creates the .mod and .vmr files used in GGG',
+    description='Python code that creates the .mod and .vmr files used in GGG',
     author='Joshua Laughner, Sebastien Roche, Matthaeus Kiel',
     author_email='jlaugh@caltech.edu',
     version='1.1.7',  # make sure stays in sync with the version in ginput/__init__.py
