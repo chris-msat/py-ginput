@@ -215,6 +215,7 @@ def parse_args(parser=None):
         am_i_main = False
 
     parser.add_argument('date_range', type=dlutils.parse_date_range_no_hm, help=dlutils.date_range_cl_help(False))
+    parser.add_argument('--list-only', action='store_true', help='Only generate the list of URLs to download')
     _add_common_args(parser)
     parser.epilog = 'If both --filetypes and --levels are omitted, then the legacy behavior is to download met data ' \
                     'for the surface and on fixed pressure levels. However, if one is given, then both must be given.'
@@ -290,7 +291,7 @@ def runlog_driver(runlog, path='', mode='FP', filetypes=_default_file_type, leve
 
 
 def driver(date_range, mode='FP', path='.', filetypes=_default_file_type, levels=_default_level_type,
-           gridtypes=_default_grid_type,log_file=sys.stdout, verbosity=0, **kwargs):
+           gridtypes=_default_grid_type,log_file=sys.stdout, verbosity=0, list_only=False, **kwargs):
     """
     Run get_GEOS5 as if called from the command line.
 
@@ -343,8 +344,9 @@ def driver(date_range, mode='FP', path='.', filetypes=_default_file_type, levels
             os.makedirs(outpath)
 
         _func_dict[mode](start, end, filetype=ftype, levels=ltype, gridtype=gtype, outpath=os.path.join(outpath, 'getGEOS.dat'))
-        for line in execute(wget_cmd.split(), cwd=outpath):
-            print(line, end="", file=log_file)
+        if not list_only:
+            for line in execute(wget_cmd.split(), cwd=outpath):
+                print(line, end="", file=log_file)
 
 
 ########
