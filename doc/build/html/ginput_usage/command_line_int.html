@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ginput command line interface &mdash; ginput 1.1.6 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Downloading met files" href="downloading_met.html" />
+    <link rel="prev" title="Welcome to ginput’s documentation!" href="../index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> ginput
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Using ginput:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Ginput command line interface</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#downloading-met-data">Downloading met data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#generating-model-files">Generating model files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#generating-vmr-files">Generating VMR files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#generating-map-files">Generating .map files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#updating-input-noaa-data">Updating input NOAA data</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="downloading_met.html">Downloading met files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="making_mod_files.html">Making model files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="making_vmr_files.html">Making VMR files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="making_map_files.html">Making .map and .map.nc files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="updating_noaa.html">Updating NOAA input data</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">ginput code overview:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../code_design/sat_interface.html">Satellite priors interface</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">ginput API documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api/tccon_priors.html">tccon_priors module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api/mlo_smo_prep.html">mlo_smo_prep module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api/acos_interface.html">acos_interface module</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">ginput</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>Ginput command line interface</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/ginput_usage/command_line_int.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="ginput-command-line-interface">
+<h1>Ginput command line interface<a class="headerlink" href="#ginput-command-line-interface" title="Permalink to this heading"></a></h1>
+<p>If you installed <code class="docutils literal notranslate"><span class="pre">ginput</span></code> using:</p>
+<ul class="simple">
+<li><p>the <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">install</span></code> command,</p></li>
+<li><p>the <code class="docutils literal notranslate"><span class="pre">install.sh</span></code> script, or</p></li>
+<li><p>you ran the <code class="docutils literal notranslate"><span class="pre">install-runscript.sh</span></code> script with the proper Conda environment active,</p></li>
+</ul>
+<p>then there will be a <code class="docutils literal notranslate"><span class="pre">run_ginput.py</span></code> script in the root directory of the <code class="docutils literal notranslate"><span class="pre">ginput</span></code> repo. This is the main entry point to run <code class="docutils literal notranslate"><span class="pre">ginput</span></code> from the command line. To see all the possible options, call it as <code class="docutils literal notranslate"><span class="pre">./run_ginput.py</span> <span class="pre">--help</span></code> from the root directory of the <code class="docutils literal notranslate"><span class="pre">ginput</span></code> repo. This prints out all the possible subcommands:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ ./run_ginput.py --help
+
+usage: run_ginput.py [-h] {oco,acos,geocarb,update_hourly,mod,tccon-mod,rlmod,tccon-rlmod,vmr,rlvmr,getg5,get-rl-g5,map,sample-model} ...
+
+Call various pieces of ginput
+
+positional arguments:
+  {oco,acos,geocarb,update_hourly,mod,tccon-mod,rlmod,tccon-rlmod,vmr,rlvmr,getg5,get-rl-g5,map,sample-model}
+                        The following subcommands execute different parts of ginput
+    oco                 Generate .h5 file for input into the OCO algorithm
+    acos                Generate .h5 file for input into the GOSAT algorithm
+    geocarb             Generate .h5 file for input into the GeoCarb algorithm
+    update_hourly       Update monthly input CO2 files with new NOAA hourly data
+    mod                 Generate .mod (model) files for GGG
+    tccon-mod           Generate .mod (model) files appropriate for use with TCCON GGG2020 retrievals.
+    rlmod               Generate .mod (model) files for spectra enumerated in a runlog
+    tccon-rlmod         Generate .mod (model) files appropriate for use with TCCON GGG2020 retrievals for spectra enumerated in a runlog.
+    vmr                 Generate full .vmr files for GGG
+    rlvmr               Generate .vmr files from a runlog
+    getg5               Download GEOS5 FP or FP-IT data
+    get-rl-g5           Download GEOS5 FP or FP-IT data for spectra in a runlog
+    map                 Generate .map (a priori) files.
+</pre></div>
+</div>
+<p>In the above example, <code class="docutils literal notranslate"><span class="pre">run_ginput.py</span></code> is called as <code class="docutils literal notranslate"><span class="pre">./run_ginput.py</span></code> and <em>not</em> <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">run_ginput.py</span></code>. This is because when <code class="docutils literal notranslate"><span class="pre">run_ginput.py</span></code> is created it is given a <a class="reference external" href="https://en.wikipedia.org/wiki/Shebang_(Unix)">shebang</a> that points to the Python executable in the correct Conda environment. That’s why you can run it as <code class="docutils literal notranslate"><span class="pre">./run_ginput.py</span></code> without activating the Conda environment that <code class="docutils literal notranslate"><span class="pre">ginput</span></code> was installed it first, whereas if you tried to call it as <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">run_ginput.py</span></code> you <em>would</em> have to activate the right environment.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The command line help is more likely to be up-to-date than this page. If you notice a discrepancy between the command line help and this page, please <a class="reference external" href="https://github.com/TCCON/py-ginput/issues">open an issue</a>.</p>
+</div>
+<p>Each subcommand represents one action that <code class="docutils literal notranslate"><span class="pre">ginput</span></code> can perform. You can get command line help for any subcommand, by calling the subcommand with the <code class="docutils literal notranslate"><span class="pre">--help</span></code> argument, e.g.:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ ./run_ginput getg5 --help
+
+usage: run_ginput.py getg5 [-h] [--mode {FP,FPIT,GEOSIT}] [--path PATH] [-t {met,chm}] [-l {surf,p,eta}] [-g {L,C}] date_range
+
+Download GEOSFP or GEOSFP-IT reanalysis met data
+
+positional arguments:
+  date_range            The range of dates to get, in YYYYMMDD-YYYYMMDD format. The second date may be omitted, in which case the end date will be one day after the first date. The end date is not included in the
+                        range.
+
+options:
+  -h, --help            show this help message and exit
+  --mode {FP,FPIT,GEOSIT}
+                        Which GEOS product to get. The default is FP. Note that to retrieve FP-IT data requires a subscription with NASA (https://gmao.gsfc.nasa.gov/GMAO_products/)
+  --path PATH           Where to download the GEOS data to, &quot;.&quot; by default. Data will be placed in Np, Nv, and Nx subdirectories automatically created in this directory.
+  -t {met,chm}, --filetypes {met,chm}
+                        Which file types to download. Works in conjunction with --levels to determine which files to download.
+  -l {surf,p,eta}, --levels {surf,p,eta}
+                        Which level type to download. Note that only &quot;eta&quot; levels are available for the &quot;chm&quot; file type.
+  -g {L,C}, --gridtypes {L,C}
+                        used to specify the grid type when downloading GEOS-IT files, L for lat-lon and C for cubed-sphere
+
+If both --filetypes and --levels are omitted, then the legacy behavior is to download met data for the surface and on fixed pressure levels. However, if one is given, then both must be given.
+</pre></div>
+</div>
+<p>These subcommands can be divided into several groups.</p>
+<section id="downloading-met-data">
+<h2>Downloading met data<a class="headerlink" href="#downloading-met-data" title="Permalink to this heading"></a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">getg5</span></code> and <code class="docutils literal notranslate"><span class="pre">get-rl-g5</span></code> subcommands help to download the GEOS-5 meteorology data the <code class="docutils literal notranslate"><span class="pre">ginput</span></code> ingests to produce met and a priori trace gas profile files. <code class="docutils literal notranslate"><span class="pre">getg5</span></code> allows you to download files for specific dates, while <code class="docutils literal notranslate"><span class="pre">get-rl-g5</span></code> allows users running GGG to download the met files required for a GGG <a class="reference external" href="https://tccon-wiki.caltech.edu/Main/RunLog">runlog</a> (login required).</p>
+<p>For more information, see <a class="reference internal" href="downloading_met.html#usage-dl-met"><span class="std std-ref">Downloading met files</span></a>.</p>
+</section>
+<section id="generating-model-files">
+<h2>Generating model files<a class="headerlink" href="#generating-model-files" title="Permalink to this heading"></a></h2>
+<p>In GGG, the meteorology data must be converted to <code class="file docutils literal notranslate"><span class="pre">.mod</span></code> files, which store the met variable profiles in a simple text format that GGG can read. There are four subcommands for generating these file:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">tccon-mod</span></code> - generate these files for date ranges using standard settings to generate TCCON-GGG2020-style priors.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mod</span></code> - generate these files for date ranges with more flexibility in options.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tccon-rlmod</span></code> - similar to <code class="docutils literal notranslate"><span class="pre">tccon-mod</span></code>, but generates the model files needed by a GGG runlog instead of for a given set of dates.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rlmod</span></code> - similar to <code class="docutils literal notranslate"><span class="pre">mod</span></code>, but generates the model files needed by a GGG runlog instead of for a given set of dates.</p></li>
+</ul>
+<p>For more information, see <a class="reference internal" href="making_mod_files.html#usage-mod"><span class="std std-ref">Making model files</span></a>.</p>
+</section>
+<section id="generating-vmr-files">
+<h2>Generating VMR files<a class="headerlink" href="#generating-vmr-files" title="Permalink to this heading"></a></h2>
+<p>In GGG, a priori trace gas profiles must be written to <code class="file docutils literal notranslate"><span class="pre">.vmr</span></code> files, which like the <code class="file docutils literal notranslate"><span class="pre">.mod</span></code> files, store these profiles in a simple text format for GGG to read. This step requires that the <code class="file docutils literal notranslate"><span class="pre">.mod</span></code> files for the times you are generating files for exist. There are two subcommands related to generating <code class="file docutils literal notranslate"><span class="pre">.vmr</span></code> files:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">vmr</span></code> - generate these files for a specific date range</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rlvmr</span></code> - generate these files for the times needed by a GGG runlog instead of a given set of dates.</p></li>
+</ul>
+<p>For more information, see <a class="reference internal" href="making_vmr_files.html#usage-vmr"><span class="std std-ref">Making VMR files</span></a>.</p>
+</section>
+<section id="generating-map-files">
+<h2>Generating .map files<a class="headerlink" href="#generating-map-files" title="Permalink to this heading"></a></h2>
+<p>In contrast to the <code class="file docutils literal notranslate"><span class="pre">.mod</span></code> and <code class="file docutils literal notranslate"><span class="pre">.vmr</span></code> files, <code class="file docutils literal notranslate"><span class="pre">.map</span></code> files are not inputs to GGG but were traditionally output by the post processing. These contain the key trace gas a priori profiles used by GGG. Because some groups rely on these files, <code class="docutils literal notranslate"><span class="pre">ginput</span></code> includes the capability to generate them without needing to run the <code class="docutils literal notranslate"><span class="pre">gsetup</span></code> and <code class="docutils literal notranslate"><span class="pre">write_aux</span></code> programs within GGG. There is only one subcommand related to writing these files, <code class="docutils literal notranslate"><span class="pre">map</span></code>.</p>
+<p>See <a class="reference internal" href="making_map_files.html#usage-map"><span class="std std-ref">Making .map and .map.nc files</span></a> for more information.</p>
+</section>
+<section id="updating-input-noaa-data">
+<h2>Updating input NOAA data<a class="headerlink" href="#updating-input-noaa-data" title="Permalink to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">ginput</span></code> relies on timeseries of CO2, N2O, and CH4 from NOAA observatories in Mauna Loa, Hawaii, USA and American Samoa to capture the atmospheric growth of these gases. The repo includes flask files for these gases from 2018 and has the capability to extrapolate forward in time; however, extrapolation will have larger errors than using more recent flask or in situ data. This tool allows users to update files using more rapidly delivered data from NOAA.</p>
+<p>See <a class="reference internal" href="updating_noaa.html#usage-update-noaa"><span class="std std-ref">Updating NOAA input data</span></a> for more information.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>The version of the CO2 flask data included in ginput v1.1.7 is still on the X2007 scale. If you need to switch to the X2019 scale, see <a class="reference internal" href="updating_noaa.html#usage-noaa-more-recent"><span class="std std-ref">this section</span></a> in the <a class="reference internal" href="updating_noaa.html#usage-update-noaa"><span class="std std-ref">Updating NOAA input data</span></a> page.</p>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../index.html" class="btn btn-neutral float-left" title="Welcome to ginput’s documentation!" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="downloading_met.html" class="btn btn-neutral float-right" title="Downloading met files" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Joshua Laughner and Sebastien Roche.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,4 +1,5 @@
-# Generating .map and .map.nc files
+(usage-map)=
+# Making .map and .map.nc files
 
 `.map` (*m*odel *a p*riori) files are a condensed file format that stores the a priori VMR profiles used by GGG.
 These files aren't actually read by GGG, but are used to distribute the key a priori profiles to users who do

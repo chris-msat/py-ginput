@@ -12,3 +12,6 @@ ginput/testing/plots/.*.pdf
 run_ginput.py
 # this will need to be unignored later
 ^docs
+build/**/*
+dist/**/*
+.condaenv/**/*

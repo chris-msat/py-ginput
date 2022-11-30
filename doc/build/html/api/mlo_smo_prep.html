@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mlo_smo_prep module &mdash; ginput 1.1.6 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="acos_interface module" href="acos_interface.html" />
+    <link rel="prev" title="tccon_priors module" href="tccon_priors.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> ginput
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Using ginput:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/command_line_int.html">Ginput command line interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/downloading_met.html">Downloading met files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/making_mod_files.html">Making model files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/making_vmr_files.html">Making VMR files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/making_map_files.html">Making .map and .map.nc files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/updating_noaa.html">Updating NOAA input data</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">ginput code overview:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../code_design/sat_interface.html">Satellite priors interface</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">ginput API documentation:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="tccon_priors.html">tccon_priors module</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">mlo_smo_prep module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager"><code class="docutils literal notranslate"><span class="pre">InsituMonthlyAverager</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager.class_site"><code class="docutils literal notranslate"><span class="pre">InsituMonthlyAverager.class_site()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager.convert"><code class="docutils literal notranslate"><span class="pre">InsituMonthlyAverager.convert()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager.get_new_hourly_data"><code class="docutils literal notranslate"><span class="pre">InsituMonthlyAverager.get_new_hourly_data()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager.select_background"><code class="docutils literal notranslate"><span class="pre">InsituMonthlyAverager.select_background()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager.write_monthly_insitu"><code class="docutils literal notranslate"><span class="pre">InsituMonthlyAverager.write_monthly_insitu()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.InsituProcessingError"><code class="docutils literal notranslate"><span class="pre">InsituProcessingError</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.MloBackgroundMode"><code class="docutils literal notranslate"><span class="pre">MloBackgroundMode</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.MloMonthlyAverager"><code class="docutils literal notranslate"><span class="pre">MloMonthlyAverager</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.MloMonthlyAverager.class_site"><code class="docutils literal notranslate"><span class="pre">MloMonthlyAverager.class_site()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.MloMonthlyAverager.select_background"><code class="docutils literal notranslate"><span class="pre">MloMonthlyAverager.select_background()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.MloPrelimMode"><code class="docutils literal notranslate"><span class="pre">MloPrelimMode</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.SmoMonthlyAverager"><code class="docutils literal notranslate"><span class="pre">SmoMonthlyAverager</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.SmoMonthlyAverager.class_site"><code class="docutils literal notranslate"><span class="pre">SmoMonthlyAverager.class_site()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.SmoMonthlyAverager.select_background"><code class="docutils literal notranslate"><span class="pre">SmoMonthlyAverager.select_background()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.compute_wind_for_times"><code class="docutils literal notranslate"><span class="pre">compute_wind_for_times()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.get_smo_winds_from_file"><code class="docutils literal notranslate"><span class="pre">get_smo_winds_from_file()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.merge_insitu_with_wind"><code class="docutils literal notranslate"><span class="pre">merge_insitu_with_wind()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.mlo_background_selection"><code class="docutils literal notranslate"><span class="pre">mlo_background_selection()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.monthly_avg_rapid_data"><code class="docutils literal notranslate"><span class="pre">monthly_avg_rapid_data()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.noaa_prelim_flagging"><code class="docutils literal notranslate"><span class="pre">noaa_prelim_flagging()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.read_hourly_insitu"><code class="docutils literal notranslate"><span class="pre">read_hourly_insitu()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.read_surface_file"><code class="docutils literal notranslate"><span class="pre">read_surface_file()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.smo_wind_filter"><code class="docutils literal notranslate"><span class="pre">smo_wind_filter()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="acos_interface.html">acos_interface module</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">ginput</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>mlo_smo_prep module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/mlo_smo_prep.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-ginput.priors.mlo_smo_prep">
+<span id="mlo-smo-prep-module"></span><h1>mlo_smo_prep module<a class="headerlink" href="#module-ginput.priors.mlo_smo_prep" title="Permalink to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.InsituMonthlyAverager">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ginput.priors.mlo_smo_prep.</span></span><span class="sig-name descname"><span class="pre">InsituMonthlyAverager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">clobber:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_settings:</span> <span class="pre">~ginput.priors.mlo_smo_prep.RunSettings</span> <span class="pre">=</span> <span class="pre">&lt;ginput.priors.mlo_smo_prep.RunSettings</span> <span class="pre">object&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager" title="Permalink to this definition"></a></dt>
+<dd><p>Abstract class that handles most of the logic for updating MLO or SMO monthly average files.</p>
+<p>To implement a site-specific concrete averager, only two methods need implemented: <a class="reference internal" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager.class_site" title="ginput.priors.mlo_smo_prep.InsituMonthlyAverager.class_site"><code class="xref py py-meth docutils literal notranslate"><span class="pre">class_site()</span></code></a>
+(a class method that returns the site code, e.g. “MLO” or “SMO”) and <a class="reference internal" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager.select_background" title="ginput.priors.mlo_smo_prep.InsituMonthlyAverager.select_background"><code class="xref py py-meth docutils literal notranslate"><span class="pre">select_background()</span></code></a>, which
+takes in an hourly dataframe and returns one with only background data left as rows.</p>
+<p>To update a monthly file, use the <a class="reference internal" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager.convert" title="ginput.priors.mlo_smo_prep.InsituMonthlyAverager.convert"><code class="xref py py-meth docutils literal notranslate"><span class="pre">convert()</span></code></a> method.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.InsituMonthlyAverager.class_site">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">class_site</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager.class_site" title="Permalink to this definition"></a></dt>
+<dd><p>Returns the site code (e.g. “MLO”) for the class.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.InsituMonthlyAverager.convert">
+<span class="sig-name descname"><span class="pre">convert</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">noaa_hourly_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">previous_monthly_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_monthly_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager.convert" title="Permalink to this definition"></a></dt>
+<dd><p>Convert a NOAA hourly file to monthly averages and append to the end of an existing file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>noaa_hourly_file</strong> – Path to the NOAA hourly file to use to update <cite>previous_monthly_file</cite>.</p></li>
+<li><p><strong>previous_monthly_file</strong> – Path to the previous monthly averages file, the output file will copy its existing data
+and append new monthly average(s) to the end.</p></li>
+<li><p><strong>output_monthly_file</strong> – Path to write the output file</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Writes to <cite>output_monthly_file</cite></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.InsituMonthlyAverager.get_new_hourly_data">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_new_hourly_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">monthly_df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hourly_df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last_expected_month</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Timestamp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">allow_missing_times</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">creation_month</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Timestamp</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">limit_to_avail_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">DataFrame</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">DatetimeIndex</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager.get_new_hourly_data" title="Permalink to this definition"></a></dt>
+<dd><p>Get the subset of <cite>hourly_df</cite> that has new data to append to the end of <cite>monthly_df</cite></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>monthly_df</strong> – A dataframe of monthly-averaged data from the previous monthly-average file that is being updated.</p></li>
+<li><p><strong>hourly_df</strong> – A dataframe of new hourly data, not yet filtered for good-quality data. It must contain all hours
+for the months it is to add.</p></li>
+<li><p><strong>last_expected_month</strong> – The last month required to have data in the hourly file. Note that this data may be all fill values,
+it only requires that this month and all months after the end of the previous monthly data be present.</p></li>
+<li><p><strong>allow_missing_times</strong> – By default, an error is raised if any of the expected data is not present in the hourly file. Setting
+this to <cite>True</cite> reduces that error to a warning.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><em>pd.DataFrame</em> – The subset of <cite>hourly_df</cite> that is new and good quality.</p></li>
+<li><p><em>pd.DatetimeIndex</em> – A sequence of dates that are the first of the month for every month to be added by the first return
+value.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#ginput.priors.mlo_smo_prep.InsituProcessingError" title="ginput.priors.mlo_smo_prep.InsituProcessingError"><strong>InsituProcessingError</strong></a> – previous monthly data and the last expected month. If <cite>allow_missing_times</cite> is <cite>True</cite>, then this is not
+    raised and a warning is logged instead.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.InsituMonthlyAverager.select_background">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">select_background</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hourly_df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager.select_background" title="Permalink to this definition"></a></dt>
+<dd><p>Select only background data from an hourly dataframe.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>hourly_df</strong> – The dataframe with all good-quality hourly data</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A dataframe with only background data kept.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.InsituMonthlyAverager.write_monthly_insitu">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">write_monthly_insitu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">monthly_df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">previous_monthly_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_hourly_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_months</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DatetimeIndex</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clobber</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager.write_monthly_insitu" title="Permalink to this definition"></a></dt>
+<dd><p>Write a new monthly average file</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>output_file</strong> – Path to write to</p></li>
+<li><p><strong>monthly_df</strong> – Dataframe with the monthly data to write; must have four columns: site, year, month, value.</p></li>
+<li><p><strong>previous_monthly_file</strong> – Path to the previous monthly file</p></li>
+<li><p><strong>new_hourly_file</strong> – Path to the hourly file used for this update</p></li>
+<li><p><strong>new_months</strong> – A sequence of datetimes giving the first of each month added</p></li>
+<li><p><strong>clobber</strong> – Whether to allow overwriting the output file if it already exists.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.InsituProcessingError">
+<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ginput.priors.mlo_smo_prep.</span></span><span class="sig-name descname"><span class="pre">InsituProcessingError</span></span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.InsituProcessingError" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.MloBackgroundMode">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ginput.priors.mlo_smo_prep.</span></span><span class="sig-name descname"><span class="pre">MloBackgroundMode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.MloBackgroundMode" title="Permalink to this definition"></a></dt>
+<dd><p>An enumeration.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.MloMonthlyAverager">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ginput.priors.mlo_smo_prep.</span></span><span class="sig-name descname"><span class="pre">MloMonthlyAverager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">background_method=MloBackgroundMode.TIME_AND_PRELIM</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clobber=False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_settings:</span> <span class="pre">~ginput.priors.mlo_smo_prep.RunSettings</span> <span class="pre">=</span> <span class="pre">&lt;ginput.priors.mlo_smo_prep.RunSettings</span> <span class="pre">object&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.MloMonthlyAverager" title="Permalink to this definition"></a></dt>
+<dd><dl class="py method">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.MloMonthlyAverager.class_site">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">class_site</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.MloMonthlyAverager.class_site" title="Permalink to this definition"></a></dt>
+<dd><p>Returns the site code (e.g. “MLO”) for the class.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.MloMonthlyAverager.select_background">
+<span class="sig-name descname"><span class="pre">select_background</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hourly_df</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.MloMonthlyAverager.select_background" title="Permalink to this definition"></a></dt>
+<dd><p>Select only background data from an hourly dataframe.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>hourly_df</strong> – The dataframe with all good-quality hourly data</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A dataframe with only background data kept.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.MloPrelimMode">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ginput.priors.mlo_smo_prep.</span></span><span class="sig-name descname"><span class="pre">MloPrelimMode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.MloPrelimMode" title="Permalink to this definition"></a></dt>
+<dd><p>An enumeration.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.SmoMonthlyAverager">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ginput.priors.mlo_smo_prep.</span></span><span class="sig-name descname"><span class="pre">SmoMonthlyAverager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">smo_wind_file:</span> <span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clobber:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_settings:</span> <span class="pre">~ginput.priors.mlo_smo_prep.RunSettings</span> <span class="pre">=</span> <span class="pre">&lt;ginput.priors.mlo_smo_prep.RunSettings</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">allow_missing_geos_files:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.SmoMonthlyAverager" title="Permalink to this definition"></a></dt>
+<dd><dl class="py method">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.SmoMonthlyAverager.class_site">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">class_site</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.SmoMonthlyAverager.class_site" title="Permalink to this definition"></a></dt>
+<dd><p>Returns the site code (e.g. “MLO”) for the class.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.SmoMonthlyAverager.select_background">
+<span class="sig-name descname"><span class="pre">select_background</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hourly_df</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.SmoMonthlyAverager.select_background" title="Permalink to this definition"></a></dt>
+<dd><p>Select only background data from an hourly dataframe.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>hourly_df</strong> – The dataframe with all good-quality hourly data</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A dataframe with only background data kept.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.compute_wind_for_times">
+<span class="sig-prename descclassname"><span class="pre">ginput.priors.mlo_smo_prep.</span></span><span class="sig-name descname"><span class="pre">compute_wind_for_times</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">wind_file:</span> <span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">times:</span> <span class="pre">~pandas.core.indexes.datetimes.DatetimeIndex</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wind_alt:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_settings:</span> <span class="pre">~ginput.priors.mlo_smo_prep.RunSettings</span> <span class="pre">=</span> <span class="pre">&lt;ginput.priors.mlo_smo_prep.RunSettings</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">allow_missing_geos_files:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.compute_wind_for_times" title="Permalink to this definition"></a></dt>
+<dd><p>Compute winds for specific times from a file already interpolated to a specific lat/lon</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>wind_file</strong> – <p>Either:</p>
+<ol class="arabic simple">
+<li><p>A file containing a list of GEOS FP-IT surface files that span the times
+in the <cite>times</cite> input, or</p></li>
+<li><p>A file summarizing the GEOS FP-IT surface variables at the SMO lat/lon.
+It must have <cite>UxM</cite> and <cite>VxM</cite> variables, where “x” is the wind altitude
+(see <cite>wind_alt</cite>)</p></li>
+</ol>
+</p></li>
+<li><p><strong>times</strong> – Times to interpolate to.</p></li>
+<li><p><strong>wind_alt</strong> – Which surface wind altitude (2, 10, or 50 meters usually) to use. This will
+look for variables named e.g. U10M and V10M in the GEOS file(s), with the
+number changing based on the altitude.</p></li>
+<li><p><strong>run_settings</strong> – A <code class="xref py py-class docutils literal notranslate"><span class="pre">RunSettings</span></code> instance that carries configuration.</p></li>
+<li><p><strong>allow_missing_geos_files</strong> – Set to <cite>True</cite> to allow this function to complete if any of the expected
+GEOS files were missing. By default an error is raised.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Data frame with the U and V wind vectors, wind velocity, and wind direction
+indexed by time. The vectors and velocity will have the same units as in the
+<cite>winds_file</cite> (usually meters/second) and the wind direction uses the convention
+of what direction the wind is coming FROM in degrees clockwise from north.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>10 is the default <cite>wind_alt</cite> because Waterman et al. 1989 (JGR, vol. 94, pp. 14817–14829)
+indicates in the “Air intake and topography” section that sampling heights between 6 and
+18 meters were suitable.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.get_smo_winds_from_file">
+<span class="sig-prename descclassname"><span class="pre">ginput.priors.mlo_smo_prep.</span></span><span class="sig-name descname"><span class="pre">get_smo_winds_from_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">winds_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wind_alt</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dataset</span></span></span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.get_smo_winds_from_file" title="Permalink to this definition"></a></dt>
+<dd><p>Get surface winds interpolated to SMO lat/lon from GEOS surface files.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>wind_file</strong> – Path to a file that lists GEOS surface files, one per line. All GEOS files between the
+day floor and day ceiling of the times in <cite>insitu_df</cite> must be included. That is, if
+<cite>insitu_df</cite> has data from 2021-08-02 16:00 to 2021-08-28 19:00 UTC, then GEOS files
+from 2021-08-02 00:00 to 2021-08-29 00:00 UTC are required.</p></li>
+<li><p><strong>wind_alt</strong> – Which altitude above the surface to draw winds from. 10 meters is the default as that is
+close to tha altitude of the NOAA sampling intake (see <a class="reference internal" href="#ginput.priors.mlo_smo_prep.compute_wind_for_times" title="ginput.priors.mlo_smo_prep.compute_wind_for_times"><code class="xref py py-func docutils literal notranslate"><span class="pre">compute_wind_for_times()</span></code></a>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>An xarray dataset containing ‘u’ and ‘v’ variables index by time.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>xr.Dataset</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.merge_insitu_with_wind">
+<span class="sig-prename descclassname"><span class="pre">ginput.priors.mlo_smo_prep.</span></span><span class="sig-name descname"><span class="pre">merge_insitu_with_wind</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">insitu_df:</span> <span class="pre">~pandas.core.frame.DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wind_file:</span> <span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wind_alt:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_settings:</span> <span class="pre">~ginput.priors.mlo_smo_prep.RunSettings</span> <span class="pre">=</span> <span class="pre">&lt;ginput.priors.mlo_smo_prep.RunSettings</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">allow_missing_geos_files:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.merge_insitu_with_wind" title="Permalink to this definition"></a></dt>
+<dd><p>Merge an in situ hourly dataframe with SMO data with GEOS surface winds</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>insitu_df</strong> – The SMO hourly dataframe.</p></li>
+<li><p><strong>wind_file</strong> – Path to a file that lists GEOS surface files, one per line. All GEOS files between the
+day floor and day ceiling of the times in <cite>insitu_df</cite> must be included. That is, if
+<cite>insitu_df</cite> has data from 2021-08-02 16:00 to 2021-08-28 19:00 UTC, then GEOS files
+from 2021-08-02 00:00 to 2021-08-29 00:00 UTC are required.</p></li>
+<li><p><strong>wind_alt</strong> – Which altitude above the surface to draw winds from. 10 meters is the default as that is
+close to tha altitude of the NOAA sampling intake (see <a class="reference internal" href="#ginput.priors.mlo_smo_prep.compute_wind_for_times" title="ginput.priors.mlo_smo_prep.compute_wind_for_times"><code class="xref py py-func docutils literal notranslate"><span class="pre">compute_wind_for_times()</span></code></a>)</p></li>
+<li><p><strong>run_settings</strong> – A <code class="xref py py-class docutils literal notranslate"><span class="pre">RunSettings</span></code> instance that carries configuration for extra outputs.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The <cite>insitu_df</cite> with columns for wind speed, velocity, u-component, and v-component
+added, each interpolated to the times in the <cite>insitu_df</cite>.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.mlo_background_selection">
+<span class="sig-prename descclassname"><span class="pre">ginput.priors.mlo_smo_prep.</span></span><span class="sig-name descname"><span class="pre">mlo_background_selection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mlo_df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.MloBackgroundMode" title="ginput.priors.mlo_smo_prep.MloBackgroundMode"><span class="pre">MloBackgroundMode</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.mlo_background_selection" title="Permalink to this definition"></a></dt>
+<dd><p>Limit a Mauna Loa hourly dataframe to background data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mlo_df</strong> – The MLO hourly dataframe.</p></li>
+<li><p><strong>method</strong> – <p>How to do the background selection. The two enum variants are:</p>
+<ul>
+<li><p><cite>TIME_AND_SIGMA</cite>: limit to midnight to 7a local time and where the standard
+deviation is less than 0.3 ppm.</p></li>
+<li><p><cite>TIME_AND_PRELIM</cite>: limit to midnight to 7a local time and where
+<a class="reference internal" href="#ginput.priors.mlo_smo_prep.noaa_prelim_flagging" title="ginput.priors.mlo_smo_prep.noaa_prelim_flagging"><code class="xref py py-func docutils literal notranslate"><span class="pre">noaa_prelim_flagging()</span></code></a> would keep the data.</p></li>
+</ul>
+</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><cite>mlo_df</cite> with non-background rows removed.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.monthly_avg_rapid_data">
+<span class="sig-prename descclassname"><span class="pre">ginput.priors.mlo_smo_prep.</span></span><span class="sig-name descname"><span class="pre">monthly_avg_rapid_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">year_field</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">month_field</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.monthly_avg_rapid_data" title="Permalink to this definition"></a></dt>
+<dd><p>Compute monthly averages from an hourly dataframe</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df</strong> – The hourly dataframe to compute from</p></li>
+<li><p><strong>year_field</strong> – Which column in the dataframe gives the year. If this is <cite>None</cite>, will try
+to find a column containing “year”.</p></li>
+<li><p><strong>month_field</strong> – Which column in the dataframe gives the month. If this is <cite>None</cite>, will try
+to find a column containing “month”.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The input dataframe averaged to months, with the index set to datetimes at the start of each month.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.noaa_prelim_flagging">
+<span class="sig-prename descclassname"><span class="pre">ginput.priors.mlo_smo_prep.</span></span><span class="sig-name descname"><span class="pre">noaa_prelim_flagging</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">noaa_df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hr_std_dev_max</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hr2hr_diff_max</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.25</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.MloPrelimMode" title="ginput.priors.mlo_smo_prep.MloPrelimMode"><span class="pre">MloPrelimMode</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">MloPrelimMode.TIME_RELAXED_DIFF_EITHER</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">full_output</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.noaa_prelim_flagging" title="Permalink to this definition"></a></dt>
+<dd><p>Do preliminary selection of background data for NOAA houly in situ data</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>noaa_df</strong> – A NOAA hourly dataframe read by <a class="reference internal" href="#ginput.priors.mlo_smo_prep.read_hourly_insitu" title="ginput.priors.mlo_smo_prep.read_hourly_insitu"><code class="xref py py-func docutils literal notranslate"><span class="pre">read_hourly_insitu()</span></code></a>.</p></li>
+<li><p><strong>hr_std_dev_max</strong> – The maximum standard deviation allowed within one hourly data point for it to be kept.</p></li>
+<li><p><strong>hr2hr_diff_max</strong> – Maximum allowed difference between adjacent hourly points for them to be retained. How this
+is interpreted depends on <cite>mode</cite>.</p></li>
+<li><p><strong>mode</strong> – <p>Controls how the hour-to-hour differences are used to reject data points. The different
+<a class="reference internal" href="#ginput.priors.mlo_smo_prep.MloPrelimMode" title="ginput.priors.mlo_smo_prep.MloPrelimMode"><code class="xref py py-class docutils literal notranslate"><span class="pre">MloPrelimMode</span></code></a> variants mean:</p>
+<ul>
+<li><p><cite>TIME_RELAXED_DIFF_EITHER</cite>: Keep points when the difference with either adjacent point
+is less than <cite>hr2hr_diff_max</cite>. If the time difference is &gt;1 hour (due to the standard
+deviation or flagging), do not count that VMR difference.</p></li>
+<li><p><cite>TIME_RELAXED_DIFF_BOTH</cite>: Only keep points where the VMR differences are smaller than
+<cite>hr2hr_diff_max</cite> <em>or</em> the time difference is &gt;1 on both sides.</p></li>
+<li><p><cite>TIME_STRICT_DIFF_EITHER</cite>: Keep a point only if it has at least one neighbor with a
+VMR difference smaller than <cite>hr2hr_diff_max</cite> and a time difference &lt; 1 hr.</p></li>
+<li><p><cite>TIME_STRICT_DIFF_BOTH</cite>: Keep a point only if the VMR difference with both neighbors
+is smaller than <cite>hr2hr_diff_max</cite> and both time differences are &lt; 1 hr.</p></li>
+</ul>
+</p></li>
+<li><p><strong>full_output</strong> – Set to <cite>True</cite> to output two additional logical vectors that indicate which points pass the
+hourly standard deviation and hour-to-hour difference criteria. If <cite>False</cite>, only the dataframe
+limited to good points is returned.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.read_hourly_insitu">
+<span class="sig-prename descclassname"><span class="pre">ginput.priors.mlo_smo_prep.</span></span><span class="sig-name descname"><span class="pre">read_hourly_insitu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hourly_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.read_hourly_insitu" title="Permalink to this definition"></a></dt>
+<dd><p>Read and standardize an hourly in situ file</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>hourly_file</strong> – Path to the NOAA hourly file</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A dataframe with the hourly data, a <code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DatetimeIndex</span></code>, and its columns
+standardized to “site”, “year”, “month”, “day”, “hour”, “minute”, “value”, “uncertainty”,
+and “flag”.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.read_surface_file">
+<span class="sig-prename descclassname"><span class="pre">ginput.priors.mlo_smo_prep.</span></span><span class="sig-name descname"><span class="pre">read_surface_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">surface_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">datetime_index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">('year',</span> <span class="pre">'month')</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.read_surface_file" title="Permalink to this definition"></a></dt>
+<dd><p>Read a text file with NOAA surface data, either a monthly average or hourly file</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>surface_file</strong> – Path to the surface file to read</p></li>
+<li><p><strong>datetime_index</strong> – If not <cite>None</cite>, then must be a tuple giving the names of the year and month columns
+in the file, to be converted to a monthly datetime index. (Only supported for monthly
+files.)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The data from the surface file as a dataframe. If <cite>datetime_index</cite> was not <cite>None</cite>, the
+index will be a <code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DatetimeIndex</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.smo_wind_filter">
+<span class="sig-prename descclassname"><span class="pre">ginput.priors.mlo_smo_prep.</span></span><span class="sig-name descname"><span class="pre">smo_wind_filter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">smo_df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">first_wind_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">330.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last_wind_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">160.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_wind_speed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.smo_wind_filter" title="Permalink to this definition"></a></dt>
+<dd><p>Subset an SMO CO2 dataframe to just rows with specific wind conditions</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>smo_df</strong> – The dataframe of SMO CO2 DMFs with wind data included (see <a class="reference internal" href="#ginput.priors.mlo_smo_prep.merge_insitu_with_wind" title="ginput.priors.mlo_smo_prep.merge_insitu_with_wind"><code class="xref py py-func docutils literal notranslate"><span class="pre">merge_insitu_with_wind()</span></code></a>)</p></li>
+<li><p><strong>first_wind_dir</strong> – </p></li>
+<li><p><strong>last_wind_dir</strong> – These set the range of wind directions permitted; only data with a wind direction in the
+clockwise slice between <cite>first_wind_dir</cite> and <cite>last_wind_dir</cite> are retained.</p></li>
+<li><p><strong>min_wind_speed</strong> – The slowest wind speed allowed; only rows with a wind speed greater than or equal to this
+are retained.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A data frame that has a subset of the rows in <cite>smo_df</cite>.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>The default wind limits come from  Waterman et al. 1989 (JGR, vol. 94, pp. 14817–14829).
+In the section “Data Processing,” they give two different criteria for wind direction. Although
+they found that the looser constrains kept much more data and did not introduce significant numbers
+of non-background measurements, I am using the stricter criteria, since I am filtering on
+GEOS FP-IT winds, which likely have some error compared to the surface winds measured at SMO.</p>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="tccon_priors.html" class="btn btn-neutral float-left" title="tccon_priors module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="acos_interface.html" class="btn btn-neutral float-right" title="acos_interface module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Joshua Laughner and Sebastien Roche.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
