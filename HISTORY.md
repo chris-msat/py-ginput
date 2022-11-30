@@ -1,5 +1,15 @@
 # Ginput Version History
 
+## v1.1.5b
+
+Minor patch to support GEOS-IT file naming conventions when generating OCO-2/3 priors.
+
+This version number is outside the standard semantic versioning pattern, as the request
+was to make the fix without changing any science output. To ensure that was the case, 
+this patch was applied off of the 1.1.5 version of ginput used in OCO-2/3 B11 rather
+than the later 1.1.7 version. It will be merged into the main branch in a later version.
+
+
 ## v1.1.5
 
 **acos_interface version 1.2.2**
