@@ -1135,13 +1135,13 @@ def geosfp_file_names_by_day(product, file_type, levels, utc_dates, utc_hours=No
 
 
 def datetime_from_geos_filename(geos_filename):
+    geos_filename = os.path.basename(geos_filename)
     if geos_filename.startswith('GEOS.it'):
-        date_str = re.search(r'\d{4}-\d{2}-\d{2}T\d{4}', geos_filename.group())
+        date_str = re.search(r'\d{4}-\d{2}-\d{2}T\d{4}', geos_filename).group()
         return dt.datetime.strptime(date_str, '%Y-%m-%dT%H%M')
     else:
-        geos_filename = os.path.basename(geos_filename)
         date_str = re.search(r'\d{8}_\d{4}', geos_filename).group()
-    return dt.datetime.strptime(date_str, '%Y%m%d_%H%M')
+        return dt.datetime.strptime(date_str, '%Y%m%d_%H%M')
 
 
 def is_geos_on_native_grid(geos_filename):
