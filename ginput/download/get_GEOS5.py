@@ -141,16 +141,16 @@ def URLlist_GEOSIT(start, end, timestep=timedelta(hours=3), outpath='', filetype
 
     if filetype == 'met':
         if levels == 'p':
-            fmt = "http://goldsfs1.gesdisc.eosdis.nasa.gov/data/GEOSIT/GEOSIT_ASM_I3_{gridtype}_P42.5.27.1/{yr}/{doy:0>3}/.hidden/GEOS.it.asm.asm_inst_3hr_glo_{grid_key}_p42.GEOS5271.{ymd}T{hr:0>2}00.V01.nc4\n"
+            fmt = "http://goldsfs1.gesdisc.eosdis.nasa.gov/data/GEOSIT/GEOSIT_ASM_I3_{gridtype}_P42.5.29.4/{yr}/{doy:0>3}/.hidden/GEOS.it.asm.asm_inst_3hr_glo_{grid_key}_p42.GEOS5294.{ymd}T{hr:0>2}00.V01.nc4\n"
         elif levels == 'eta':
-            fmt = "http://goldsfs1.gesdisc.eosdis.nasa.gov/data/GEOSIT/GEOSIT_ASM_I3_{gridtype}_V72.5.27.1/{yr}/{doy:0>3}/.hidden/GEOS.it.asm.asm_inst_3hr_glo_{grid_key}_v72.GEOS5271.{ymd}T{hr:0>2}00.V01.nc4\n"
+            fmt = "http://goldsfs1.gesdisc.eosdis.nasa.gov/data/GEOSIT/GEOSIT_ASM_I3_{gridtype}_V72.5.29.4/{yr}/{doy:0>3}/.hidden/GEOS.it.asm.asm_inst_3hr_glo_{grid_key}_v72.GEOS5294.{ymd}T{hr:0>2}00.V01.nc4\n"
         elif levels == 'surf':
-            fmt = "http://goldsfs1.gesdisc.eosdis.nasa.gov/data/GEOSIT/GEOSIT_ASM_I1_{gridtype}_SLV.5.27.1/{yr}/{doy:0>3}/.hidden/GEOS.it.asm.asm_inst_1hr_glo_{grid_key}_slv.GEOS5271.{ymd}T{hr:0>2}00.V01.nc4\n"
+            fmt = "http://goldsfs1.gesdisc.eosdis.nasa.gov/data/GEOSIT/GEOSIT_ASM_I1_{gridtype}_SLV.5.29.4/{yr}/{doy:0>3}/.hidden/GEOS.it.asm.asm_inst_1hr_glo_{grid_key}_slv.GEOS5294.{ymd}T{hr:0>2}00.V01.nc4\n"
         else:
             raise ValueError('No GEOSIT URL format defined for filetype == {} and levels == {}'.format(filetype, levels))
     elif filetype == 'chm':
         if levels == 'eta':
-            fmt = "http://goldsfs1.gesdisc.eosdis.nasa.gov/data/GEOSIT/GEOSIT_CHM_I3_{gridtype}_V72.5.27.1/{yr}/{doy:0>3}/.hidden/GEOS.it.asm.chm_inst_3hr_glo_{grid_key}_v72.GEOS5271.{ymd}T{hr:0>2}00.V01.nc4\n"
+            fmt = "http://goldsfs1.gesdisc.eosdis.nasa.gov/data/GEOSIT/GEOSIT_CHM_I3_{gridtype}_V72.5.29.4/{yr}/{doy:0>3}/.hidden/GEOS.it.asm.chm_inst_3hr_glo_{grid_key}_v72.GEOS5294.{ymd}T{hr:0>2}00.V01.nc4\n"
         else:
             raise ValueError('Chemistry files only available on eta levels')
     else:
