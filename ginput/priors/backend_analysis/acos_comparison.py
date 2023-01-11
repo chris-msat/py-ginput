@@ -524,7 +524,7 @@ def make_mod_h5_file(h5file, mod_dir, last_geos_time=pd.Timestamp('2017-05-14 18
                     shape = (n_files, 1)
                 else:
                     raise NotImplementedError('No shape defined for {} group'.format(tccon_path[0]))
-                data_dict[oco_path[0]][oco_path[1]] = np.full(shape, aci._fill_val, dtype=np.float)
+                data_dict[oco_path[0]][oco_path[1]] = np.full(shape, aci._fill_val, dtype=float)
 
             # Weight the profiles based on the datetime
             data18 = moddat18[tccon_path[0]][tccon_path[1]]

@@ -80,7 +80,7 @@ from jllutils import stats as jstats, plots as jplots
 
 _mydir = os.path.dirname(__file__)
 
-pbin_edges_std = np.array([1030, 1020, 1010, 1000, 975, 950, 925, 900, 875, 850, 825, 800, 750, 700, 650, 600, 550, 500, 400, 300, 200, 100, 50, 25, 10, 5, 1, 0.1], dtype=np.float)
+pbin_edges_std = np.array([1030, 1020, 1010, 1000, 975, 950, 925, 900, 875, 850, 825, 800, 750, 700, 650, 600, 550, 500, 400, 300, 200, 100, 50, 25, 10, 5, 1, 0.1], dtype=float)
 pbin_centers_std = (pbin_edges_std[:-1] + pbin_edges_std[1:])/2.0
 z_edges_std = 7.4 * np.log(1013 / pbin_edges_std)
 z_centers_std = (z_edges_std[:-1] + z_edges_std[1:])/2.0

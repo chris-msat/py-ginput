@@ -491,7 +491,7 @@ class MloSmoTraceGasRecord(TraceGasRecord):
         :rtype: :class:`pandas.DataFrame`
         """
         n_ages = np.size(ages)
-        arr = xr.DataArray(data=np.ones([n_ages, 1], dtype=np.float), coords=[('age', ages), ('theta', cls._no_theta_coord)])
+        arr = xr.DataArray(data=np.ones([n_ages, 1], dtype=float), coords=[('age', ages), ('theta', cls._no_theta_coord)])
         return arr
 
     def get_latency_by_date(self, dates):
@@ -511,7 +511,7 @@ class MloSmoTraceGasRecord(TraceGasRecord):
         earlier_latency = np.array([mod_utils.timedelta_to_frac_year(td) for td in earlier_timedeltas if td < dt.timedelta(0)])
         later_latency = np.array([mod_utils.timedelta_to_frac_year(td) for td in later_timedeltas if td > dt.timedelta(0)])
 
-        latency = np.zeros_like(dates, dtype=np.float)
+        latency = np.zeros_like(dates, dtype=float)
         latency[dates < first_record_date] = earlier_latency
         latency[dates > last_record_date] = later_latency
         return latency
@@ -1201,7 +1201,7 @@ class MloSmoTraceGasRecord(TraceGasRecord):
         # First get just monthly data. freq='MS' gives us monthly data at the start of the month. Use the existing logic
         # to extrapolate the record for a given month if needed.
         monthly_idx = pd.date_range(start_date_subset, end_date_subset, freq='MS')
-        monthly_df = pd.DataFrame(index=monthly_idx, columns=['dmf_mean', 'latency'], dtype=np.float)
+        monthly_df = pd.DataFrame(index=monthly_idx, columns=['dmf_mean', 'latency'], dtype=float)
         for timestamp in monthly_df.index:
             monthly_df.dmf_mean[timestamp], info_dict = self.get_gas_by_month(timestamp.year, timestamp.month, deseasonalize=deseasonalize)
             monthly_df.latency[timestamp] = info_dict['latency']
@@ -1348,9 +1348,9 @@ class MidlatTraceGasRecord(TraceGasRecord):
     # Assume peak Northward excursion of ITCZ is mid-July (idoy=198)
     # Assume peak Southward excursion of ITCZ is mid-Jan (idoy=15)
     # Copied from gsetup/calc_itcz.f in changeset 20597c7420c2
-    _vlat_jul = np.array([16, 20, 24, 27, 29, 30, 30, 30, 29, 26, 21, 20, 19, 19, 19, 19, 18, 16, 11, 5, 1, 4, 8, 12, 16], dtype=np.float)
-    _vlat_jan = np.array([3, 5, -8, -14, -12, -8, -5, -4, -5, -7, -10, -13, -14, -14, -10, -4, 0, 1, 0, -2, -6, -8, -6, -2, 3], dtype=np.float)
-    _vwidth = np.array([11, 10, 9, 8, 8, 9, 10, 11, 12, 12, 11, 10, 9, 8, 7, 6, 7, 8, 11, 13, 14, 14, 13, 12, 11], dtype=np.float)
+    _vlat_jul = np.array([16, 20, 24, 27, 29, 30, 30, 30, 29, 26, 21, 20, 19, 19, 19, 19, 18, 16, 11, 5, 1, 4, 8, 12, 16], dtype=float)
+    _vlat_jan = np.array([3, 5, -8, -14, -12, -8, -5, -4, -5, -7, -10, -13, -14, -14, -10, -4, 0, 1, 0, -2, -6, -8, -6, -2, 3], dtype=float)
+    _vwidth = np.array([11, 10, 9, 8, 8, 9, 10, 11, 12, 12, 11, 10, 9, 8, 7, 6, 7, 8, 11, 13, 14, 14, 13, 12, 11], dtype=float)
 
     @property
     def gas_name(self):
