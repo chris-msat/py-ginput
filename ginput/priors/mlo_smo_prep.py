@@ -278,8 +278,13 @@ def noaa_prelim_flagging(noaa_df: pd.DataFrame, hr_std_dev_max: float = 0.2, hr2
         raise TypeError(f'Unknown `mode` "{mode}"')
         
     # For the first and last points, there's only one difference to consider
-    xx_hr2hr[0] = xx_diff[0]
-    xx_hr2hr[-1] = xx_diff[-1]
+    if np.size(xx_hr2hr) > 0 and np.size(xx_diff) > 0:
+        xx_hr2hr[0] = xx_diff[0]
+        xx_hr2hr[-1] = xx_diff[-1]
+    elif np.size(xx_hr2hr) == 0 and np.size(xx_diff) == 0:
+        logger.info('There are no data points to flag by hour to hour differences')
+    else:
+        raise NotImplementedError('A case occurred where of two arrays that should both be size 0 or not, one had size 0 and the other did not. This case is not handled.')
     
     if full_output:
         xx_hr2hr_full = np.zeros_like(xx_sd)
