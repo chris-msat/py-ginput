@@ -1,6 +1,25 @@
 # Ginput Version History
 
+## v1.1.5c
+
+**`mlo_smo_prep` version 1.0.2**
+
+Minor patch to fix unexpected crash in `update_hourly` subcommand when NOAA hourly data is all fills.
+
+In Dec 2022, the NOAA hourly data from Mauna Loa was all flagged. This caused a crash
+when running the `update_hourly` subcommand because it expects there to be at least
+some valid data during the preliminary filtering process. The fix was straightforward,
+as if there is no valid data, the preliminary filtering cannot filter out any more
+data and so can return early. This produces a NaN in the monthly average output file
+as expected.
+
+Like v1.1.5b, this version number is outside the standard semantic versioning pattern,
+as it was a fix that needed to be applied to the version of `ginput` used for OCO-2/3
+B11 processing.
+
 ## v1.1.5b
+
+**acos_interface version 1.2.3**
 
 Minor patch to support GEOS-IT file naming conventions when generating OCO-2/3 priors.
 

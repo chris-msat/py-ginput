@@ -28,7 +28,7 @@ from ..mod_maker import mod_maker
 from ..priors import tccon_priors
 from .. import __version__
 
-__acos_int_version__ = '1.2.2'
+__acos_int_version__ = '1.2.3'
 
 _acos_tstring_fmt = '%Y-%m-%dT%H:%M:%S.%fZ'
 # Values lower than this will be replaced with NaNs when reading in the resampled met data

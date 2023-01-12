@@ -15,7 +15,7 @@ from ..common_utils.ggg_logging import logger, setup_logger
 
 from typing import Tuple, Optional
 
-__version__ = '1.0.1'
+__version__ = '1.0.2'
 
 class MloPrelimMode(Enum):
     TIME_STRICT_DIFF_EITHER = 0
