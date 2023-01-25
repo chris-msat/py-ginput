@@ -872,7 +872,7 @@ class InsituMonthlyAverager(ABC):
             raise InsituProcessingError('Given hourly file does not contain only {site} data. Sites present: {all_sites}'.format(site=site, all_sites=', '.join(hourly_sites)))
 
 
-    def convert(self, noaa_hourly_file: str, previous_monthly_file: str, output_monthly_file: str) -> None:
+    def convert(self, noaa_hourly_file: str, previous_monthly_file: str, output_monthly_file: str, skip_site_check: bool = False) -> None:
         """Convert a NOAA hourly file to monthly averages and append to the end of an existing file.
 
         Parameters
@@ -917,7 +917,11 @@ class InsituMonthlyAverager(ABC):
         hourly_df = hourly_df.loc[tt, :].copy()
         hourly_creation_month = pd.Timestamp(hourly_creation_date.year, hourly_creation_date.month, 1)
 
-        self._check_site(monthly_df, hourly_df, self.class_site())
+        if not skip_site_check:
+            self._check_site(monthly_df, hourly_df, self.class_site())
+        else:
+            logger.info('Skipped check of NOAA site ID, as requested')
+
         hourly_df, new_month_index = self.get_new_hourly_data(
             monthly_df=monthly_df, 
             hourly_df=hourly_df, 
@@ -992,7 +996,7 @@ class SmoMonthlyAverager(InsituMonthlyAverager):
 
 def driver(site, previous_monthly_file, hourly_insitu_file, output_monthly_file, last_month=DEFAULT_LAST_MONTH, geos_2d_file_list=None, 
            allow_missing_geos_files=False, allow_missing_hourly_times=False, allow_missing_creation_date=False, limit_by_avail_data=True,
-           clobber=False, save_missing_geos_to=None):
+           clobber=False, save_missing_geos_to=None, skip_site_check=False):
     run_settings = RunSettings(
         save_missing_geos_to=save_missing_geos_to, 
         last_month=last_month, 
@@ -1011,7 +1015,7 @@ def driver(site, previous_monthly_file, hourly_insitu_file, output_monthly_file,
         raise InsituProcessingError('When processing with site == "smo", geos_2d_file_list must be provided')
 
     converter = conversion_classes[site]
-    converter.convert(hourly_insitu_file, previous_monthly_file, output_monthly_file)
+    converter.convert(hourly_insitu_file, previous_monthly_file, output_monthly_file, skip_site_check=skip_site_check)
 
 
 
@@ -1068,6 +1072,8 @@ def parse_args(p: ArgumentParser):
     p.add_argument('--allow-missing-geos-files', action='store_true', help='Prevent this program from erroring if GEOS files '
                                                                            'are missing, will still issue a warning and list '
                                                                            'the missing files if --save-missing-geos-to is given.')
+    p.add_argument('--skip-site-check', action='store_true', help='Override the check that the input monthly and hourly files '
+                                                                  'contain data from the correct NOAA site.')
     p.add_argument('-c', '--clobber', action='store_true', help='By default, the output file will not overwrite any existing '
                                                                 'file at that path. Setting this flag will cause it to overwrite '
                                                                 'existing files UNLESS that file is the previous monthly file. '
