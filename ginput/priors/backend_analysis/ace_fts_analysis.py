@@ -292,7 +292,7 @@ def _bin_z_vs_xy(x, y, z, good_data, x_bins, y_bins):
     n_x_bins = x_bins.size - 1
     n_y_bins = y_bins.size - 1
     x_means = np.full([n_x_bins, n_y_bins], np.nan)
-    x_counts = np.zeros_like(x_means, dtype=np.int)
+    x_counts = np.zeros_like(x_means, dtype=int)
 
     for i, (tlow, thigh) in enumerate(zip(y_bins[:-1], y_bins[1:])):
         aa = good_data & (y >= tlow) & (y < thigh)
@@ -456,7 +456,7 @@ def _save_hf_ch4_lut(nc_filename, ace_ch4_file, ace_hf_file, ace_age_file, lat_b
         ioutils.make_ncvar_helper(nch, 'ace_counts', ch4_hf_count.to_numpy().astype(float), [year_dim, bins_dim],
                                   units='#',
                                   description='Number of ACE-FTS observations used to calculate this slope')
-        ioutils.make_ncvar_helper(nch, 'ch4_hf_slopes_source', ch4_hf_source.to_numpy().astype(np.int), [year_dim, bins_dim],
+        ioutils.make_ncvar_helper(nch, 'ch4_hf_slopes_source', ch4_hf_source.to_numpy().astype(int), [year_dim, bins_dim],
                                   units='N/A',
                                   description='Flag indicating how the slope was computed. 0 means taken directly from '
                                               'fits of ACE-FTS CH4 vs. HF; 1 means sampled from the exponential fit '
@@ -1095,8 +1095,8 @@ def make_excess_co_lut(save_file, ace_co_file, ace_ch4_file, ace_age_file, lat_t
         means = xr.Dataset({k: proto_array.copy() for k in bin_cols})
         stds = xr.Dataset({k: proto_array.copy() for k in bin_cols})
 
-        flags = np.zeros(proto_array.shape, dtype=np.int)
-        counts = np.zeros(proto_array.shape, dtype=np.int)
+        flags = np.zeros(proto_array.shape, dtype=int)
+        counts = np.zeros(proto_array.shape, dtype=int)
 
         pbar = mod_utils.ProgressBar(total_bins, prefix='Binning', style='counter')
         iind = 0

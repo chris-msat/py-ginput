@@ -638,8 +638,8 @@ class MloSmoTraceGasRecord(TraceGasRecord):
         n_months = all_months.size
 
         df_combined = df_combined.reindex(all_months)
-        df_combined = df_combined.assign(interp_flag=np.zeros((n_months,), dtype=np.int),
-                                         latency=np.zeros((n_months,), dtype=np.int))
+        df_combined = df_combined.assign(interp_flag=np.zeros((n_months,), dtype=int),
+                                         latency=np.zeros((n_months,), dtype=int))
 
         # set the interpolation flag
         missing = pd.isna(df_combined['dmf_mean'])
@@ -1573,8 +1573,8 @@ class HFTropicsRecord(MloSmoTraceGasRecord):
         n_months = all_months.size
 
         df_combined = pd.DataFrame(index=all_months, columns=['dmf_mean']).fillna(0.0)
-        df_combined = df_combined.assign(interp_flag=np.zeros((n_months,), dtype=np.int),
-                                         latency=np.zeros((n_months,), dtype=np.int))
+        df_combined = df_combined.assign(interp_flag=np.zeros((n_months,), dtype=int),
+                                         latency=np.zeros((n_months,), dtype=int))
 
         # Post processing is currently unnecessary for HF (since all concentrations are 0). However, we keep this call
         # in for consistency.
