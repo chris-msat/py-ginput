@@ -1,5 +1,41 @@
 # Ginput Version History
 
+## v1.1.5d
+
+**`mlo_smo_prep` version 1.1.0**
+
+Minor, backwards compatible, update to allow the `update_hourly` subcommand to accept hourly files from alternate NOAA sites.
+
+This change also stems from the lack of NOAA hourly data from MLO after the Mauna Loa eruption
+at the end of Nov 2022. NOAA set up temporary measurements on Mauna Kea until the Mauna Loa
+observatory can be reopened. This data comes with the site ID "MKO". Previously, the `update_hourly`
+command would not allow either the hourly or monthly input files to contain site IDs other than
+"MLO" or "SMO" as a protection against accidentally passing the wrong file for the wrong site.
+
+To support MKO data, plus any potential future site shifts, this version adds two new command line
+options to the `update_hourly` subcommand:
+
+* `--allow-alt-noaa-site`: when this flag is passed, the hourly file is allowed to have a site ID
+  that does not match the expected "MLO" or "SMO". That site ID will be recorded as the site ID 
+  for the new months in the output monthly file. An error will still be raised if the input hourly
+  file contains multiple site IDs.
+* `--site-id-override`: allows the caller to pass a site ID to use in the output monthly file
+  *instead* of the site ID(s) found in the input hourly file. When given, the hourly file *may*
+  have multiple site IDs; they will be ignored and the site ID passed to this option will be 
+  used instead.
+
+The site IDs in the input monthly file are still checked, but will no longer raise an error in
+any case. Instead either a warning or informational message will be logged if the site ID(s) in
+the input file are do not match "MLO"/"SMO" or the override site ID. Whether a warning or 
+informational message is printed depends on whether `--allow-alt-noaa-site` is absent or present.
+Make this check a warning rather than a hard error was done because once a monthly file uses an
+alternate site once, it will always have multiple site IDs going forward, which would require
+passing `--allow-alt-noaa-site` every time, even after the hourly file reverts back to the
+expected site (MLO or SMO).
+
+Like v1.1.5b and v1.1.5c, this version number is outside the standard semantic versioning pattern,
+as it was a fix that needed to be applied to the version of `ginput` used for OCO-2/3 B11 processing.
+
 ## v1.1.5c
 
 **`mlo_smo_prep` version 1.0.2**
