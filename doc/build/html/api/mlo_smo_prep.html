@@ -15,7 +15,6 @@
         <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
         <script src="../_static/doctools.js"></script>
-        <script src="../_static/sphinx_highlight.js"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -58,39 +57,7 @@
 <p class="caption" role="heading"><span class="caption-text">ginput API documentation:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="tccon_priors.html">tccon_priors module</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">mlo_smo_prep module</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager"><code class="docutils literal notranslate"><span class="pre">InsituMonthlyAverager</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager.class_site"><code class="docutils literal notranslate"><span class="pre">InsituMonthlyAverager.class_site()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager.convert"><code class="docutils literal notranslate"><span class="pre">InsituMonthlyAverager.convert()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager.get_new_hourly_data"><code class="docutils literal notranslate"><span class="pre">InsituMonthlyAverager.get_new_hourly_data()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager.select_background"><code class="docutils literal notranslate"><span class="pre">InsituMonthlyAverager.select_background()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager.write_monthly_insitu"><code class="docutils literal notranslate"><span class="pre">InsituMonthlyAverager.write_monthly_insitu()</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.InsituProcessingError"><code class="docutils literal notranslate"><span class="pre">InsituProcessingError</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.MloBackgroundMode"><code class="docutils literal notranslate"><span class="pre">MloBackgroundMode</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.MloMonthlyAverager"><code class="docutils literal notranslate"><span class="pre">MloMonthlyAverager</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.MloMonthlyAverager.class_site"><code class="docutils literal notranslate"><span class="pre">MloMonthlyAverager.class_site()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.MloMonthlyAverager.select_background"><code class="docutils literal notranslate"><span class="pre">MloMonthlyAverager.select_background()</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.MloPrelimMode"><code class="docutils literal notranslate"><span class="pre">MloPrelimMode</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.SmoMonthlyAverager"><code class="docutils literal notranslate"><span class="pre">SmoMonthlyAverager</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.SmoMonthlyAverager.class_site"><code class="docutils literal notranslate"><span class="pre">SmoMonthlyAverager.class_site()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.SmoMonthlyAverager.select_background"><code class="docutils literal notranslate"><span class="pre">SmoMonthlyAverager.select_background()</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.compute_wind_for_times"><code class="docutils literal notranslate"><span class="pre">compute_wind_for_times()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.get_smo_winds_from_file"><code class="docutils literal notranslate"><span class="pre">get_smo_winds_from_file()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.merge_insitu_with_wind"><code class="docutils literal notranslate"><span class="pre">merge_insitu_with_wind()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.mlo_background_selection"><code class="docutils literal notranslate"><span class="pre">mlo_background_selection()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.monthly_avg_rapid_data"><code class="docutils literal notranslate"><span class="pre">monthly_avg_rapid_data()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.noaa_prelim_flagging"><code class="docutils literal notranslate"><span class="pre">noaa_prelim_flagging()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.read_hourly_insitu"><code class="docutils literal notranslate"><span class="pre">read_hourly_insitu()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.read_surface_file"><code class="docutils literal notranslate"><span class="pre">read_surface_file()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#ginput.priors.mlo_smo_prep.smo_wind_filter"><code class="docutils literal notranslate"><span class="pre">smo_wind_filter()</span></code></a></li>
-</ul>
-</li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">mlo_smo_prep module</a></li>
 <li class="toctree-l1"><a class="reference internal" href="acos_interface.html">acos_interface module</a></li>
 </ul>
 

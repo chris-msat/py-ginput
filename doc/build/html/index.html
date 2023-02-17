@@ -15,7 +15,6 @@
         <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
         <script src="_static/doctools.js"></script>
-        <script src="_static/sphinx_highlight.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -98,7 +97,12 @@
 <li class="toctree-l2"><a class="reference internal" href="ginput_usage/command_line_int.html#updating-input-noaa-data">Updating input NOAA data</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="ginput_usage/downloading_met.html">Downloading met files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ginput_usage/downloading_met.html">Downloading met files</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="ginput_usage/downloading_met.html#expected-file-structure">Expected file structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="ginput_usage/downloading_met.html#downloading-data-for-dates">Downloading data for dates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="ginput_usage/downloading_met.html#downloading-data-for-a-runlog">Downloading data for a runlog</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="ginput_usage/making_mod_files.html">Making model files</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ginput_usage/making_vmr_files.html">Making VMR files</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ginput_usage/making_map_files.html">Making .map and .map.nc files</a></li>
@@ -129,55 +133,9 @@
 <div class="toctree-wrapper compound">
 <p class="caption" role="heading"><span class="caption-text">ginput API documentation:</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="api/tccon_priors.html">tccon_priors module</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="api/tccon_priors.html#ginput.priors.tccon_priors.CH4TropicsRecord"><code class="docutils literal notranslate"><span class="pre">CH4TropicsRecord</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/tccon_priors.html#ginput.priors.tccon_priors.CO2TropicsRecord"><code class="docutils literal notranslate"><span class="pre">CO2TropicsRecord</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/tccon_priors.html#ginput.priors.tccon_priors.GasRecordDateError"><code class="docutils literal notranslate"><span class="pre">GasRecordDateError</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/tccon_priors.html#ginput.priors.tccon_priors.GasRecordError"><code class="docutils literal notranslate"><span class="pre">GasRecordError</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/tccon_priors.html#ginput.priors.tccon_priors.GasRecordExtrapolationError"><code class="docutils literal notranslate"><span class="pre">GasRecordExtrapolationError</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/tccon_priors.html#ginput.priors.tccon_priors.GasRecordInconsistentDimsError"><code class="docutils literal notranslate"><span class="pre">GasRecordInconsistentDimsError</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/tccon_priors.html#ginput.priors.tccon_priors.GasRecordInputMissingError"><code class="docutils literal notranslate"><span class="pre">GasRecordInputMissingError</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/tccon_priors.html#ginput.priors.tccon_priors.GasRecordInputVerificationError"><code class="docutils literal notranslate"><span class="pre">GasRecordInputVerificationError</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/tccon_priors.html#ginput.priors.tccon_priors.HFTropicsRecord"><code class="docutils literal notranslate"><span class="pre">HFTropicsRecord</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/tccon_priors.html#ginput.priors.tccon_priors.MloSmoTraceGasRecord"><code class="docutils literal notranslate"><span class="pre">MloSmoTraceGasRecord</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/tccon_priors.html#ginput.priors.tccon_priors.N2OTropicsRecord"><code class="docutils literal notranslate"><span class="pre">N2OTropicsRecord</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/tccon_priors.html#ginput.priors.tccon_priors.add_strat_prior_standard"><code class="docutils literal notranslate"><span class="pre">add_strat_prior_standard()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/tccon_priors.html#ginput.priors.tccon_priors.add_trop_prior_standard"><code class="docutils literal notranslate"><span class="pre">add_trop_prior_standard()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/tccon_priors.html#ginput.priors.tccon_priors.generate_full_tccon_vmr_file"><code class="docutils literal notranslate"><span class="pre">generate_full_tccon_vmr_file()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/tccon_priors.html#ginput.priors.tccon_priors.generate_single_tccon_prior"><code class="docutils literal notranslate"><span class="pre">generate_single_tccon_prior()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/tccon_priors.html#ginput.priors.tccon_priors.generate_tccon_priors_driver"><code class="docutils literal notranslate"><span class="pre">generate_tccon_priors_driver()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/tccon_priors.html#ginput.priors.tccon_priors.get_clams_age"><code class="docutils literal notranslate"><span class="pre">get_clams_age()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/tccon_priors.html#ginput.priors.tccon_priors.get_trop_eq_lat"><code class="docutils literal notranslate"><span class="pre">get_trop_eq_lat()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/tccon_priors.html#ginput.priors.tccon_priors.modify_strat_co"><code class="docutils literal notranslate"><span class="pre">modify_strat_co()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/tccon_priors.html#ginput.priors.tccon_priors.regenerate_gas_strat_lut_files"><code class="docutils literal notranslate"><span class="pre">regenerate_gas_strat_lut_files()</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="api/mlo_smo_prep.html">mlo_smo_prep module</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="api/mlo_smo_prep.html#ginput.priors.mlo_smo_prep.InsituMonthlyAverager"><code class="docutils literal notranslate"><span class="pre">InsituMonthlyAverager</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/mlo_smo_prep.html#ginput.priors.mlo_smo_prep.InsituProcessingError"><code class="docutils literal notranslate"><span class="pre">InsituProcessingError</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/mlo_smo_prep.html#ginput.priors.mlo_smo_prep.MloBackgroundMode"><code class="docutils literal notranslate"><span class="pre">MloBackgroundMode</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/mlo_smo_prep.html#ginput.priors.mlo_smo_prep.MloMonthlyAverager"><code class="docutils literal notranslate"><span class="pre">MloMonthlyAverager</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/mlo_smo_prep.html#ginput.priors.mlo_smo_prep.MloPrelimMode"><code class="docutils literal notranslate"><span class="pre">MloPrelimMode</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/mlo_smo_prep.html#ginput.priors.mlo_smo_prep.SmoMonthlyAverager"><code class="docutils literal notranslate"><span class="pre">SmoMonthlyAverager</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/mlo_smo_prep.html#ginput.priors.mlo_smo_prep.compute_wind_for_times"><code class="docutils literal notranslate"><span class="pre">compute_wind_for_times()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/mlo_smo_prep.html#ginput.priors.mlo_smo_prep.get_smo_winds_from_file"><code class="docutils literal notranslate"><span class="pre">get_smo_winds_from_file()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/mlo_smo_prep.html#ginput.priors.mlo_smo_prep.merge_insitu_with_wind"><code class="docutils literal notranslate"><span class="pre">merge_insitu_with_wind()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/mlo_smo_prep.html#ginput.priors.mlo_smo_prep.mlo_background_selection"><code class="docutils literal notranslate"><span class="pre">mlo_background_selection()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/mlo_smo_prep.html#ginput.priors.mlo_smo_prep.monthly_avg_rapid_data"><code class="docutils literal notranslate"><span class="pre">monthly_avg_rapid_data()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/mlo_smo_prep.html#ginput.priors.mlo_smo_prep.noaa_prelim_flagging"><code class="docutils literal notranslate"><span class="pre">noaa_prelim_flagging()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/mlo_smo_prep.html#ginput.priors.mlo_smo_prep.read_hourly_insitu"><code class="docutils literal notranslate"><span class="pre">read_hourly_insitu()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/mlo_smo_prep.html#ginput.priors.mlo_smo_prep.read_surface_file"><code class="docutils literal notranslate"><span class="pre">read_surface_file()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/mlo_smo_prep.html#ginput.priors.mlo_smo_prep.smo_wind_filter"><code class="docutils literal notranslate"><span class="pre">smo_wind_filter()</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="api/acos_interface.html">acos_interface module</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="api/acos_interface.html#ginput.priors.acos_interface.acos_interface_main"><code class="docutils literal notranslate"><span class="pre">acos_interface_main()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/acos_interface.html#ginput.priors.acos_interface.compute_sounding_equivalent_latitudes"><code class="docutils literal notranslate"><span class="pre">compute_sounding_equivalent_latitudes()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/acos_interface.html#ginput.priors.acos_interface.init_prior_h5"><code class="docutils literal notranslate"><span class="pre">init_prior_h5()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/acos_interface.html#ginput.priors.acos_interface.read_resampled_met"><code class="docutils literal notranslate"><span class="pre">read_resampled_met()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/acos_interface.html#ginput.priors.acos_interface.write_prior_h5"><code class="docutils literal notranslate"><span class="pre">write_prior_h5()</span></code></a></li>
-</ul>
-</li>
+<li class="toctree-l1"><a class="reference internal" href="api/tccon_priors.html">tccon_priors module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/mlo_smo_prep.html">mlo_smo_prep module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/acos_interface.html">acos_interface module</a></li>
 </ul>
 </div>
 </section>

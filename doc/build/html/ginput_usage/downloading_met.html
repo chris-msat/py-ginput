@@ -15,7 +15,6 @@
         <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
         <script src="../_static/doctools.js"></script>
-        <script src="../_static/sphinx_highlight.js"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -45,7 +44,12 @@
               <p class="caption" role="heading"><span class="caption-text">Using ginput:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="command_line_int.html">Ginput command line interface</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Downloading met files</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Downloading met files</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#expected-file-structure">Expected file structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#downloading-data-for-dates">Downloading data for dates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#downloading-data-for-a-runlog">Downloading data for a runlog</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="making_mod_files.html">Making model files</a></li>
 <li class="toctree-l1"><a class="reference internal" href="making_vmr_files.html">Making VMR files</a></li>
 <li class="toctree-l1"><a class="reference internal" href="making_map_files.html">Making .map and .map.nc files</a></li>
@@ -88,6 +92,93 @@
              
   <section id="downloading-met-files">
 <span id="usage-dl-met"></span><h1>Downloading met files<a class="headerlink" href="#downloading-met-files" title="Permalink to this heading"></a></h1>
+<p>To generate the <code class="docutils literal notranslate"><span class="pre">.mod</span></code> and <code class="docutils literal notranslate"><span class="pre">.vmr</span></code> files for GGG2020, <code class="docutils literal notranslate"><span class="pre">ginput</span></code> needs to have 3 types of GEOS files available:</p>
+<ol class="arabic simple">
+<li><p>2D assimilated met variables: these are files with the identifier <code class="docutils literal notranslate"><span class="pre">inst3_2d_asm_Nx</span></code> that contain variables like <code class="docutils literal notranslate"><span class="pre">TROPPB</span></code> (i.e. blended tropopause pressure estimate)</p></li>
+<li><p>3D assimilated met variables: these are files with the identifier <code class="docutils literal notranslate"><span class="pre">inst3_3d_asm_Nv</span></code> that contain variables like <code class="docutils literal notranslate"><span class="pre">T</span></code> (temperature) and <code class="docutils literal notranslate"><span class="pre">EPV</span></code> (Ertel’s Potential Vorticity) on hybrid model levels.</p></li>
+<li><p>3D chemistry simulation variables: these are files with the identifier <code class="docutils literal notranslate"><span class="pre">inst3_3d_chm_Nv</span></code> that contain, among others, the <code class="docutils literal notranslate"><span class="pre">CO</span></code> variable on hybrid model levels.</p></li>
+</ol>
+<p>Ginput provides the ability to download these files from 3 different streams:</p>
+<ol class="arabic simple">
+<li><p>GEOS FP-IT: this is a product provided for instrument teams by Goddard. It is the data stream used for GGG2020, but requires a data subscription.</p></li>
+<li><p>GEOS FP: this is a freely available simulation product from Goddard. It is available at higher spatial resolution than FP-IT but does not go as far back in time.</p></li>
+<li><p>GEOS IT: this is the new instrument teams product, released by Goddard in 2023. It also requires a data subscription. GGG2020 will switch to this when FP-IT is discontinued.</p></li>
+</ol>
+<p>Downloading is done with the <code class="docutils literal notranslate"><span class="pre">getg5</span></code> and <code class="docutils literal notranslate"><span class="pre">get-rl-g5</span></code> subcommands to <code class="docutils literal notranslate"><span class="pre">run_ginput.py</span></code>. As with all subcommands, passing the <code class="docutils literal notranslate"><span class="pre">--help</span></code> flag will print out the most up-to-date command line argument information.</p>
+<section id="expected-file-structure">
+<h2>Expected file structure<a class="headerlink" href="#expected-file-structure" title="Permalink to this heading"></a></h2>
+<p>If you are downloading this data to use as input to <code class="docutils literal notranslate"><span class="pre">ginput</span></code>, then the GEOS data must be stored in a particular file structure as follows:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>GEOS_ROOT_DIR
+├── Nv
+└── Nx
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">GEOS_ROOT_DIR</span></code> may be any path. However, under that path you must have two subdirectories: <code class="docutils literal notranslate"><span class="pre">Nv</span></code> and <code class="docutils literal notranslate"><span class="pre">Nx</span></code>.
+The <code class="docutils literal notranslate"><span class="pre">Nv</span></code> directory must contain the 3D files, and the <code class="docutils literal notranslate"><span class="pre">Nx</span></code> directory the 2D files.
+The meteorology and chemistry 3D files can both go in the <code class="docutils literal notranslate"><span class="pre">Nv</span></code> directory, or you could use an alternate directory structure:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>GEOS_CHEM_DIR
+└── Nv
+GEOS_MET_DIR
+├── Nv
+└── Nx
+</pre></div>
+</div>
+<p>Here, <code class="docutils literal notranslate"><span class="pre">GEOS_CHEM_DIR</span></code> and <code class="docutils literal notranslate"><span class="pre">GEOS_MET_DIR</span></code> can again be any path.
+They do <em>not</em> need to be siblings to each other; <code class="docutils literal notranslate"><span class="pre">GEOS_CHEM_DIR</span></code> could be <code class="docutils literal notranslate"><span class="pre">/data/chem</span></code> and <code class="docutils literal notranslate"><span class="pre">GEOS_MET_DIR</span></code> could be <code class="docutils literal notranslate"><span class="pre">/mnt/goddard/geos/fpit</span></code> for example.
+However, they must have the correct <code class="docutils literal notranslate"><span class="pre">Nv</span></code> and <code class="docutils literal notranslate"><span class="pre">Nx</span></code> subdirectories.
+As before, 3D files go in the <code class="docutils literal notranslate"><span class="pre">Nv</span></code> subdirectory and 2D files in the <code class="docutils literal notranslate"><span class="pre">Nx</span></code> subdirectory.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The download command described below will place the data automatically in the correct <code class="docutils literal notranslate"><span class="pre">Nv</span></code> or <code class="docutils literal notranslate"><span class="pre">Nx</span></code> subdirectories. You only need to do this manually if
+you are downloading GEOS data yourself.</p>
+</div>
+</section>
+<section id="downloading-data-for-dates">
+<h2>Downloading data for dates<a class="headerlink" href="#downloading-data-for-dates" title="Permalink to this heading"></a></h2>
+<p>If you want to download GEOS data for a single date or range of dates, the <code class="docutils literal notranslate"><span class="pre">getg5</span></code> subcommand will do that.
+It accepts a date or date range as its positional argument.
+The <code class="docutils literal notranslate"><span class="pre">--path</span></code> argument indicates where to download the data to.
+(GEOS data volume adds up quickly, so make sure this is right!)
+The <code class="docutils literal notranslate"><span class="pre">--mode</span></code>, <code class="docutils literal notranslate"><span class="pre">--filetypes</span></code> (short: <code class="docutils literal notranslate"><span class="pre">-t</span></code>), and <code class="docutils literal notranslate"><span class="pre">--levels</span></code> (short: <code class="docutils literal notranslate"><span class="pre">-l</span></code>) options set which data stream (FP, FP-IT, or IT), which kind of data (meteorology or chemistry) and which set of vertical levels (3D hybrid or 2D) to download files for.
+If you wanted to download all the files needed to generate standard GGG2020 priors for 1 Jan 2018, you would run this command three times as follows:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ ./run_ginput.py getg5 --mode FPIT --filetypes met --levels eta --path GEOS_MET_DIR 20180101
+$ ./run_ginput.py getg5 --mode FPIT --filetypes met --levels surf --path GEOS_MET_DIR 20180101
+$ ./run_ginput.py getg5 --mode FPIT --filetypes chm --levels eta --path GEOS_CHEM_DIR 20180101
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">GEOS_MET_DIR</span></code> and <code class="docutils literal notranslate"><span class="pre">GEOS_CHEM_DIR</span></code> can be whatever path you wish.
+Note that in the third command, the argument to <code class="docutils literal notranslate"><span class="pre">--filetypes</span></code> is “chm” (no “e”).
+If you wished to download the openly available GEOS FP data, you would change the “FPIT” argument of <code class="docutils literal notranslate"><span class="pre">--mode</span></code> to “FP”.
+If you wished to download data for all of January 2018, you would make the positional argument “20180101-20180201”.
+Note that in this case, the second date in the range is <em>exclusive</em>, that is, this command would download up to and including 31 Jan 2018 but not 1 Feb 2018.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If you omit both of the technically optional arguments <code class="docutils literal notranslate"><span class="pre">--filetypes</span></code> and <code class="docutils literal notranslate"><span class="pre">--levels</span></code>, <code class="docutils literal notranslate"><span class="pre">ginput</span></code> would download the expected 2D met files as well as 3D <em>fixed pressure levels</em> files, instead of the hybrid level files expected.
+This is because the fixed pressure level files were expected to be the preferred ones during primary <code class="docutils literal notranslate"><span class="pre">ginput</span></code> development, and the decision to change to the hybrid level files came late enough that we chose not to upset the default in a breaking change.
+Therefore, if you want the met files that GGG2020 uses, you must give the <code class="docutils literal notranslate"><span class="pre">--filetypes</span></code> and <code class="docutils literal notranslate"><span class="pre">--levels</span></code> options as shown above.</p>
+</div>
+</section>
+<section id="downloading-data-for-a-runlog">
+<h2>Downloading data for a runlog<a class="headerlink" href="#downloading-data-for-a-runlog" title="Permalink to this heading"></a></h2>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This section only applies to GGG users, and of those, users who want to generate custom priors themselves.
+If you do not use GGG (i.e. if you are using <code class="docutils literal notranslate"><span class="pre">ginput</span></code> to generate priors for satellite missions), this section will not be useful to you.
+Likewise, if you are someone who needs to do standard GGG2020 processing of TCCON or EM27 data, you should use the <code class="docutils literal notranslate"><span class="pre">.mod</span></code> and <code class="docutils literal notranslate"><span class="pre">.vmr</span></code> files generated at Caltech as described <a class="reference external" href="https://tccon-wiki.caltech.edu/Main/ObtainingGinputData">here</a>.</p>
+</div>
+<p>If you want to download GEOS data necessary to generate the <code class="docutils literal notranslate"><span class="pre">.mod</span></code> and <code class="docutils literal notranslate"><span class="pre">.vmr</span></code> files to process spectra defined in a runlog, the <code class="docutils literal notranslate"><span class="pre">get-rl-g5</span></code> subcommand will automatically download the GEOS files for the dates included in a runlog.
+Suppose you have a runlog, <code class="docutils literal notranslate"><span class="pre">$GGGPATH/runlogs/gnd/xx20200101_20200201.grl</span></code>.
+To download the GEOS files needed to make <code class="docutils literal notranslate"><span class="pre">.mod</span></code> and <code class="docutils literal notranslate"><span class="pre">.vmr</span></code> files for this runlog, you would again need three commands:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ ./run_ginput get-rl-g5 --mode FPIT --filetypes met --levels eta --path GEOS_MET_DIR $GGGPATH/runlogs/gnd/xx20200101_20200201.grl
+$ ./run_ginput get-rl-g5 --mode FPIT --filetypes met --levels surf --path GEOS_MET_DIR $GGGPATH/runlogs/gnd/xx20200101_20200201.grl
+$ ./run_ginput get-rl-g5 --mode FPIT --filetypes chm --levels eta --path GEOS_MET_DIR $GGGPATH/runlogs/gnd/xx20200101_20200201.grl
+</pre></div>
+</div>
+<p>By default, this will download the met data required for the entire runlog.
+To limit the dates, use the <code class="docutils literal notranslate"><span class="pre">--first-date</span></code> and <code class="docutils literal notranslate"><span class="pre">--last-date</span></code> options.
+For example, if you had a runlog for which you had previously obtained the GEOS data, and that you added new spectra to, you could use <code class="docutils literal notranslate"><span class="pre">--first-date</span></code> to indicate the earliest date for which new GEOS files need downloaded.
+These take dates in YYYY-MM-DD format.</p>
+</section>
 </section>
 
 
