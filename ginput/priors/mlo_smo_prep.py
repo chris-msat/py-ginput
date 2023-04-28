@@ -15,7 +15,7 @@ from ..common_utils.ggg_logging import logger, setup_logger
 
 from typing import Tuple, Optional
 
-__version__ = '1.0.1'
+__version__ = '1.1.0'
 
 class MloPrelimMode(Enum):
     TIME_STRICT_DIFF_EITHER = 0
@@ -278,8 +278,13 @@ def noaa_prelim_flagging(noaa_df: pd.DataFrame, hr_std_dev_max: float = 0.2, hr2
         raise TypeError(f'Unknown `mode` "{mode}"')
         
     # For the first and last points, there's only one difference to consider
-    xx_hr2hr[0] = xx_diff[0]
-    xx_hr2hr[-1] = xx_diff[-1]
+    if np.size(xx_hr2hr) > 0 and np.size(xx_diff) > 0:
+        xx_hr2hr[0] = xx_diff[0]
+        xx_hr2hr[-1] = xx_diff[-1]
+    elif np.size(xx_hr2hr) == 0 and np.size(xx_diff) == 0:
+        logger.info('There are no data points to flag by hour to hour differences')
+    else:
+        raise NotImplementedError('A case occurred where of two arrays that should both be size 0 or not, one had size 0 and the other did not. This case is not handled.')
     
     if full_output:
         xx_hr2hr_full = np.zeros_like(xx_sd)
@@ -849,25 +854,43 @@ class InsituMonthlyAverager(ABC):
         elif os.path.exists(output_file) and os.path.samefile(output_file, previous_file):
             raise InsituProcessingError('Cannot directly overwrite the previous monthly output file, even with clobber set')
 
-    @staticmethod
-    def _check_site(monthly_df, hourly_df, site):
+    @classmethod
+    def _check_site(cls, monthly_df, hourly_df, site, allow_alt_sites=False):
         """Check that the monthly and hourly dataframes are for the same NOAA site
         """
         def inner_check(df):
             df_sites = df['site'].unique()
-            ok = df_sites.size == 1 and df_sites[0] == site
+            ok = df_sites.size == 1
+            if not allow_alt_sites:
+                ok = ok and df_sites[0] == site
             return ok, df_sites
 
+        if allow_alt_sites:
+            hourly_ok, hourly_sites = inner_check(hourly_df)
+            if not hourly_ok:
+                raise InsituProcessingError('Given hourly file contains multiple NOAA site ID: {}'.format(', '.join(hourly_sites)))
+            else:
+                logger.info('Allowing alternate NOAA site ID %s, as requested', hourly_sites.item())
+        else:
+            hourly_ok, hourly_sites = inner_check(hourly_df)
+            if not hourly_ok:
+                raise InsituProcessingError('Given hourly file does not contain only {site} data. Sites present: {all_sites}'.format(site=site, all_sites=', '.join(hourly_sites)))
+
+        # Once multiple sites have been ingested into a monthly file, the check for one site in the monthly file will always fail, so there's not much point in
+        # enforcing that requirement. But change the severity of the message so that if the --allow-alt-sites flag is passed, it's just informational, but if
+        # that flag was not present, we get a more noticeable warning (in case the mixed sites were accidental).
         monthly_ok, monthly_sites = inner_check(monthly_df)
         if not monthly_ok:
-            raise InsituProcessingError('Previous monthly file does not contain only {site} data. Sites present: {all_sites}'.format(site=site, all_sites=', '.join(monthly_sites)))
-        
-        hourly_ok, hourly_sites = inner_check(hourly_df)
-        if not hourly_ok:
-            raise InsituProcessingError('Given hourly file does not contain only {site} data. Sites present: {all_sites}'.format(site=site, all_sites=', '.join(hourly_sites)))
+            if allow_alt_sites:
+                logger.info('Note: given input monthly file contains multiple sites: %s', ', '.join(monthly_sites))
+            else:
+                logger.warning('Caution: given input monthly file contains sites other than %s or multiple sites: %s. This is okay if a previous version of the monthly file was generated with alternate site data.',
+                               cls.class_site(),  ', '.join(monthly_sites))
+
+        return hourly_sites.item()
 
 
-    def convert(self, noaa_hourly_file: str, previous_monthly_file: str, output_monthly_file: str) -> None:
+    def convert(self, noaa_hourly_file: str, previous_monthly_file: str, output_monthly_file: str, allow_alt_sites: bool = False, site_id_override: Optional[str] = None) -> None:
         """Convert a NOAA hourly file to monthly averages and append to the end of an existing file.
 
         Parameters
@@ -881,6 +904,23 @@ class InsituMonthlyAverager(ABC):
 
         output_monthly_file
             Path to write the output file
+
+        allow_alt_sites
+            Set to ``True`` to allow the input hourly file to contain data with a site ID different
+            from the one defined by ``self.class_id()``. Otherwise, that would raise an :class:`InsituProcessingError`.
+            Changing to ``True`` also changes how mismatches between the input monthly file an the
+            ``self.class_id()`` value are reported, but such mismatches do not raise an error in
+            either case.
+
+        site_id_override
+            If given, then this value will be used as the site ID for the new row(s) added to the output
+            monthly file. When this is given, ``allow_alt_sites`` has no effect. Mismatches between the
+            ID in the input hourly file and the ID given to this argument are reported, but do not
+            raise an exception.
+
+            .. note::
+               Passing a string with more than 3 characters for ``site_id_override`` *should* work, but 
+               is not officially tested/supported.
 
         Returns
         -------
@@ -912,7 +952,28 @@ class InsituMonthlyAverager(ABC):
         hourly_df = hourly_df.loc[tt, :].copy()
         hourly_creation_month = pd.Timestamp(hourly_creation_date.year, hourly_creation_date.month, 1)
 
-        self._check_site(monthly_df, hourly_df, self.class_site())
+        # Handle checks for the site IDs in the input hourly file
+        if site_id_override is None:
+            # The default behavior is to require that *all* site IDs in the input file be "MLO" or "SMO" for each 
+            # site's class, respectively. If not, then this raises an exception. However, setting allow_alt_sites to
+            # ``True`` will allow different site IDs *as long as* all rows of the input file have the *same* ID.
+            # Note that starting from ginput v1.1.5d, mismatches in the monthly file only ever log a warning. 
+            noaa_site_id = self._check_site(monthly_df, hourly_df, self.class_site(), allow_alt_sites=allow_alt_sites)
+        else:
+            # We can also provide our own site ID. This is mainly useful if the input hourly file has a mix of site IDs,
+            # since that always raises an exception no matter what `allow_alt_sites` is. But we could also use this if
+            # we need to specify our own site ID for a different reason.
+            try:
+                hourly_site_id = self._check_site(monthly_df, hourly_df, site_id_override, allow_alt_sites=True)
+            except InsituProcessingError:
+                # With allow_alt_sites = True, this error indicates that the input file had multiple site IDs
+                logger.info('Multiple site IDs were detected in the input hourly file, using specified override "%s" instead', site_id_override)
+            else:
+                # Otherwise tell the user what site ID they're replacing
+                logger.info('Using site ID override "%s" in place of site ID "%s" detected in the input hourly file', site_id_override, hourly_site_id)
+
+            noaa_site_id = site_id_override
+
         hourly_df, new_month_index = self.get_new_hourly_data(
             monthly_df=monthly_df, 
             hourly_df=hourly_df, 
@@ -932,7 +993,7 @@ class InsituMonthlyAverager(ABC):
         new_monthly_df['month'] = new_month_index.month
         
         logger.info('Writing to {}'.format(output_monthly_file))
-        new_monthly_df['site'] = self.class_site()
+        new_monthly_df['site'] = noaa_site_id
         new_monthly_df = new_monthly_df[['site', 'year', 'month', 'value']]
 
         first_new_date = new_monthly_df.index.min()
@@ -987,7 +1048,7 @@ class SmoMonthlyAverager(InsituMonthlyAverager):
 
 def driver(site, previous_monthly_file, hourly_insitu_file, output_monthly_file, last_month=DEFAULT_LAST_MONTH, geos_2d_file_list=None, 
            allow_missing_geos_files=False, allow_missing_hourly_times=False, allow_missing_creation_date=False, limit_by_avail_data=True,
-           clobber=False, save_missing_geos_to=None):
+           clobber=False, save_missing_geos_to=None, allow_alt_sites=False, site_id_override=None):
     run_settings = RunSettings(
         save_missing_geos_to=save_missing_geos_to, 
         last_month=last_month, 
@@ -1006,7 +1067,7 @@ def driver(site, previous_monthly_file, hourly_insitu_file, output_monthly_file,
         raise InsituProcessingError('When processing with site == "smo", geos_2d_file_list must be provided')
 
     converter = conversion_classes[site]
-    converter.convert(hourly_insitu_file, previous_monthly_file, output_monthly_file)
+    converter.convert(hourly_insitu_file, previous_monthly_file, output_monthly_file, allow_alt_sites=allow_alt_sites, site_id_override=site_id_override)
 
 
 
@@ -1063,6 +1124,15 @@ def parse_args(p: ArgumentParser):
     p.add_argument('--allow-missing-geos-files', action='store_true', help='Prevent this program from erroring if GEOS files '
                                                                            'are missing, will still issue a warning and list '
                                                                            'the missing files if --save-missing-geos-to is given.')
+
+    site_ex_args = p.add_mutually_exclusive_group()
+    site_ex_args.add_argument('--allow-alt-noaa-site', dest='allow_alt_sites', action='store_true',
+                              help='Override the check that the input monthly and hourly files contain data from the correct NOAA site.')
+    site_ex_args.add_argument('--site-id-override', help='Override the site ID written to the new row(s) in the output monthly file with '
+                                                         'the value given to this option, e.g. --site-id-override=XXX will use "XXX" in the '
+                                                         'output file. This permits ingesting hourly files with mixed site IDs. If you only '
+                                                         'need to allow ingesting an hourly file for a site with a different ID than given '
+                                                         'by the SITE argument, prefer --allow-alt-noaa-site over this option.')
     p.add_argument('-c', '--clobber', action='store_true', help='By default, the output file will not overwrite any existing '
                                                                 'file at that path. Setting this flag will cause it to overwrite '
                                                                 'existing files UNLESS that file is the previous monthly file. '
