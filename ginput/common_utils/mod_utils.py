@@ -25,6 +25,7 @@ from numpy.core._multiarray_umath import arctan, tan, sin, cos
 from scipy.interpolate import interp1d, interp2d
 import subprocess
 import sys
+from warnings import warn
 
 from . import mod_constants as const
 from .mod_constants import days_per_year
@@ -844,7 +845,21 @@ def calculate_eq_lat(EPV, PT, area):
 
         for l,thresh in enumerate(EPV_thresh[k]):
             area_total = np.sum(area[new_EPV[k]>=thresh])
-            EL[k,l] = np.arcsin(1-area_total/(2*np.pi))*90.0*2/np.pi
+            x = 1-area_total/(2*np.pi)
+
+            # With Python 3.10 and those dependencies, I started getting cases where x was *just* outside the -1 to 1 allowed domain,
+            # which led to NaNs in the EqL and so bad things downstream. Since values were only slightly outside the domain, it's fine
+            # to clip them, but if they go too far outside the expected values, then we may have a bigger problem.
+            if x < -1.01 or x > 1.01:
+                warn(f'Total area divided by 2*pi (x={x}) is far outside the domain of arcsin in EqL calculation. Clipping to -1 to 1.')
+                
+            if x < -1:
+                x = -1
+            elif x > 1:
+                x = 1
+
+            
+            EL[k,l] = np.arcsin(x)*90.0*2/np.pi
 
     # Define a fixed potential vorticity grid, with increasing spacing away from 0
     # The last term should ensure that 0 is in the grid
