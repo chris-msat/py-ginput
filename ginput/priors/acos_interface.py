@@ -130,7 +130,8 @@ _def_errh = ErrorHandler(suppress_error=False)
 
 
 def acos_interface_main(instrument, met_resampled_file, geos_files, output_file, mlo_co2_file=None, smo_co2_file=None,
-                        use_trop_eqlat=False, cache_strat_lut=False, truncate_mlo_smo_by=0, nprocs=0, error_handler=_def_errh):
+                        use_trop_eqlat=False, cache_strat_lut=False, truncate_mlo_smo_by=0, nprocs=0, interp_pickle_dir='.',
+                        error_handler=_def_errh):
     """
     The primary interface to create CO2 priors for the ACOS algorithm
 
@@ -242,6 +243,7 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
     eqlat_array = compute_sounding_equivalent_latitudes(sounding_pv=pv_array, sounding_theta=theta_array,
                                                         sounding_datenums=datenum_array, sounding_qflags=qflag_array,
                                                         geos_files=geos_files, nprocs=nprocs, prior_flags=prior_flags,
+                                                        eqlat_pickle_dir=interp_pickle_dir,
                                                         error_handler=error_handler)
 
     met_data['el'] = eqlat_array.reshape(orig_shape)
@@ -559,7 +561,7 @@ def _prior_parallel(orig_shape, var_mapping, var_type_info, met_data, gas_record
 
 
 def compute_sounding_equivalent_latitudes(sounding_pv, sounding_theta, sounding_datenums, sounding_qflags, geos_files,
-                                          nprocs=0, prior_flags=None, error_handler=_def_errh):
+                                          nprocs=0, prior_flags=None, eqlat_pickle_dir='.', error_handler=_def_errh):
     """
     Compute equivalent latitudes for a collection of OCO soundings
 
@@ -620,7 +622,7 @@ def compute_sounding_equivalent_latitudes(sounding_pv, sounding_theta, sounding_
                              prior_flags=prior_flags, error_handler=error_handler)
     else:
         return _eqlat_parallel(sounding_pv, sounding_theta, sounding_datenums, sounding_qflags, geos_datenums, eqlat_fxns, 
-                               prior_flags=prior_flags, error_handler=error_handler, nprocs=nprocs, eqlat_pickle_dir='.')
+                               prior_flags=prior_flags, error_handler=error_handler, nprocs=nprocs, eqlat_pickle_dir=eqlat_pickle_dir)
 
 
 def _eqlat_helper(idx, pv_vec, theta_vec, datenum, quality_flag, eqlat_fxns, geos_datenums, prior_flags=None,
@@ -1330,6 +1332,10 @@ def parse_args(parser=None, instrument=None):
                         help='Silence all logging except warnings and critical messages. Note: some messages that do '
                              'not use the standard logger will also not be silenced.')
     parser.add_argument('-n', '--nprocs', default=0, type=int, help='Number of processors to use in parallelization')
+    parser.add_argument('--interp-pickle-dir', default='.',
+                        help='Directory in which to write temporary files containing pickles of the EqL interpolators if needed. '
+                             'These files will only be written if running on Python 3.9 or less, and will be cleaned up automatically. '
+                             'Default is "%(default)s"')
     parser.add_argument('--raise-errors', action='store_true', help='Raise errors normally rather than suppressing and '
                                                                     'logging them.')
 
