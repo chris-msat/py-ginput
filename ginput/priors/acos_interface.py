@@ -11,14 +11,19 @@ point. A command line interface is also provided
 from __future__ import print_function, division
 
 import argparse
+from contextlib import contextmanager
 import datetime as dt
 from dateutil.relativedelta import relativedelta
+from functools import lru_cache
 import h5py
 from itertools import repeat, product
 import logging
 from multiprocessing import Pool
 import numpy as np
+from pathlib import Path
+import pickle
 import os
+import sys
 import traceback
 
 from ..common_utils import mod_utils, mod_constants
@@ -125,7 +130,8 @@ _def_errh = ErrorHandler(suppress_error=False)
 
 
 def acos_interface_main(instrument, met_resampled_file, geos_files, output_file, mlo_co2_file=None, smo_co2_file=None,
-                        use_trop_eqlat=False, cache_strat_lut=False, truncate_mlo_smo_by=0, nprocs=0, error_handler=_def_errh):
+                        use_trop_eqlat=False, cache_strat_lut=False, truncate_mlo_smo_by=0, nprocs=0, interp_pickle_dir='.',
+                        error_handler=_def_errh):
     """
     The primary interface to create CO2 priors for the ACOS algorithm
 
@@ -237,6 +243,7 @@ def acos_interface_main(instrument, met_resampled_file, geos_files, output_file,
     eqlat_array = compute_sounding_equivalent_latitudes(sounding_pv=pv_array, sounding_theta=theta_array,
                                                         sounding_datenums=datenum_array, sounding_qflags=qflag_array,
                                                         geos_files=geos_files, nprocs=nprocs, prior_flags=prior_flags,
+                                                        eqlat_pickle_dir=interp_pickle_dir,
                                                         error_handler=error_handler)
 
     met_data['el'] = eqlat_array.reshape(orig_shape)
@@ -554,7 +561,7 @@ def _prior_parallel(orig_shape, var_mapping, var_type_info, met_data, gas_record
 
 
 def compute_sounding_equivalent_latitudes(sounding_pv, sounding_theta, sounding_datenums, sounding_qflags, geos_files,
-                                          nprocs=0, prior_flags=None, error_handler=_def_errh):
+                                          nprocs=0, prior_flags=None, eqlat_pickle_dir='.', error_handler=_def_errh):
     """
     Compute equivalent latitudes for a collection of OCO soundings
 
@@ -615,7 +622,7 @@ def compute_sounding_equivalent_latitudes(sounding_pv, sounding_theta, sounding_
                              prior_flags=prior_flags, error_handler=error_handler)
     else:
         return _eqlat_parallel(sounding_pv, sounding_theta, sounding_datenums, sounding_qflags, geos_datenums, eqlat_fxns, 
-                               prior_flags=prior_flags, error_handler=error_handler, nprocs=nprocs)
+                               prior_flags=prior_flags, error_handler=error_handler, nprocs=nprocs, eqlat_pickle_dir=eqlat_pickle_dir)
 
 
 def _eqlat_helper(idx, pv_vec, theta_vec, datenum, quality_flag, eqlat_fxns, geos_datenums, prior_flags=None,
@@ -660,6 +667,18 @@ def _eqlat_helper(idx, pv_vec, theta_vec, datenum, quality_flag, eqlat_fxns, geo
     elif prior_flags is not None and prior_flags[idx] != 0:
         logger.info('Sounding {}: prior flag != 0. Skipping eq. lat. calculation.'.format(idx))
         return default_return, prior_flags[idx]
+    
+    # Because of a limit on the size of objects that can be sent between threads in Python 3.6,
+    # we need a workaround for big interpolators. If we got strings/paths, then we had to write
+    # those interpolators to files and pass the paths to those files instead. This block can
+    # be removed when we no longer need to support Python 3.6.
+    eqlat_fxns_in = eqlat_fxns
+    eqlat_fxns = []
+    for fxn in eqlat_fxns_in:
+        if isinstance(fxn, (str, Path)):
+            eqlat_fxns.append(_eqlat_pickle_load_cached(fxn))
+        else:
+            eqlat_fxns.append(fxn)
 
     logger.debug('Calculating eq. lat. {}'.format(idx))
     try:
@@ -757,7 +776,7 @@ def _eqlat_serial(sounding_pv, sounding_theta, sounding_datenums, sounding_qflag
 
 
 def _eqlat_parallel(sounding_pv, sounding_theta, sounding_datenums, sounding_qflags, geos_datenums, eqlat_fxns, nprocs,
-                    prior_flags=None, error_handler=_def_errh):
+                    prior_flags=None, error_handler=_def_errh, eqlat_pickle_dir='.'):
     """
     Calculate equivalent latitude running in parallel mode.
 
@@ -767,10 +786,10 @@ def _eqlat_parallel(sounding_pv, sounding_theta, sounding_datenums, sounding_qfl
     See :func:`_eqlat_serial` for the other parameters and return type.
     """
     logger.info('Running eq. lat. calculation in parallel with {} processes'.format(nprocs))
-    with Pool(processes=nprocs) as pool:
+    with Pool(processes=nprocs) as pool, _eqlat_pickle_manager(eqlat_fxns, eqlat_pickle_dir) as eqlat_pickles:
         result = pool.starmap(_eqlat_helper, zip(range(sounding_pv.shape[0]), sounding_pv, sounding_theta,
                                                  sounding_datenums, sounding_qflags,
-                                                 repeat(eqlat_fxns), repeat(geos_datenums), repeat(prior_flags),
+                                                 repeat(eqlat_pickles), repeat(geos_datenums), repeat(prior_flags),
                                                  repeat(error_handler)))
 
     eqlats, flags = zip(*result)
@@ -780,6 +799,48 @@ def _eqlat_parallel(sounding_pv, sounding_theta, sounding_datenums, sounding_qfl
     for i, flag in enumerate(flags):
         prior_flags[i] = flag
     return sounding_eqlat
+
+
+@contextmanager
+def _eqlat_pickle_manager(eqlat_fxns, pickle_dir='.'):
+    if sys.version_info.major <= 3 and sys.version_info.minor >= 10:
+        logger.info("Running under Python 3.10 or greater, assuming support for large inter-thread objects. Not writing pickle files for eqlat interpolators.")
+        yield eqlat_fxns
+        return 
+    
+    logger.info("Running under Python 3.9 or less, not assuming there is support for large inter-thread objects. Writing pickle files for eqlat interpolators.")
+    mypid = os.getpid()
+    eqlat_pickle_files = []
+    
+    for i, fxn in enumerate(eqlat_fxns):
+        pickle_file = os.path.join(pickle_dir, f'ginput_eqlat_interpolator_pickle.{mypid}-{i}.pkl')
+        if os.path.exists(pickle_file):
+            raise IOError(f'Cannot create eqlat interpolator pickle file {pickle_file}, file already exists')
+        eqlat_pickle_files.append(pickle_file)
+        with open(pickle_file, 'wb') as f:
+            pickle.dump(fxn, f)
+    file_basenames = ', '.join(os.path.basename(fname) for fname in eqlat_pickle_files)
+    logger.info(f'Created {len(eqlat_pickle_files)} pickle files in {os.path.abspath(pickle_dir)}: {file_basenames}')
+    
+    try:
+        yield eqlat_pickle_files
+    finally:
+        for pickle_file in eqlat_pickle_files:
+            if os.path.exists(pickle_file):
+                os.remove(pickle_file)
+                logger.debug(f'Removed eqlat interpolator pickle file {os.path.abspath(pickle_file)}')
+        logger.info(f'Removed {len(eqlat_pickle_files)} temporary pickle files')
+
+
+@lru_cache(maxsize=4)
+def _eqlat_pickle_load_cached(pickle_file):
+    # It's important to have this as a cached function rather than loading the pickle directly in _eqlat_helper.
+    # If we do that, then it needs to load the pickles for each sounding it operates on, which is slow.
+    # At least in my testing, using this cache function means that the first sounding in a given thread will
+    # load the pickle, but then it is cached, so all the remaining soundings can access it directly from memory.
+    logger.debug(f'Loading eqlat interpolator from file {pickle_file}')
+    with open(pickle_file, 'rb') as f:
+        return pickle.load(f)
 
 
 def read_oco_resampled_met(met_file, error_handler=_def_errh):
@@ -1271,6 +1332,10 @@ def parse_args(parser=None, instrument=None):
                         help='Silence all logging except warnings and critical messages. Note: some messages that do '
                              'not use the standard logger will also not be silenced.')
     parser.add_argument('-n', '--nprocs', default=0, type=int, help='Number of processors to use in parallelization')
+    parser.add_argument('--interp-pickle-dir', default='.',
+                        help='Directory in which to write temporary files containing pickles of the EqL interpolators if needed. '
+                             'These files will only be written if running on Python 3.9 or less, and will be cleaned up automatically. '
+                             'Default is "%(default)s"')
     parser.add_argument('--raise-errors', action='store_true', help='Raise errors normally rather than suppressing and '
                                                                     'logging them.')
 
