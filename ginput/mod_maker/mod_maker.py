@@ -348,7 +348,7 @@ def write_mod(mod_path, version, site_lat, data=0, surf_data=0, func=None, muted
         # not sure if merra needs all the filters/corrections used for ncep data?
 
         # Export the Pressure, Temp and SHum
-        prototype_array = np.full((len(data['H2O_DMF'],)), np.nan, dtype=np.float)
+        prototype_array = np.full((len(data['H2O_DMF'],)), np.nan, dtype=float)
 
         output_dict = dict()
         for key in final_data_keys.keys():

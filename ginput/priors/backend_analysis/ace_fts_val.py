@@ -26,7 +26,7 @@ def _match_input_size(err_msg, *inputs):
         if np.ndim(val) == 0:
             inputs[idx] = np.full([max_size], val)
         elif np.shape(val)[0] == 1:
-            desired_shape = np.ones([np.ndim(val)], dtype=np.int)
+            desired_shape = np.ones([np.ndim(val)], dtype=int)
             desired_shape[0] = max_size
             inputs[idx] = np.tile(val, desired_shape)
         elif np.shape(val)[0] != max_size:
@@ -78,7 +78,7 @@ def match_ace_prior_profiles(prior_dirs, ace_dir, specie, match_alt=True, prior_
     # Now find what hour of the day the ACE profile is. Make this into the closest multiple of 3 since we have outputs
     # every 3 hours
     ace_hours = get_matching_ace_hours(prior_lons, prior_lats, prior_dates, ace_dir, specie)
-    prior_hours = (np.round(ace_hours/3)*3).astype(np.int)
+    prior_hours = (np.round(ace_hours/3)*3).astype(int)
     # This is not great, but if there's an hour > 21, we need to set it to 21 because 2100 UTC is the last hour we have
     # priors for. What would be better is to go to the next day, but at the moment we don't have priors for the next
     # day. This can be fixed if/when we do the full ACE record.

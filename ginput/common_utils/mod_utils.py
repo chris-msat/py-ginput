@@ -25,6 +25,7 @@ from numpy.core._multiarray_umath import arctan, tan, sin, cos
 from scipy.interpolate import interp1d, interp2d
 import subprocess
 import sys
+from warnings import warn
 
 from . import mod_constants as const
 from .mod_constants import days_per_year
@@ -844,7 +845,21 @@ def calculate_eq_lat(EPV, PT, area):
 
         for l,thresh in enumerate(EPV_thresh[k]):
             area_total = np.sum(area[new_EPV[k]>=thresh])
-            EL[k,l] = np.arcsin(1-area_total/(2*np.pi))*90.0*2/np.pi
+            x = 1-area_total/(2*np.pi)
+
+            # With Python 3.10 and those dependencies, I started getting cases where x was *just* outside the -1 to 1 allowed domain,
+            # which led to NaNs in the EqL and so bad things downstream. Since values were only slightly outside the domain, it's fine
+            # to clip them, but if they go too far outside the expected values, then we may have a bigger problem.
+            if x < -1.01 or x > 1.01:
+                warn(f'Total area divided by 2*pi (x={x}) is far outside the domain of arcsin in EqL calculation. Clipping to -1 to 1.')
+                
+            if x < -1:
+                x = -1
+            elif x > 1:
+                x = 1
+
+            
+            EL[k,l] = np.arcsin(x)*90.0*2/np.pi
 
     # Define a fixed potential vorticity grid, with increasing spacing away from 0
     # The last term should ensure that 0 is in the grid
@@ -1477,13 +1492,17 @@ def number_density_air(p, t):
     return p / (R*t) * const.avogadro
 
 
-def effective_vertical_path(z, p=None, t=None, nair=None):
-    """
+def effective_vertical_path(z, zmin, p=None, t=None, nair=None):
+    """  
     Calculate the effective vertical path used by GFIT for a given z/P/T grid.
 
     :param z: altitudes of the vertical levels. May be any unit, but note that the effective paths will be returned in
      the same unit.
     :type z: array-like
+    
+    :param zmin: minimum altitude that the light ray reaches. This is given as ``zmin`` in the netCDF files and the .ray
+     files. Must be in the same unit as ``z``.
+    :type zmin: float
 
     :param p: pressures of the vertical levels. Must be in hPa.
     :type p: array-like
@@ -1498,15 +1517,22 @@ def effective_vertical_path(z, p=None, t=None, nair=None):
         return dz_in * 0.5 * (1.0 + sign * lrp_in / 3 + lrp_in**2/12 + sign*lrp_in**3/60)
 
     if nair is not None:
-        d = nair
+        d = nair 
     elif p is not None and t is not None:
         d = number_density_air(p, t)
     else:
         raise TypeError('Either nair or p & t must be given')
-    dz = np.concatenate([[0.0], np.diff(z), [0.0]])
-    log_rp = np.log(d[:-1] / d[1:])
-    log_rp = np.concatenate([[0.0], log_rp, [0.0]])
-
+    
+    vpath = np.zeros_like(d)
+    
+    # From gfit/compute_vertical_paths.f, we need to find the first level above zmin
+    # If there is no such level (which should not happen for TCCON), we treat the top
+    # level this way
+    try:
+        klev = np.flatnonzero(z > zmin)[0]
+    except IndexError:
+        klev = np.size(z) - 1
+        
     # from gfit/compute_vertical_paths.f, the calculation for level i is
     #   v_i = 0.5 * dz_{i+1} * (1 - l_{i+1}/3 + l_{i+1}**2/12 - l_{i+1}**3/60)
     #       + 0.5 * dz_i * (1 + l_i/3 + l_i**2/12 + l_i**3/60)
@@ -1515,8 +1541,28 @@ def effective_vertical_path(z, p=None, t=None, nair=None):
     #   l_i  = ln(d_{i-1}/d_i)
     # The top level has no i+1 term. This vector addition duplicates that calculation. The zeros padded to the beginning
     # and end of the difference vectors ensure that when there's no i+1 or i-1 term, it is given a value of 0.
-    vpath = integral(dz[1:], log_rp[1:], sign=-1) + integral(dz[:-1], log_rp[:-1], sign=1)
-    # TODO: handle the levels around the surface
+    dz = np.concatenate([[0.0], np.diff(z[klev:]), [0.0]])
+    log_rp = np.log(d[klev:-1] / d[klev+1:])
+    log_rp = np.concatenate([[0.0], log_rp, [0.0]])
+    
+    # The indexing is complicated here, but with how dz and log_rp are constructed, this makes sure that, for vpath[klev],
+    # the first integral(...) term uses dz = z[klev+1] - z[klev] and log_rp = ln(d[klev]/d[klev+1]) and the second integral
+    # term is 0 (as vpath[klev] needs to account for the surface location below). For all other terms, this combines the
+    # contributions from the weight above and below each level, with different integration signs to account for how the
+    # weights increase from the level below to the current level and decrease from the current level to the level above.
+    vpath[klev:] = integral(dz[1:], log_rp[1:], sign=-1) + integral(dz[:-1], log_rp[:-1], sign=1)
+       
+    # Now handle the surface - I don't fully understand how this is constructed mathematically, but the idea is that both
+    # the levels in the prior above and below zmin need to contribute to the column, however that contribution needs to be
+    # 0 below zmin. 
+    
+    dz = z[klev] - z[klev-1]
+    xo = (zmin - z[klev-1])/dz
+    log_rp = 0.0 if d[klev] <= 0 else np.log(d[klev-1]/d[klev])
+    xl = log_rp * (1-xo)
+    vpath[klev-1] += dz * (1-xo) * (1-xo-xl*(1+2*xo)/3 + (xl**2)*(1+3*xo)/12 + (xl**3)*(1+4*xo)/60)/2
+    vpath[klev] += dz * (1-xo) * (1+xo+xl*(1+2*xo)/3 + (xl**2)*(1+3*xo)/12 - (xl**3)*(1+4*xo)/60)/2
+
     return vpath
 
 

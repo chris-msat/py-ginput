@@ -660,7 +660,7 @@ def _write_priors_h5(save_file, prior_results, atm_files, mod_files=None, root_a
                 fill_val = int_h5_fill
             elif var_array.flatten()[0] is None:
                 if all(v is None for v in var_array.flat):
-                    var_array = np.full_like(var_array, float_h5_fill, dtype=np.float)
+                    var_array = np.full_like(var_array, float_h5_fill, dtype=float)
                     attrs = dict()
                     fill_val = float_h5_fill
                 else:

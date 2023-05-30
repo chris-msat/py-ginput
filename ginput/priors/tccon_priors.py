@@ -58,6 +58,9 @@ import argparse
 from collections import OrderedDict
 from copy import deepcopy
 import datetime as dt
+import json
+from pathlib import Path
+from typing import Optional, Union
 
 from dateutil.relativedelta import relativedelta
 from glob import glob
@@ -488,7 +491,7 @@ class MloSmoTraceGasRecord(TraceGasRecord):
         :rtype: :class:`pandas.DataFrame`
         """
         n_ages = np.size(ages)
-        arr = xr.DataArray(data=np.ones([n_ages, 1], dtype=np.float), coords=[('age', ages), ('theta', cls._no_theta_coord)])
+        arr = xr.DataArray(data=np.ones([n_ages, 1], dtype=float), coords=[('age', ages), ('theta', cls._no_theta_coord)])
         return arr
 
     def get_latency_by_date(self, dates):
@@ -508,7 +511,7 @@ class MloSmoTraceGasRecord(TraceGasRecord):
         earlier_latency = np.array([mod_utils.timedelta_to_frac_year(td) for td in earlier_timedeltas if td < dt.timedelta(0)])
         later_latency = np.array([mod_utils.timedelta_to_frac_year(td) for td in later_timedeltas if td > dt.timedelta(0)])
 
-        latency = np.zeros_like(dates, dtype=np.float)
+        latency = np.zeros_like(dates, dtype=float)
         latency[dates < first_record_date] = earlier_latency
         latency[dates > last_record_date] = later_latency
         return latency
@@ -635,8 +638,8 @@ class MloSmoTraceGasRecord(TraceGasRecord):
         n_months = all_months.size
 
         df_combined = df_combined.reindex(all_months)
-        df_combined = df_combined.assign(interp_flag=np.zeros((n_months,), dtype=np.int),
-                                         latency=np.zeros((n_months,), dtype=np.int))
+        df_combined = df_combined.assign(interp_flag=np.zeros((n_months,), dtype=int),
+                                         latency=np.zeros((n_months,), dtype=int))
 
         # set the interpolation flag
         missing = pd.isna(df_combined['dmf_mean'])
@@ -1198,7 +1201,7 @@ class MloSmoTraceGasRecord(TraceGasRecord):
         # First get just monthly data. freq='MS' gives us monthly data at the start of the month. Use the existing logic
         # to extrapolate the record for a given month if needed.
         monthly_idx = pd.date_range(start_date_subset, end_date_subset, freq='MS')
-        monthly_df = pd.DataFrame(index=monthly_idx, columns=['dmf_mean', 'latency'], dtype=np.float)
+        monthly_df = pd.DataFrame(index=monthly_idx, columns=['dmf_mean', 'latency'], dtype=float)
         for timestamp in monthly_df.index:
             monthly_df.dmf_mean[timestamp], info_dict = self.get_gas_by_month(timestamp.year, timestamp.month, deseasonalize=deseasonalize)
             monthly_df.latency[timestamp] = info_dict['latency']
@@ -1345,9 +1348,9 @@ class MidlatTraceGasRecord(TraceGasRecord):
     # Assume peak Northward excursion of ITCZ is mid-July (idoy=198)
     # Assume peak Southward excursion of ITCZ is mid-Jan (idoy=15)
     # Copied from gsetup/calc_itcz.f in changeset 20597c7420c2
-    _vlat_jul = np.array([16, 20, 24, 27, 29, 30, 30, 30, 29, 26, 21, 20, 19, 19, 19, 19, 18, 16, 11, 5, 1, 4, 8, 12, 16], dtype=np.float)
-    _vlat_jan = np.array([3, 5, -8, -14, -12, -8, -5, -4, -5, -7, -10, -13, -14, -14, -10, -4, 0, 1, 0, -2, -6, -8, -6, -2, 3], dtype=np.float)
-    _vwidth = np.array([11, 10, 9, 8, 8, 9, 10, 11, 12, 12, 11, 10, 9, 8, 7, 6, 7, 8, 11, 13, 14, 14, 13, 12, 11], dtype=np.float)
+    _vlat_jul = np.array([16, 20, 24, 27, 29, 30, 30, 30, 29, 26, 21, 20, 19, 19, 19, 19, 18, 16, 11, 5, 1, 4, 8, 12, 16], dtype=float)
+    _vlat_jan = np.array([3, 5, -8, -14, -12, -8, -5, -4, -5, -7, -10, -13, -14, -14, -10, -4, 0, 1, 0, -2, -6, -8, -6, -2, 3], dtype=float)
+    _vwidth = np.array([11, 10, 9, 8, 8, 9, 10, 11, 12, 12, 11, 10, 9, 8, 7, 6, 7, 8, 11, 13, 14, 14, 13, 12, 11], dtype=float)
 
     @property
     def gas_name(self):
@@ -1570,8 +1573,8 @@ class HFTropicsRecord(MloSmoTraceGasRecord):
         n_months = all_months.size
 
         df_combined = pd.DataFrame(index=all_months, columns=['dmf_mean']).fillna(0.0)
-        df_combined = df_combined.assign(interp_flag=np.zeros((n_months,), dtype=np.int),
-                                         latency=np.zeros((n_months,), dtype=np.int))
+        df_combined = df_combined.assign(interp_flag=np.zeros((n_months,), dtype=int),
+                                         latency=np.zeros((n_months,), dtype=int))
 
         # Post processing is currently unnecessary for HF (since all concentrations are 0). However, we keep this call
         # in for consistency.
@@ -2906,7 +2909,7 @@ def _get_std_vmr_file(std_vmr_file):
 
 
 def generate_full_tccon_vmr_file(mod_data, utc_offsets, save_dir, product='fpit', std_vmr_file=None, site_abbrevs='xx',
-                                 keep_latlon_prec=False, use_existing_luts=False, **kwargs):
+                                 keep_latlon_prec=False, use_existing_luts=False, mlo_smo_files: Optional[dict] = None, **kwargs):
     """
     Generate a .vmr file with all the gases required by TCCON (both retrieved and secondary).
 
@@ -2942,10 +2945,23 @@ def generate_full_tccon_vmr_file(mod_data, utc_offsets, save_dir, product='fpit'
      or input data.
     :type use_existing_luts: bool
 
+    :param mlo_smo_files: if given, a dictionary with lowercase gas names for keys and subdictionaries for values. The
+     subdictionaries must have the keys "mlo_file" and "smo_file" with paths to the files to use as values. Any gases
+     not included in the dictionary will use the default files. Example::
+
+        {
+            'co2': {'mlo_file': './x2019/ml_co2_x2019.txt', 'smo_file': './x2019/smo_co2_x2019.txt'},
+            'ch4': {'mlo_file': './test/ml_ch4_test.txt', 'smo_file', './test/smo_ch4_test.txt'}
+        }
+
     :return: none, writes .vmr files
     :raises GGGPathError: if ``$GGGPATH`` is not defined and it needs to find the standard file or it cannot find the
      standard file in the expected place.
     """
+    if mlo_smo_files is None:
+        mlo_smo_files = dict()
+
+    extra_header = dict()
 
     std_vmr_file = _get_std_vmr_file(std_vmr_file)
     if std_vmr_file:
@@ -2968,18 +2984,23 @@ def generate_full_tccon_vmr_file(mod_data, utc_offsets, save_dir, product='fpit'
 
         rec = gas_records[gas.lower()]
         if issubclass(rec, MloSmoTraceGasRecord):
-            species.append(rec(**mlo_smo_kwargs))
+            these_kws = mlo_smo_kwargs.copy()
+            these_mlo_smo_files = mlo_smo_files.get(gas.lower(), dict())
+            if these_mlo_smo_files:
+                these_kws.update(these_mlo_smo_files)
+                extra_header[f'{gas}_mlo_smo_files'] = ', '.join(str(v) for v in these_mlo_smo_files.values())
+            species.append(rec(**these_kws))
         else:
             species.append(rec())
 
     generate_tccon_priors_driver(mod_data=mod_data, utc_offsets=utc_offsets, species=species, site_abbrevs=site_abbrevs,
                                  write_vmrs=save_dir, keep_latlon_prec=keep_latlon_prec, gas_name_order=std_vmr_gases,
-                                 product=product, **kwargs)
+                                 product=product, special_header_info=extra_header, **kwargs)
 
 
 def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='xx', write_vmrs=False,
                                  gas_name_order=None, keep_latlon_prec=False, flat_outdir=True, product='fpit',
-                                 **prior_kwargs):
+                                 special_header_info: Optional[dict] = None, **prior_kwargs):
     """
     Generate multiple TCCON priors or a file containing multiple gas concentrations
 
@@ -3015,6 +3036,9 @@ def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='x
     :param keep_latlon_prec: if ``False``, then .vmr files written are named with lat/lon rounded to integers. If
      ``True``, then 2 decimal places are retained.
     :type keep_latlon_prec: bool
+
+    :param special_header_info: A dictionary giving extra lines to write in the header of the .vmr file. The pairs
+     will be written as "key: value" in the header. 
 
     :param prior_kwargs:
     :return:
@@ -3119,12 +3143,16 @@ def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='x
                 if not os.path.exists(this_vmr_dir):
                     os.makedirs(this_vmr_dir)
                 vmr_name = os.path.join(this_vmr_dir, vmr_name)
+            extra_header_info = {
+                'EFF_LAT_TROP': map_constants['trop_eqlat'],
+                'MIDTROP_THETA': '{:.2f}'.format(map_constants['midtrop_theta'])
+            }
+            extra_header_info.update(special_header_info)
             writers.write_vmr_file(vmr_name, tropopause_alt=map_constants['tropopause_alt'],
                                    profile_date=site_date, profile_lat=site_lat,
                                    profile_alt=profile_dict['Height'], profile_gases=vmr_gases,
                                    gas_name_order=gas_name_order,
-                                   extra_header_info={'EFF_LAT_TROP': map_constants['trop_eqlat'],
-                                                      'MIDTROP_THETA': '{:.2f}'.format(map_constants['midtrop_theta'])})
+                                   extra_header_info=extra_header_info)
 
 
 def _add_common_cl_args(parser):
@@ -3156,6 +3184,10 @@ def _add_common_cl_args(parser):
     parser.add_argument('-f', '--flat-outdir', action='store_true',
                         help='Write the .vmr files directly to the specified output directory, rather than organizing '
                              'by product/site/vertical or slant.')
+    parser.add_argument('--mlo-smo-files-json', dest='mlo_smo_files', 
+                        help='A JSON file that configures which files to read MLO/SMO data from. The top level must be a '
+                             'dictionary with lowercase gas names as keys. The values must be dictionaries with "mlo_file" '
+                             'and "smo_file" as keys, with their values being paths to the files to read.')
 
 
 def parse_args(parser=None):
@@ -3207,7 +3239,12 @@ def runlog_cl_driver(runlog, first_date='2000-01-01', site_abbrev=None, **kwargs
 
 
 def cl_driver(date_range, mod_dir=None, mod_root_dir=None, save_dir=None, product='fpit',
-              site_lat=None, site_lon=None, site_abbrev='xx', keep_latlon_prec=False, **kwargs):
+              site_lat=None, site_lon=None, site_abbrev='xx', keep_latlon_prec=False, 
+              mlo_smo_files: Optional[Union[str, dict]] = None, **kwargs):
+
+    # Read the MLO/SMO JSON if given
+    if isinstance(mlo_smo_files, (str, Path)):
+        mlo_smo_files = json.load(mlo_smo_files)
 
     # Normalize scalar and collection abbreviations, lats, and lons
     site_abbrev, site_lat, site_lon, _ = mod_utils.check_site_lat_lon_alt(abbrev=site_abbrev, lat=site_lat, lon=site_lon, alt=None if site_lat is None else 0.0)
@@ -3260,5 +3297,5 @@ def cl_driver(date_range, mod_dir=None, mod_root_dir=None, save_dir=None, produc
 
     # GO!
     generate_full_tccon_vmr_file(mod_data=mod_files, utc_offsets=dt.timedelta(0), save_dir=save_dir, product=product,
-                                 keep_latlon_prec=keep_latlon_prec, site_abbrevs=all_site_abbrevs, **kwargs)
+                                 keep_latlon_prec=keep_latlon_prec, site_abbrevs=all_site_abbrevs, mlo_smo_files=mlo_smo_files, **kwargs)
 
