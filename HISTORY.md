@@ -2,6 +2,27 @@
 
 ## v1.1.8
 
+Another minor update to address issues arising from running with GEOS IT.
+
+1. Download URLs for GEOS IT updated to latest product.
+2. Solves an issue running the satellite interface (`oco`, `gosat`, or `geocarb` subcommands)
+   with 3 GEOS IT input. The interpolators created for the GEOS IT files are large enough that
+   three cannot be passed between threads in Python 3.6 due to a limit on the number of bytes
+   that the Python 3.6 multiprocessing module can pickle. This is fixed by Python 3.10 at the
+   latest, but getting Python 3.10 and required numerical dependencies to reproduce the Python
+   3.6 results to numerical precision was not possible. Therefore, as a workaround, if the 
+   satellite interface detects that it is running on Python 3.9 or earlier, it will pickle the
+   interpolators as separate files and load them back in from the threads when `--nprocs` is not
+   0.
+
+There are two other aspects to this release:
+
+1. This is the first release that can be run on Python 3.10 and has the changes needed to run
+  the satellite interface with GEOS IT files. v1.1.7 didn't have those GEOS IT changes and
+  v1.1.5d was not compatible with Python 3.6.
+2. The unit testing code now ignores the GINPUT_VERSION value in the `.vmr` file headers; this
+  saves us from needing to update the test input files with each version if there should not
+  be changes in the output.
 
 ## v1.1.7
 

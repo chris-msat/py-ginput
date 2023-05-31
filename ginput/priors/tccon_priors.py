@@ -2705,8 +2705,10 @@ def calculate_meso_co(alt_profile, eqlat_profile, pres_profile, temp_profile, pr
         co_alts = ds['altitude'][:]
 
     # In the LUT, nair is assumed to be the same for every profile (because pressure is) so we don't need to interpolate
-    # anything before we calculate the effective vertical path we'll use to integrate the CO profiles
-    vpath = mod_utils.effective_vertical_path(co_alts.data, nair=co_nair.data)
+    # anything before we calculate the effective vertical path we'll use to integrate the CO profiles.
+    # Since we only care about the mesosphere, we'll just use zmin = 0 for all calculations (it won't affect anything
+    # except the level about the surface).
+    vpath = mod_utils.effective_vertical_path(co_alts.data, zmin=0.0, nair=co_nair.data)
     plev = co_nd.plev
     prof_doy = mod_utils.day_of_year(prof_date)
     # Unlike the extra strat CO, we don't need the CO on the same levels as any existing profile, we want it on its
@@ -2722,7 +2724,8 @@ def calculate_meso_co(alt_profile, eqlat_profile, pres_profile, temp_profile, pr
     meso_co_col = np.sum(vpath[xx_meso] * 1e5 * cmam_co_prof[xx_meso])
 
     # Now we need the effective vertical path for the top level of the actual CO profile.
-    top_prior_vpath = mod_utils.effective_vertical_path(z=alt_profile, p=pres_profile, t=temp_profile)[-1]
+    # Again, the actual value of zmin does not matter here so we just use 0.
+    top_prior_vpath = mod_utils.effective_vertical_path(z=alt_profile, p=pres_profile, t=temp_profile, zmin=0.0)[-1]
 
     # So we can calculate the number density and then the mixing ratio (convert to ppb) that would result from putting
     # the CO column above the top level into the top level with the effective path length that we calculated and an
