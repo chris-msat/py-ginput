@@ -948,7 +948,18 @@ def calculate_eq_lat_field(EPV, PT, area):
 
         for l,thresh in enumerate(EPV_thresh[k]):
             area_total = np.sum(area[new_EPV[k]>=thresh])
-            EL[k,l] = np.arcsin(1-area_total/(2*np.pi))*90.0*2/np.pi
+            x = 1-area_total/(2*np.pi)
+
+            # see comment in calculate_eq_lat
+            if x < -1.01 or x > 1.01:
+                warn(f'Total area divided by 2*pi (x={x}) is far outside the domain of arcsin in EqL calculation. Clipping to -1 to 1.')
+                
+            if x < -1:
+                x = -1
+            elif x > 1:
+                x = 1
+                      
+            EL[k,l] = np.arcsin(x)*90.0*2/np.pi
 
     # pv_array has much less elements than in calculate_eq_lat in order to be used with griddata
     pv_array = np.unique(np.concatenate([
