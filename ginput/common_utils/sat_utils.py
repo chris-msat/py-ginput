@@ -64,4 +64,4 @@ def datetime2datenum(datetime_obj):
     :return: the converted date number
     :rtype: :class:`numpy.float`
     """
-    return np.datetime64(datetime_obj, 's').astype(np.float)
+    return np.datetime64(datetime_obj, 's').astype(float)

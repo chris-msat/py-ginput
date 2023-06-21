@@ -1,8 +1,96 @@
 # Ginput Version History
 
+## v1.1.8
+
+Another minor update to address issues arising from running with GEOS IT.
+
+1. Download URLs for GEOS IT updated to latest product.
+2. Solves an issue running the satellite interface (`oco`, `gosat`, or `geocarb` subcommands)
+   with 3 GEOS IT input. The interpolators created for the GEOS IT files are large enough that
+   three cannot be passed between threads in Python 3.6 due to a limit on the number of bytes
+   that the Python 3.6 multiprocessing module can pickle. This is fixed by Python 3.10 at the
+   latest, but getting Python 3.10 and required numerical dependencies to reproduce the Python
+   3.6 results to numerical precision was not possible. Therefore, as a workaround, if the 
+   satellite interface detects that it is running on Python 3.9 or earlier, it will pickle the
+   interpolators as separate files and load them back in from the threads when `--nprocs` is not
+   0.
+
+There are two other aspects to this release:
+
+1. This is the first release that can be run on Python 3.10 and has the changes needed to run
+  the satellite interface with GEOS IT files. v1.1.7 didn't have those GEOS IT changes and
+  v1.1.5d was not compatible with Python 3.6.
+2. The unit testing code now ignores the GINPUT_VERSION value in the `.vmr` file headers; this
+  saves us from needing to update the test input files with each version if there should not
+  be changes in the output.
+
 ## v1.1.7
 
 Installing with pip also includes the ginput/data folder without needing to use the editable mode
+
+## v1.1.5d
+
+**`mlo_smo_prep` version 1.1.0**
+
+Minor, backwards compatible, update to allow the `update_hourly` subcommand to accept hourly files from alternate NOAA sites.
+
+This change also stems from the lack of NOAA hourly data from MLO after the Mauna Loa eruption
+at the end of Nov 2022. NOAA set up temporary measurements on Mauna Kea until the Mauna Loa
+observatory can be reopened. This data comes with the site ID "MKO". Previously, the `update_hourly`
+command would not allow either the hourly or monthly input files to contain site IDs other than
+"MLO" or "SMO" as a protection against accidentally passing the wrong file for the wrong site.
+
+To support MKO data, plus any potential future site shifts, this version adds two new command line
+options to the `update_hourly` subcommand:
+
+* `--allow-alt-noaa-site`: when this flag is passed, the hourly file is allowed to have a site ID
+  that does not match the expected "MLO" or "SMO". That site ID will be recorded as the site ID 
+  for the new months in the output monthly file. An error will still be raised if the input hourly
+  file contains multiple site IDs.
+* `--site-id-override`: allows the caller to pass a site ID to use in the output monthly file
+  *instead* of the site ID(s) found in the input hourly file. When given, the hourly file *may*
+  have multiple site IDs; they will be ignored and the site ID passed to this option will be 
+  used instead.
+
+The site IDs in the input monthly file are still checked, but will no longer raise an error in
+any case. Instead either a warning or informational message will be logged if the site ID(s) in
+the input file are do not match "MLO"/"SMO" or the override site ID. Whether a warning or 
+informational message is printed depends on whether `--allow-alt-noaa-site` is absent or present.
+Make this check a warning rather than a hard error was done because once a monthly file uses an
+alternate site once, it will always have multiple site IDs going forward, which would require
+passing `--allow-alt-noaa-site` every time, even after the hourly file reverts back to the
+expected site (MLO or SMO).
+
+Like v1.1.5b and v1.1.5c, this version number is outside the standard semantic versioning pattern,
+as it was a fix that needed to be applied to the version of `ginput` used for OCO-2/3 B11 processing.
+
+## v1.1.5c
+
+**`mlo_smo_prep` version 1.0.2**
+
+Minor patch to fix unexpected crash in `update_hourly` subcommand when NOAA hourly data is all fills.
+
+In Dec 2022, the NOAA hourly data from Mauna Loa was all flagged. This caused a crash
+when running the `update_hourly` subcommand because it expects there to be at least
+some valid data during the preliminary filtering process. The fix was straightforward,
+as if there is no valid data, the preliminary filtering cannot filter out any more
+data and so can return early. This produces a NaN in the monthly average output file
+as expected.
+
+Like v1.1.5b, this version number is outside the standard semantic versioning pattern,
+as it was a fix that needed to be applied to the version of `ginput` used for OCO-2/3
+B11 processing.
+
+## v1.1.5b
+
+**acos_interface version 1.2.3**
+
+Minor patch to support GEOS-IT file naming conventions when generating OCO-2/3 priors.
+
+This version number is outside the standard semantic versioning pattern, as the request
+was to make the fix without changing any science output. To ensure that was the case, 
+this patch was applied off of the 1.1.5 version of ginput used in OCO-2/3 B11 rather
+than the later 1.1.7 version. It will be merged into the main branch in a later version.
 
 ## v1.1.5
 

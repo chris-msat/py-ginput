@@ -221,7 +221,7 @@ def make_hf_ch4_slopes(ace_ch4_file, ace_hf_file, ace_age_file, washenfelder_sup
 
     # Read in the early slopes from Washenfelder et al. 2003 (doi: 10.1029/2003GL017969), table S3.
     washenfelder_df = pd.read_csv(washenfelder_supp_table_file, header=2, sep=r'\s+')
-    washenfelder_slopes = washenfelder_df.set_index('Date').b.astype(np.float)
+    washenfelder_slopes = washenfelder_df.set_index('Date').b.astype(float)
     washenfelder_slopes.index = pd.DatetimeIndex(washenfelder_slopes.index)
     washenfelder_slopes.name = 'slope'
 
@@ -233,7 +233,7 @@ def make_hf_ch4_slopes(ace_ch4_file, ace_hf_file, ace_age_file, washenfelder_sup
     lat_bin_slopes = pd.DataFrame(index=_get_ace_date_range(ace_dates), columns=lat_bin_functions.keys())
     lat_bin_counts = lat_bin_slopes.copy()
 
-    fit_params = np.zeros([len(lat_bin_functions), 4], dtype=np.float)
+    fit_params = np.zeros([len(lat_bin_functions), 4], dtype=float)
 
     for ibin, (bin_name, bin_fxn) in enumerate(lat_bin_functions.items()):
         for year_start_date in lat_bin_slopes.index:
@@ -247,7 +247,7 @@ def make_hf_ch4_slopes(ace_ch4_file, ace_hf_file, ace_age_file, washenfelder_sup
         full_series = pd.concat([washenfelder_slopes, lat_bin_slopes.loc[:, bin_name]])
         full_series = full_series.sort_index()
         full_series_year = full_series.index.year
-        full_series = full_series.to_numpy().astype(np.float)
+        full_series = full_series.to_numpy().astype(float)
 
         # This was found to be a good initial guess for all latitude bins by trial and error. 3000.0 gets about the
         # right magnitude at year 0, 0.18 get about the right decay, using the last slope as the offset generally works
@@ -292,7 +292,7 @@ def _bin_z_vs_xy(x, y, z, good_data, x_bins, y_bins):
     n_x_bins = x_bins.size - 1
     n_y_bins = y_bins.size - 1
     x_means = np.full([n_x_bins, n_y_bins], np.nan)
-    x_counts = np.zeros_like(x_means, dtype=np.int)
+    x_counts = np.zeros_like(x_means, dtype=int)
 
     for i, (tlow, thigh) in enumerate(zip(y_bins[:-1], y_bins[1:])):
         aa = good_data & (y >= tlow) & (y < thigh)
@@ -449,14 +449,14 @@ def _save_hf_ch4_lut(nc_filename, ace_ch4_file, ace_hf_file, ace_age_file, lat_b
         fit_params_dim = nch.createDimension('exp_fit_params_length', size=nparams)
 
         # Save the variables
-        ioutils.make_ncvar_helper(nch, 'ch4_hf_slopes', ch4_hf_slopes.to_numpy().astype(np.float), [year_dim, bins_dim],
+        ioutils.make_ncvar_helper(nch, 'ch4_hf_slopes', ch4_hf_slopes.to_numpy().astype(float), [year_dim, bins_dim],
                                   units='ppb CH4/ppb HF',
                                   description='Slope of stratospheric CH4 concentrations vs HF concentrations from '
                                               'ACE-FTS data for specific years and latitude bins')
-        ioutils.make_ncvar_helper(nch, 'ace_counts', ch4_hf_count.to_numpy().astype(np.float), [year_dim, bins_dim],
+        ioutils.make_ncvar_helper(nch, 'ace_counts', ch4_hf_count.to_numpy().astype(float), [year_dim, bins_dim],
                                   units='#',
                                   description='Number of ACE-FTS observations used to calculate this slope')
-        ioutils.make_ncvar_helper(nch, 'ch4_hf_slopes_source', ch4_hf_source.to_numpy().astype(np.int), [year_dim, bins_dim],
+        ioutils.make_ncvar_helper(nch, 'ch4_hf_slopes_source', ch4_hf_source.to_numpy().astype(int), [year_dim, bins_dim],
                                   units='N/A',
                                   description='Flag indicating how the slope was computed. 0 means taken directly from '
                                               'fits of ACE-FTS CH4 vs. HF; 1 means sampled from the exponential fit '
@@ -1095,8 +1095,8 @@ def make_excess_co_lut(save_file, ace_co_file, ace_ch4_file, ace_age_file, lat_t
         means = xr.Dataset({k: proto_array.copy() for k in bin_cols})
         stds = xr.Dataset({k: proto_array.copy() for k in bin_cols})
 
-        flags = np.zeros(proto_array.shape, dtype=np.int)
-        counts = np.zeros(proto_array.shape, dtype=np.int)
+        flags = np.zeros(proto_array.shape, dtype=int)
+        counts = np.zeros(proto_array.shape, dtype=int)
 
         pbar = mod_utils.ProgressBar(total_bins, prefix='Binning', style='counter')
         iind = 0

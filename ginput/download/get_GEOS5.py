@@ -141,16 +141,16 @@ def URLlist_GEOSIT(start, end, timestep=timedelta(hours=3), outpath='', filetype
 
     if filetype == 'met':
         if levels == 'p':
-            fmt = "http://goldsfs1.gesdisc.eosdis.nasa.gov/data/GEOSIT/GEOSIT_ASM_I3_{gridtype}_P42.5.27.1/{yr}/{doy:0>3}/.hidden/GEOS.it.asm.asm_inst_3hr_glo_{grid_key}_p42.GEOS5271.{ymd}T{hr:0>2}00.V01.nc4\n"
+            fmt = "http://goldsfs1.gesdisc.eosdis.nasa.gov/data/GEOSIT/GEOSIT_ASM_I3_{gridtype}_P42.5.29.4/{yr}/{doy:0>3}/.hidden/GEOS.it.asm.asm_inst_3hr_glo_{grid_key}_p42.GEOS5294.{ymd}T{hr:0>2}00.V01.nc4\n"
         elif levels == 'eta':
-            fmt = "http://goldsfs1.gesdisc.eosdis.nasa.gov/data/GEOSIT/GEOSIT_ASM_I3_{gridtype}_V72.5.27.1/{yr}/{doy:0>3}/.hidden/GEOS.it.asm.asm_inst_3hr_glo_{grid_key}_v72.GEOS5271.{ymd}T{hr:0>2}00.V01.nc4\n"
+            fmt = "http://goldsfs1.gesdisc.eosdis.nasa.gov/data/GEOSIT/GEOSIT_ASM_I3_{gridtype}_V72.5.29.4/{yr}/{doy:0>3}/.hidden/GEOS.it.asm.asm_inst_3hr_glo_{grid_key}_v72.GEOS5294.{ymd}T{hr:0>2}00.V01.nc4\n"
         elif levels == 'surf':
-            fmt = "http://goldsfs1.gesdisc.eosdis.nasa.gov/data/GEOSIT/GEOSIT_ASM_I1_{gridtype}_SLV.5.27.1/{yr}/{doy:0>3}/.hidden/GEOS.it.asm.asm_inst_1hr_glo_{grid_key}_slv.GEOS5271.{ymd}T{hr:0>2}00.V01.nc4\n"
+            fmt = "http://goldsfs1.gesdisc.eosdis.nasa.gov/data/GEOSIT/GEOSIT_ASM_I1_{gridtype}_SLV.5.29.4/{yr}/{doy:0>3}/.hidden/GEOS.it.asm.asm_inst_1hr_glo_{grid_key}_slv.GEOS5294.{ymd}T{hr:0>2}00.V01.nc4\n"
         else:
             raise ValueError('No GEOSIT URL format defined for filetype == {} and levels == {}'.format(filetype, levels))
     elif filetype == 'chm':
         if levels == 'eta':
-            fmt = "http://goldsfs1.gesdisc.eosdis.nasa.gov/data/GEOSIT/GEOSIT_CHM_I3_{gridtype}_V72.5.27.1/{yr}/{doy:0>3}/.hidden/GEOS.it.asm.chm_inst_3hr_glo_{grid_key}_v72.GEOS5271.{ymd}T{hr:0>2}00.V01.nc4\n"
+            fmt = "http://goldsfs1.gesdisc.eosdis.nasa.gov/data/GEOSIT/GEOSIT_CHM_I3_{gridtype}_V72.5.29.4/{yr}/{doy:0>3}/.hidden/GEOS.it.asm.chm_inst_3hr_glo_{grid_key}_v72.GEOS5294.{ymd}T{hr:0>2}00.V01.nc4\n"
         else:
             raise ValueError('Chemistry files only available on eta levels')
     else:
@@ -215,6 +215,7 @@ def parse_args(parser=None):
         am_i_main = False
 
     parser.add_argument('date_range', type=dlutils.parse_date_range_no_hm, help=dlutils.date_range_cl_help(False))
+    parser.add_argument('--list-only', action='store_true', help='Only generate the list of URLs to download')
     _add_common_args(parser)
     parser.epilog = 'If both --filetypes and --levels are omitted, then the legacy behavior is to download met data ' \
                     'for the surface and on fixed pressure levels. However, if one is given, then both must be given.'
@@ -290,7 +291,7 @@ def runlog_driver(runlog, path='', mode='FP', filetypes=_default_file_type, leve
 
 
 def driver(date_range, mode='FP', path='.', filetypes=_default_file_type, levels=_default_level_type,
-           gridtypes=_default_grid_type,log_file=sys.stdout, verbosity=0, **kwargs):
+           gridtypes=_default_grid_type,log_file=sys.stdout, verbosity=0, list_only=False, **kwargs):
     """
     Run get_GEOS5 as if called from the command line.
 
@@ -343,8 +344,9 @@ def driver(date_range, mode='FP', path='.', filetypes=_default_file_type, levels
             os.makedirs(outpath)
 
         _func_dict[mode](start, end, filetype=ftype, levels=ltype, gridtype=gtype, outpath=os.path.join(outpath, 'getGEOS.dat'))
-        for line in execute(wget_cmd.split(), cwd=outpath):
-            print(line, end="", file=log_file)
+        if not list_only:
+            for line in execute(wget_cmd.split(), cwd=outpath):
+                print(line, end="", file=log_file)
 
 
 ########
