@@ -9,6 +9,7 @@ import sys
 
 from . import download_utils as dlutils
 from ..common_utils import mod_utils, readers
+from ..common_utils.ioutils import SmartHandle
 from ..common_utils.ggg_logging import logger
 
 ####################
@@ -75,7 +76,7 @@ def URLlist_FP(start, end, timestep=timedelta(hours=3), outpath='', filetype=_de
     print('Writting URL list in:',outpath)
 
     curdate = start
-    with open(outpath,'w') as f:
+    with SmartHandle(outpath,'w') as f:
         while curdate<end:
             f.write(fmt.format(curdate.year,curdate.month,curdate.day,datetime.strftime(curdate,'%Y%m%d'),curdate.hour))
             curdate += timestep
@@ -116,7 +117,7 @@ def URLlist_FPIT(start, end, timestep=timedelta(hours=3), outpath='', filetype=_
     print('Writing URL list in:',outpath)
 
     curdate = start
-    with open(outpath, 'w') as f:
+    with SmartHandle(outpath, 'w') as f:
         while curdate < end:
             f.write(fmt.format(yr=curdate.year, doy=curdate.timetuple().tm_yday, ymd=datetime.strftime(curdate, '%Y%m%d'), hr=curdate.hour))
             curdate += timestep
@@ -162,7 +163,7 @@ def URLlist_GEOSIT(start, end, timestep=timedelta(hours=3), outpath='', filetype
     print('Writing URL list in:',outpath)
 
     curdate = start
-    with open(outpath, 'w') as f:
+    with SmartHandle(outpath, 'w') as f:
         while curdate < end:
             f.write(fmt.format(gridtype=gridtype,grid_key=grid_key,yr=curdate.year, doy=curdate.timetuple().tm_yday, ymd=datetime.strftime(curdate, '%Y-%m-%d'), hr=curdate.hour))
             curdate += timestep
@@ -216,6 +217,7 @@ def parse_args(parser=None):
 
     parser.add_argument('date_range', type=dlutils.parse_date_range_no_hm, help=dlutils.date_range_cl_help(False))
     parser.add_argument('--list-only', action='store_true', help='Only generate the list of URLs to download')
+    parser.add_argument('--print-list', action='store_true', help='Only print the list of URLs to download to stdout')
     _add_common_args(parser)
     parser.epilog = 'If both --filetypes and --levels are omitted, then the legacy behavior is to download met data ' \
                     'for the surface and on fixed pressure levels. However, if one is given, then both must be given.'
@@ -291,7 +293,7 @@ def runlog_driver(runlog, path='', mode='FP', filetypes=_default_file_type, leve
 
 
 def driver(date_range, mode='FP', path='.', filetypes=_default_file_type, levels=_default_level_type,
-           gridtypes=_default_grid_type,log_file=sys.stdout, verbosity=0, list_only=False, **kwargs):
+           gridtypes=_default_grid_type,log_file=sys.stdout, verbosity=0, list_only=False, print_list=False, **kwargs):
     """
     Run get_GEOS5 as if called from the command line.
 
@@ -323,6 +325,12 @@ def driver(date_range, mode='FP', path='.', filetypes=_default_file_type, levels
 
     :param gridtypes: the type of grid when using GEOS-IT files "L" for lat-lon and "C" for cubed-sphere
 
+    :param list_only: write the URL list but do not download the files
+    :type list_only: bool
+
+    :param print_list: print the list of URLs to stdout but do not download the files
+    :type print_list: bool
+
     :param kwargs: unused, swallows extra keyword arguments.
 
     :return: none, downloads GEOS files to ``path``.
@@ -338,13 +346,14 @@ def driver(date_range, mode='FP', path='.', filetypes=_default_file_type, levels
 
     start, end = date_range
     for ftype, ltype, gtype in zip(filetypes, levels, gridtypes):
-        outpath = os.path.join(path, _std_out_paths[ltype])
-        if not os.path.exists(outpath):
+        outpath = False if print_list else os.path.join(path, _std_out_paths[ltype])
+        if outpath and not os.path.exists(outpath):
             logger.info('Creating {}'.format(outpath))
             os.makedirs(outpath)
 
-        _func_dict[mode](start, end, filetype=ftype, levels=ltype, gridtype=gtype, outpath=os.path.join(outpath, 'getGEOS.dat'))
-        if not list_only:
+        file_outpath = '-' if not outpath else os.path.join(outpath, 'getGEOS.dat')
+        _func_dict[mode](start, end, filetype=ftype, levels=ltype, gridtype=gtype, outpath=file_outpath)
+        if not list_only and not print_list:
             for line in execute(wget_cmd.split(), cwd=outpath):
                 print(line, end="", file=log_file)
 

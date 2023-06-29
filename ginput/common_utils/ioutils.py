@@ -6,8 +6,77 @@ from hashlib import sha1
 import netCDF4 as ncdf
 import numpy as np
 from subprocess import CalledProcessError
+import sys
 
 from . import mod_utils
+
+
+class SmartHandle:
+    """An improved handle to standard files
+
+    This solves the problem of opening either a file on disk or the special stdin/stdout file objects. If the filename
+    is "-" or `None`, then stdin or stdout is opened (depending on the mode - stdin for read modes, stdout for any other
+    mode). Otherwise the file specified is opened as normal.
+
+    Parameters
+    ----------
+    filename: str or None
+        The path to the file to open. If "-" or `None`, then stdin/stdout is "opened"
+    mode: str
+        The permission mode to open the file under, may be any mode recognized by the :func:`open` builtin.
+
+    Examples
+    --------
+
+    You can use this pretty much anywhere in place of :func:`open`. The following would write "This is a log message"
+    to the :file:`logfile.txt` file:
+
+    >>> f = SmartHandle('logfile.txt', 'w')
+    >>> f.write('This is a log message\\n')
+    >>> f.close()
+
+    But we can also use this to write that to stdout:
+
+    >>> f = SmartHandle('-', 'w')  # stdout is chosen because the mode is write
+    >>> f.write('This is a log message\\n')
+    >>> f.close()  # closing will have no effect and can be included or omitted safely
+
+    This works in `with` blocks as well
+    >>> with SmartHandle('-', 'w') as f:
+    >>>      f.write('This is a log message\\n')
+
+    This is helpful if, say, you want to print messages to the screen normally but have the ability to redirect them
+    to a file. A single `with` block can write to either a file or stdout depending on the value of the filename, which
+    helps prevent having to duplicate your code.
+    """
+    def __init__(self, filename, mode):
+        if filename is None or filename == '-':
+            if mode.startswith('r'):
+                self._handle = sys.stdin
+            else:
+                self._handle = sys.stdout
+            self._do_close = False
+        else:
+            self._handle = open(filename, mode)
+            self._do_close = True
+
+    def __getattr__(self, item):
+        # this allows pass through of all read/write methods to the _handle
+        return getattr(self._handle, item)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def close(self):
+        """Close the open file.
+
+        This has no effect if it was stdin or stdout opened.
+        """
+        if self._do_close:
+            self._handle.close()
 
 
 def make_ncdim_helper(nc_handle, dim_name, dim_var, **attrs):
