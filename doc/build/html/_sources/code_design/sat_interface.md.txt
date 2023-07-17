@@ -1,1 +1,5 @@
 # Satellite priors interface
+
+## Overview
+
+The {py:mod}`~ginput.priors.acos_interface` module

@@ -133,7 +133,7 @@ takes in an hourly dataframe and returns one with only background data left as r
 
 <dl class="py method">
 <dt class="sig sig-object py" id="ginput.priors.mlo_smo_prep.InsituMonthlyAverager.convert">
-<span class="sig-name descname"><span class="pre">convert</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">noaa_hourly_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">previous_monthly_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_monthly_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager.convert" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">convert</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">noaa_hourly_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">previous_monthly_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_monthly_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">allow_alt_sites</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">site_id_override</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ginput.priors.mlo_smo_prep.InsituMonthlyAverager.convert" title="Permalink to this definition"></a></dt>
 <dd><p>Convert a NOAA hourly file to monthly averages and append to the end of an existing file.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -142,6 +142,21 @@ takes in an hourly dataframe and returns one with only background data left as r
 <li><p><strong>previous_monthly_file</strong> – Path to the previous monthly averages file, the output file will copy its existing data
 and append new monthly average(s) to the end.</p></li>
 <li><p><strong>output_monthly_file</strong> – Path to write the output file</p></li>
+<li><p><strong>allow_alt_sites</strong> – Set to <code class="docutils literal notranslate"><span class="pre">True</span></code> to allow the input hourly file to contain data with a site ID different
+from the one defined by <code class="docutils literal notranslate"><span class="pre">self.class_id()</span></code>. Otherwise, that would raise an <a class="reference internal" href="#ginput.priors.mlo_smo_prep.InsituProcessingError" title="ginput.priors.mlo_smo_prep.InsituProcessingError"><code class="xref py py-class docutils literal notranslate"><span class="pre">InsituProcessingError</span></code></a>.
+Changing to <code class="docutils literal notranslate"><span class="pre">True</span></code> also changes how mismatches between the input monthly file an the
+<code class="docutils literal notranslate"><span class="pre">self.class_id()</span></code> value are reported, but such mismatches do not raise an error in
+either case.</p></li>
+<li><p><strong>site_id_override</strong> – <p>If given, then this value will be used as the site ID for the new row(s) added to the output
+monthly file. When this is given, <code class="docutils literal notranslate"><span class="pre">allow_alt_sites</span></code> has no effect. Mismatches between the
+ID in the input hourly file and the ID given to this argument are reported, but do not
+raise an exception.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Passing a string with more than 3 characters for <code class="docutils literal notranslate"><span class="pre">site_id_override</span></code> <em>should</em> work, but
+is not officially tested/supported.</p>
+</div>
+</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
