@@ -73,7 +73,7 @@ def URLlist_FP(start, end, timestep=timedelta(hours=3), outpath='', filetype=_de
     if outpath=='': # if no specified full path to make the file, just write a file in the current directory
         outpath = 'getFP.dat'
 
-    print('Writting URL list in:',outpath)
+    print('Writting URL list in:',outpath,file=sys.stderr)
 
     curdate = start
     with SmartHandle(outpath,'w') as f:
@@ -114,7 +114,7 @@ def URLlist_FPIT(start, end, timestep=timedelta(hours=3), outpath='', filetype=_
     if outpath=='': # if no specified full path to make the file, just write a file in the current directory
         outpath = 'getFPIT.dat'
 
-    print('Writing URL list in:',outpath)
+    print('Writing URL list in:',outpath,file=sys.stderr)
 
     curdate = start
     with SmartHandle(outpath, 'w') as f:
@@ -160,7 +160,7 @@ def URLlist_GEOSIT(start, end, timestep=timedelta(hours=3), outpath='', filetype
     if outpath=='': # if no specified full path to make the file, just write a file in the current directory
         outpath = 'getGEOSIT.dat'
 
-    print('Writing URL list in:',outpath)
+    print('Writing URL list in:',outpath,file=sys.stderr)
 
     curdate = start
     with SmartHandle(outpath, 'w') as f:
@@ -215,7 +215,7 @@ def parse_args(parser=None):
         parser.description = description
         am_i_main = False
 
-    parser.add_argument('date_range', type=dlutils.parse_date_range_no_hm, help=dlutils.date_range_cl_help(False))
+    parser.add_argument('date_range', type=dlutils.parse_date_range, help=dlutils.date_range_cl_help(True))
     parser.add_argument('--list-only', action='store_true', help='Only generate the list of URLs to download')
     parser.add_argument('--print-list', action='store_true', help='Only print the list of URLs to download to stdout')
     _add_common_args(parser)
