@@ -1,3 +1,4 @@
+from argparse import ArgumentParser
 import ctypes
 from datetime import datetime, timedelta
 from glob import glob
@@ -166,3 +167,23 @@ def lut_regen_driver():
     # regenerated
     for record in tccon_priors.gas_records.values():
         record()
+
+
+def parse_cl_args(p=None):
+    if p is None:
+        p = ArgumentParser()
+        i_am_main = True
+    else:
+        i_am_main = False
+
+    p.description = 'Entry point for ginput intended for calls from priors automation code'
+    subp = p.add_subparsers()
+    p_run = subp.add_parser('run', help='Run ginput to generate .mod, .vmr, and (optionally) .map files')
+    p_run.add_argument('json_file', help='Path to the JSON file containing the information about what priors to generate')
+    p_run.set_defaults(driver_fxn=job_driver)
+
+    p_lut = subp.add_parser('regen-lut', help='Regenerate the chemical lookup tables used by "run"')
+    p_lut.set_defaults(driver_fxn=lut_regen_driver)
+
+    if i_am_main:
+        return vars(p.parse_args())

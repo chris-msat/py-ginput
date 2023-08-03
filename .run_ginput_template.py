@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import argparse
 
-from ginput.priors import acos_interface as aci, tccon_priors, map_maker
+from ginput.priors import acos_interface as aci, tccon_priors, map_maker, automation
 from ginput.mod_maker import mod_maker
 from ginput.download import get_GEOS5
 
@@ -44,6 +44,9 @@ def parse_args():
 
     map_parser = subparsers.add_parser('map', help='Generate .map (a priori) files.')
     map_maker.parse_cl_args(map_parser)
+
+    auto_parser = subparsers.add_parser('auto', help='Entry point for running ginput in an automation environment')
+    automation.parse_cl_args(auto_parser)
 
     return vars(parser.parse_args())
 
