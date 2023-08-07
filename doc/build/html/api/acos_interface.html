@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" >
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>acos_interface module &mdash; ginput 1.1.6 documentation</title>
@@ -11,10 +11,9 @@
     <script src="../_static/js/html5shiv.min.js"></script>
   <![endif]-->
   
-        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
         <script src="../_static/jquery.js"></script>
-        <script src="../_static/underscore.js"></script>
         <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
         <script src="../_static/doctools.js"></script>
         <script src="../_static/sphinx_highlight.js"></script>
     <script src="../_static/js/theme.js"></script>
@@ -28,11 +27,15 @@
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
-            <a href="../index.html" class="icon icon-home"> ginput
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            ginput
           </a>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" />
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
   </form>
@@ -78,8 +81,8 @@
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
-      <li>acos_interface module</li>
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">acos_interface module</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/api/acos_interface.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -101,7 +104,7 @@ point. A command line interface is also provided</p>
 <span class="sig-prename descclassname"><span class="pre">ginput.priors.acos_interface.</span></span><span class="sig-name descname"><span class="pre">acos_interface_main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">instrument</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">met_resampled_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">geos_files</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mlo_co2_file=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">smo_co2_file=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_trop_eqlat=False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_strat_lut=False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">truncate_mlo_smo_by=0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nprocs=0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interp_pickle_dir='.'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">error_handler=&lt;ginput.priors.acos_interface.ErrorHandler</span> <span class="pre">object&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ginput.priors.acos_interface.acos_interface_main" title="Permalink to this definition"></a></dt>
 <dd><p>The primary interface to create CO2 priors for the ACOS algorithm</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>met_resampled_file</strong> (<em>str</em>) – the path to the HDF5 file containing the met data resampled to the satellite footprints</p></li>
 <li><p><strong>geos_files</strong> (<em>list</em><em>(</em><em>str</em><em>)</em>) – the list of GEOS FP or FP-IT pressure level met files that bracket the satellite observations.
@@ -122,7 +125,7 @@ is in Aug 2021, the MLO/SMO data will only be used up to June 2021 - but they <e
 month, or an error is raised.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>None, writes results to the HDF5 <code class="docutils literal notranslate"><span class="pre">output_file</span></code>.</p>
 </dd>
 </dl>
@@ -133,7 +136,7 @@ month, or an error is raised.</p></li>
 <span class="sig-prename descclassname"><span class="pre">ginput.priors.acos_interface.</span></span><span class="sig-name descname"><span class="pre">compute_sounding_equivalent_latitudes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sounding_pv</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sounding_theta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sounding_datenums</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sounding_qflags</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">geos_files</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nprocs=0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prior_flags=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eqlat_pickle_dir='.'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">error_handler=&lt;ginput.priors.acos_interface.ErrorHandler</span> <span class="pre">object&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ginput.priors.acos_interface.compute_sounding_equivalent_latitudes" title="Permalink to this definition"></a></dt>
 <dd><p>Compute equivalent latitudes for a collection of OCO soundings</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>sounding_pv</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">numpy.ndarray</span></code>) – potential vorticity in units of PVU (1e-6 K * m2 * kg^-1 * s^-1). Must be an array with
 dimensions (profiles, levels). That is, if the data read from the resampled met files have dimensions (soundings,
@@ -152,10 +155,10 @@ generate.</p></li>
 and handled.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>an array of equivalent latitudes with dimensions (profiles, levels)</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><code class="xref py py-class docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></p>
 </dd>
 </dl>
@@ -168,7 +171,7 @@ and handled.</p></li>
 <p>Initialize the output .h5 file. If it already exists, it will be overwritten.
 :type output_file: str</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>geos_files</strong> (<em>Sequence</em><em>[</em><em>str</em><em>]</em>) – a list/tuple of GEOS-FP(IT) files from which the equivalent
 latitude was computed.</p></li>
@@ -176,7 +179,7 @@ latitude was computed.</p></li>
 variables were read from.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>none, writes to disk</p>
 </dd>
 </dl>
@@ -187,7 +190,7 @@ variables were read from.</p></li>
 <span class="sig-prename descclassname"><span class="pre">ginput.priors.acos_interface.</span></span><span class="sig-name descname"><span class="pre">read_resampled_met</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">met_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">var_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">error_handler=&lt;ginput.priors.acos_interface.ErrorHandler</span> <span class="pre">object&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ginput.priors.acos_interface.read_resampled_met" title="Permalink to this definition"></a></dt>
 <dd><p>Read the required data from the HDF5 file containing the resampled met data.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>met_file</strong> (<em>str</em>) – the path to the met file</p></li>
 <li><p><strong>var_dict</strong> (<em>dict</em>) – a dictionary mapping the output variables to the datasets in the HDF5 file. Keys must be the
@@ -195,7 +198,7 @@ output variables (listed below) and the values must be two-element lists, the fi
 and the second the dataset name within that group to read.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p><p>a dictionary with variables both read directly from the met file and derived from those values. Keys are:</p>
 <ul class="simple">
 <li><p>”pv” - potential vorticity in PVU</p></li>
@@ -215,7 +218,7 @@ and the second the dataset name within that group to read.</p></li>
 </ul>
 </p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>dict</p>
 </dd>
 </dl>
@@ -226,7 +229,7 @@ and the second the dataset name within that group to read.</p></li>
 <span class="sig-prename descclassname"><span class="pre">ginput.priors.acos_interface.</span></span><span class="sig-name descname"><span class="pre">write_prior_h5</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">profile_variables</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">units</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prior_group</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'priors'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ginput.priors.acos_interface.write_prior_h5" title="Permalink to this definition"></a></dt>
 <dd><p>Write the priors to an HDF5 file.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>output_file</strong> (<em>str</em>) – the path to the output file.</p></li>
 <li><p><strong>profile_variables</strong> (<em>dict</em>) – a dictionary containing the variables to write. The keys will be used as the variable
@@ -234,7 +237,7 @@ names.</p></li>
 <li><p><strong>units</strong> (<em>dict</em><em>(</em><em>str</em><em>)</em>) – a dictionary defining the units each variable is in. Must have the same keys as <code class="docutils literal notranslate"><span class="pre">profile_variables</span></code>.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>none, writes to file on disk.</p>
 </dd>
 </dl>
