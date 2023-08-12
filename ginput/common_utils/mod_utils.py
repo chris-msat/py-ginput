@@ -263,6 +263,31 @@ def vmr_file_name(obs_date, lon, lat, keep_latlon_prec=False, date_fmt='%Y%m%d%H
                                                        tz='Z' if in_utc else 'L', lat=lat, lon=lon)
 
 
+def map_file_name_from_mod_vmr_files(site_abbrev, mod_file, vmr_file, map_fmt):
+    if map_fmt not in {'nc', 'netcdf', 'txt', 'text'}:
+        raise ValueError(f'Unknown value for map_fmt: {map_fmt}')
+    is_ncdf = map_fmt in {'nc', 'netcdf'}
+
+    vmr_date = find_datetime_substring(os.path.basename(vmr_file), out_type=dt.datetime)
+    mod_date = find_datetime_substring(os.path.basename(mod_file), out_type=dt.datetime)
+    if vmr_date != mod_date:
+        raise RuntimeError('The .vmr and .mod files have different dates in their filenames!')
+    vmr_lonstr = find_lon_substring(os.path.basename(vmr_file))
+    mod_lonstr = find_lon_substring(os.path.basename(mod_file))
+    if vmr_lonstr != mod_lonstr:
+        raise RuntimeError('The .vmr and .mod files have different longitudes in their filenames!')
+    vmr_latstr = find_lat_substring(os.path.basename(vmr_file))
+    mod_latstr = find_lat_substring(os.path.basename(mod_file))
+    if vmr_latstr != mod_latstr:
+        raise RuntimeError('The .vmr and .mod files have different latitudes in their filenames!')
+    
+    return '{site}_{lat}_{lon}_{date}Z.map{suffix}'.format(
+        site=site_abbrev, lat=vmr_latstr, lon=vmr_lonstr, 
+        date=vmr_date.strftime('%Y%m%d%H'),
+        suffix='.nc' if is_ncdf else ''
+    )
+
+
 def format_lon(lon, prec=2, zero_pad=False):
     """
     Convert longitude between string and numeric representations.

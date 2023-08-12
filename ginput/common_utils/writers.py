@@ -1,15 +1,13 @@
-from datetime import datetime as dtime
 import netCDF4 as ncdf
 import numpy as np
 import os
-import pandas as pd
 from warnings import warn
 
 # Have trouble with CFUnits when calling from a Jupyter notebook. This allows the module to at least be imported if that
 # happens - the problem seems to be an issue interacting with the C library.
 try:
     from cfunits import Units
-except AssertionError:
+except (AssertionError, AttributeError):
     warn('Could not import cfunits due to an assertion error. Will not be able to enforce CF units conventions.')
     cfunits_imported = False
 else:
@@ -110,31 +108,17 @@ def write_map_from_vmr_mod(vmr_file, mod_file, map_output_dir, fmt='txt', wet_or
     if wet_or_dry not in ('wet', 'dry'):
         raise ValueError('wet_or_dry must be "wet" or "dry"')
 
-    vmr_date = mod_utils.find_datetime_substring(os.path.basename(vmr_file), out_type=dtime)
-    mod_date = mod_utils.find_datetime_substring(os.path.basename(mod_file), out_type=dtime)
-    if vmr_date != mod_date:
-        raise RuntimeError('The .vmr and .mod files have different dates in their filenames!')
-    vmr_lonstr = mod_utils.find_lon_substring(os.path.basename(vmr_file))
-    mod_lonstr = mod_utils.find_lon_substring(os.path.basename(mod_file))
-    if vmr_lonstr != mod_lonstr:
-        raise RuntimeError('The .vmr and .mod files have different longitudes in their filenames!')
-    vmr_latstr = mod_utils.find_lat_substring(os.path.basename(vmr_file))
-    mod_latstr = mod_utils.find_lat_substring(os.path.basename(mod_file))
-    if vmr_latstr != mod_latstr:
-        raise RuntimeError('The .vmr and .mod files have different latitudes in their filenames!')
-
-    mapdat, obs_lat = _merge_and_convert_mod_vmr(vmr_file, mod_file, wet_or_dry=wet_or_dry)
-    map_name = '{site}_{lat}_{lon}_{date}Z.map'.format(site=site_abbrev, lat=vmr_latstr, lon=vmr_lonstr,
-                                                       date=vmr_date.strftime('%Y%m%d%H'))
+    map_name = mod_utils.map_file_name_from_mod_vmr_files(site_abbrev, mod_file, vmr_file, fmt)
     map_name = os.path.join(map_output_dir, map_name)
+    mapdat, obs_lat = _merge_and_convert_mod_vmr(vmr_file, mod_file, wet_or_dry=wet_or_dry)
 
-    if fmt == 'txt':
+    if fmt in {'txt', 'text'}:
         _write_text_map_file(mapdat=mapdat, obs_lat=obs_lat, map_file=map_name, wet_or_dry=wet_or_dry)
-    elif fmt == 'nc':
+    elif fmt in {'nc', 'netcdf'}:
         moddat = readers.read_mod_file(mod_file)
         _write_ncdf_map_file(mapdat=mapdat, obs_lat=obs_lat, obs_date=moddat['file']['datetime'], obs_site=site_abbrev,
                              file_lat=moddat['file']['lat'], file_lon=moddat['file']['lon'],
-                             map_file=map_name+'.nc', wet_or_dry=wet_or_dry, no_cfunits=no_cfunits)
+                             map_file=map_name, wet_or_dry=wet_or_dry, no_cfunits=no_cfunits)
 
 
 def _merge_and_convert_mod_vmr(vmr_file, mod_file, vmr_vars=('h2o', 'hdo', 'co2', 'n2o', 'co', 'ch4', 'hf', 'o2'),

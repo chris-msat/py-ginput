@@ -5,6 +5,7 @@ from glob import glob
 import json
 import os
 import sys
+import time
 
 from ..common_utils import mod_utils, writers
 from ..mod_maker import mod_maker
@@ -67,7 +68,7 @@ class AutomationArgs:
         self.base_vmr_file = json_dict['base_vmr_file']
         self.zgrid_file = json_dict['zgrid_file']
 
-        self.map_file_format = json_dict['map_file_format']
+        self.map_file_format = json_dict['map_file_format'].lower()
 
         self.n_threads = json_dict.get('n_threads', 4)
 
@@ -146,8 +147,45 @@ def _make_map_files(all_args: AutomationArgs):
 
             writers.write_map_from_vmr_mod(vmr_file=vmrf, mod_file=modf, map_output_dir=map_dir, fmt=map_fmt,
                                            site_abbrev=site_abbrev)
+            
+def _make_simulated_files(all_args: AutomationArgs, delay_time: float):
+    time.sleep(delay_time)
+    curr_time = all_args.start_date
+    site_ids, site_lats, site_lons, _ = mod_utils.check_site_lat_lon_alt(
+        all_args.site_ids, all_args.site_lats, all_args.site_lons, all_args.site_alts
+    )
+    while curr_time < all_args.end_date:
+        for (site_id, lat, lon) in zip(site_ids, site_lats, site_lons):
+            # .mod files
+            mod_dir = os.path.join(all_args.save_path, 'fpit', site_id, 'vertical')
+            if not os.path.exists(mod_dir):
+                os.makedirs(mod_dir)
+            mod_file_name = mod_utils.mod_file_name_for_priors(curr_time, lat, lon)
+            with open(os.path.join(mod_dir, mod_file_name), 'w') as f:
+                f.write(f'Simulated .mod file for {curr_time}')
 
-def job_driver(json_file):
+            # .vmr files
+            vmr_dir = mod_utils.vmr_output_subdir(all_args.save_path, site_id)
+            if not os.path.exists(vmr_dir):
+                os.makedirs(vmr_dir)
+            vmr_file_name = mod_utils.vmr_file_name(curr_time, lon, lat)
+            with open(os.path.join(vmr_dir, vmr_file_name), 'w') as f:
+                f.write(f'Simulated .vmr file for {curr_time}')
+
+            if all_args.map_file_format != 'none':
+                map_dir = os.path.join(all_args.save_path, 'fpit', site_id, 'maps-vertical')
+                if not os.path.exists(map_dir):
+                    os.makedirs(map_dir)
+                map_file_name = mod_utils.map_file_name_from_mod_vmr_files(
+                    site_id, mod_file_name, vmr_file_name, all_args.map_file_format
+                )
+                with open(os.path.join(map_dir, map_file_name), 'w') as f:
+                    f.write(f'Simulated .map file for {curr_time}')
+                
+            
+        curr_time += timedelta(hours=3)
+
+def job_driver(json_file, simulate_with_delay=None):
     if json_file is None:
         json_dict = json.loads(sys.stdin.read())
     else:
@@ -155,11 +193,13 @@ def job_driver(json_file):
             json_dict = json.load(f)
 
     all_args = AutomationArgs(**json_dict)
-    # TODO: need to make sure that multiple calls to this script don't fight over making the LUTs
-    with MKLThreads(all_args.n_threads):
-        _make_mod_files(all_args)
-        _make_vmr_files(all_args)
-        _make_map_files(all_args)
+    if simulate_with_delay is not None:
+        _make_simulated_files(all_args, simulate_with_delay)
+    else:
+        with MKLThreads(all_args.n_threads):
+            _make_mod_files(all_args)
+            _make_vmr_files(all_args)
+            _make_map_files(all_args)
 
     
 def lut_regen_driver():
@@ -180,6 +220,7 @@ def parse_cl_args(p=None):
     subp = p.add_subparsers()
     p_run = subp.add_parser('run', help='Run ginput to generate .mod, .vmr, and (optionally) .map files')
     p_run.add_argument('json_file', help='Path to the JSON file containing the information about what priors to generate')
+    p_run.add_argument('-s', '--simulate-with-delay', type=float, help='Simulate running ginput, delaying creating output files by the given number of seconds')
     p_run.set_defaults(driver_fxn=job_driver)
 
     p_lut = subp.add_parser('regen-lut', help='Regenerate the chemical lookup tables used by "run"')
