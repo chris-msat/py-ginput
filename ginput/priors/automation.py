@@ -56,7 +56,7 @@ class MKLThreads(object):
 class AutomationArgs:
     def __init__(self, **json_dict):
         self.start_date = datetime.strptime(json_dict['start_date'], "%Y-%m-%d")
-        self.end_date = datetime.strptime(json_dict['end_date'], '%Y-%m-%d') if 'end_date' in json_dict else self.start_date + timedelta(days=1)
+        self.end_date = datetime.strptime(json_dict['end_date'], '%Y-%m-%d') if json_dict.get('end_date') is not None else self.start_date + timedelta(days=1)
         self.met_path = json_dict['met_path']
         self.chem_path = json_dict['chem_path']
         self.save_path = json_dict['save_path']
@@ -127,7 +127,7 @@ def _make_map_files(all_args: AutomationArgs):
         map_fmt = 'txt'
     elif map_fmt == 'netcdf':
         map_fmt = 'nc'
-    else:
+    elif map_fmt != 'txtandnc':
         raise ValueError('"{}" is not an allowed value for map_fmt.'.format(map_fmt))
 
     sites = sorted(glob(os.path.join(job_dir, 'fpit', '??')))
@@ -145,8 +145,21 @@ def _make_map_files(all_args: AutomationArgs):
             modf = mod_files[key]
             vmrf = vmr_files[key]
 
-            writers.write_map_from_vmr_mod(vmr_file=vmrf, mod_file=modf, map_output_dir=map_dir, fmt=map_fmt,
-                                           site_abbrev=site_abbrev)
+            if map_fmt == 'txtandnc':
+                writers.write_map_from_vmr_mod(
+                    vmr_file=vmrf, mod_file=modf, map_output_dir=map_dir, 
+                    fmt='txt', site_abbrev=site_abbrev
+                )
+
+                writers.write_map_from_vmr_mod(
+                    vmr_file=vmrf, mod_file=modf, map_output_dir=map_dir, 
+                    fmt='nc', site_abbrev=site_abbrev
+                )
+            else:
+                writers.write_map_from_vmr_mod(
+                    vmr_file=vmrf, mod_file=modf, map_output_dir=map_dir, 
+                    fmt=map_fmt, site_abbrev=site_abbrev
+                )
             
 def _make_simulated_files(all_args: AutomationArgs, delay_time: float):
     time.sleep(delay_time)
@@ -176,11 +189,25 @@ def _make_simulated_files(all_args: AutomationArgs, delay_time: float):
                 map_dir = os.path.join(all_args.save_path, 'fpit', site_id, 'maps-vertical')
                 if not os.path.exists(map_dir):
                     os.makedirs(map_dir)
-                map_file_name = mod_utils.map_file_name_from_mod_vmr_files(
-                    site_id, mod_file_name, vmr_file_name, all_args.map_file_format
-                )
-                with open(os.path.join(map_dir, map_file_name), 'w') as f:
-                    f.write(f'Simulated .map file for {curr_time}')
+                    
+                if all_args.map_file_format == 'txtandnc':
+                    map_file_name = mod_utils.map_file_name_from_mod_vmr_files(
+                        site_id, mod_file_name, vmr_file_name, 'txt'
+                    )
+                    with open(os.path.join(map_dir, map_file_name), 'w') as f:
+                        f.write(f'Simulated .map file for {curr_time}')
+
+                    map_file_name = mod_utils.map_file_name_from_mod_vmr_files(
+                        site_id, mod_file_name, vmr_file_name, 'nc'
+                    )
+                    with open(os.path.join(map_dir, map_file_name), 'w') as f:
+                        f.write(f'Simulated .map file for {curr_time}')
+                else:
+                    map_file_name = mod_utils.map_file_name_from_mod_vmr_files(
+                        site_id, mod_file_name, vmr_file_name, all_args.map_file_format
+                    )
+                    with open(os.path.join(map_dir, map_file_name), 'w') as f:
+                        f.write(f'Simulated .map file for {curr_time}')
                 
             
         curr_time += timedelta(hours=3)
