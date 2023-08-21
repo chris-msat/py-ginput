@@ -1014,6 +1014,9 @@ def _format_geosfp_name(product, file_type, levels, date_time, add_subdir=False)
     :return: the file name
     :rtype: str
     """
+    if product in {'it'}:
+        return _format_geosit_name(product, file_type, levels, date_time, add_subdir=add_subdir)
+    
     product_patterns = {'fp': 'GEOS.fp.asm.inst3_{dim}d_{vars}_{type}.{date_time}.V01.nc4',
                         'fpit': 'GEOS.fpit.asm.inst3_{dim}d_{vars}_{type}.GEOS5124.{date_time}.V01.nc4'}
     level_mapping = {'surf': 'Nx', 'p': 'Np', 'eta': 'Nv'}
@@ -1041,6 +1044,51 @@ def _format_geosfp_name(product, file_type, levels, date_time, add_subdir=False)
     fname = pattern.format(dim=dims, type=levels, date_time=date_time, vars=var_types[file_type])
     if add_subdir:
         fname = os.path.join(levels, fname)
+
+    return fname
+
+def _format_geosit_name(product, file_type, levels, date_time, grid='L', add_subdir=False):
+    product_patterns = {'it': 'GEOS.it.asm.{kind}_inst_{freq}hr_glo_{grid_key}_{lev}.GEOS5294.{dt:%Y-%m-%d}T{dt:%H%M}.V01.nc4'}
+   
+    level_descr = {'surf': 'slv', 'eta': 'v72', 'p': 'p42'}
+    level_freq = {'surf': 1, 'eta': 3, 'p': 3}
+    level_subdirs = {'surf': 'Nx', 'eta': 'Nv', 'p': 'Np'}
+    grid_keys = {'L': 'L576x361', 'C': 'C180x180x6'}
+    var_types = {'met': 'asm', 'chm': 'chm'}
+    
+    try:
+        pattern = product_patterns[product]
+    except KeyError:
+        raise ValueError('product "{}" has not been defined. Allowed values are: {}'
+                         .format(product, ', '.join(product_patterns.keys())))
+
+    try:
+        lev = level_descr[levels]
+    except KeyError:
+        raise ValueError('levels "{}" not recognized. Allowed values are: {}'
+                         .format(levels, ', '.join(level_descr.keys())))
+
+    try:
+        freq = level_freq[levels]
+    except KeyError:
+        raise ValueError('level "{}" is not recognized. Allowed values are: {}'
+                         .format(levels, ', '.join(level_freq.keys())))
+
+    try:
+        grid_key = grid_keys[grid]
+    except KeyError:
+        raise ValueError('grid "{}" is not recognized. Allowed values are: {}'
+                         .format(grid, ', '.join(grid_keys)))
+
+    try:
+        var_type = var_types[file_type]
+    except KeyError:
+        raise ValueError('file_type "{}" is not recognized. Allowed values are: {}'
+                         .format(file_type, ', '.join(var_types)))
+
+    fname = pattern.format(kind=var_type, freq=freq, grid_key=grid_key, lev=lev, dt=date_time)
+    if add_subdir:
+        fname = os.path.join(level_subdirs[levels], fname)
 
     return fname
 

@@ -669,7 +669,38 @@ def add_clams_age_to_file(ace_nc_file, save_nc_file=None):
                                       description='Age from the CLaMS model along the ACE profiles')
 
 
-def generate_ace_age_file(ace_in_file, age_file_out, geos_path, use_geos_theta_for_age=False, nprocs=0):
+def generate_ace_age_file(ace_in_file, age_file_out, geos_path, use_geos_theta_for_age=False, geos_product='fpit', allow_missing_geos=False, nprocs=0):
+    """Create a file that mimics the structure of an ACE-FTS v3 file but stores age of air and equivalent latitude
+
+    Parameters
+    ----------
+    ace_in_file: str
+        Path to any of the original ACE files. It doesn't need to be any one in particular; all should have the lat,
+        lon, pressure, temperature, quality flag, and date information needed. However, if this is for a particular
+        gas, you may as well pass that gas's file, in case the quality flags differ.
+
+    age_file_out: str
+        Path to write the resulting file to (the file itself, not a directory).
+
+    geos_path: str
+        Path to the directory containing the GEOS met data. This directory must contain an "Nv" subdirectory with the
+        3D met files. 
+
+    use_geos_theta_for_age: bool
+        Set to ``True`` to use potential temperature calculated from the GEOS files, rather than ACE, when determining
+        the age of air.
+
+    geos_product: str
+        A string, usually "fpit", "fp", or "it" that describes which GEOS product to read. This is necessary to determine
+        the file names.
+
+    allow_missing_geos: bool
+        Set to ``True`` to skip profiles for which the necessary GEOS files are not available. Otherwise, any missing GEOS
+        file is an error.
+
+    nprocs: int
+        How many processors to use. <= 1 will run in serial, >= 2 will use multiprocessing to run in parallel.
+    """
     # This will need to group ACE profiles by which GEOS files they fall between, read the PV from those files,
     # interpolate to the ACE profile lat/lon/time, generate the EL interpolators, calculate the EL profiles, then
     # finally lookup age from CLAMS.
@@ -700,11 +731,13 @@ def generate_ace_age_file(ace_in_file, age_file_out, geos_path, use_geos_theta_f
     group_inputs['geos_dates'] = ((d, d+dt.timedelta(hours=3)) for d in date_groups.keys())
     group_inputs['geos_path'] = repeat(geos_path)
     group_inputs['use_geos_theta'] = repeat(use_geos_theta_for_age)
+    group_inputs['geos_product'] = repeat(geos_product)
+    group_inputs['allow_missing'] = repeat(allow_missing_geos)
 
-    input_order = ('ace_dates', 'ace_lons', 'ace_lats', 'ace_theta', 'geos_dates', 'geos_path', 'use_geos_theta')
+    input_order = ('ace_dates', 'ace_lons', 'ace_lats', 'ace_theta', 'geos_dates', 'geos_path', 'use_geos_theta', 'geos_product', 'allow_missing')
     inputs_interator = zip(*[group_inputs[k] for k in input_order])
 
-    if nprocs == 0:
+    if nprocs <= 1:
         results = []
         for inputs in inputs_interator:
             results.append(_calc_el_age_for_ace(*inputs))
@@ -718,6 +751,11 @@ def generate_ace_age_file(ace_in_file, age_file_out, geos_path, use_geos_theta_f
     output_keys = ('EL', 'age')
     ace_outputs = {k: np.full_like(ace_data['theta'], np.nan) for k in output_keys}
     for i, inds in enumerate(date_groups.values()):
+        if results[i] is None and allow_missing_geos:
+            continue
+        elif results[i] is None and not allow_missing_geos:
+            raise TypeError('Got a None value when missing GEOS files were forbidden')
+        
         for k in output_keys:
             ace_outputs[k][inds] = results[i][k]
 
@@ -726,7 +764,7 @@ def generate_ace_age_file(ace_in_file, age_file_out, geos_path, use_geos_theta_f
     logger.info('Done generating ACE age file with NATIVE-level GEOS files')
 
 
-def _calc_el_age_for_ace(ace_dates, ace_lon, ace_lat, ace_theta, geos_dates, geos_path, use_geos_theta_for_age=False):
+def _calc_el_age_for_ace(ace_dates, ace_lon, ace_lat, ace_theta, geos_dates, geos_path, use_geos_theta_for_age=False, geos_product='fpit', allow_missing=False):
     # Let's get to the point where we load the GEOS data
     date_str = ', '.join(d.strftime('%Y-%m-%d %H:%M') for d in ace_dates)
     logger.info('Calculating eqlat and age for profiles on {}'.format(date_str))
@@ -734,7 +772,15 @@ def _calc_el_age_for_ace(ace_dates, ace_lon, ace_lat, ace_theta, geos_dates, geo
     geos_vars = {'EPV': 1e6, 'T': 1.0, 'DELP': 1.0}
 
     try:
-        geos_files = [os.path.join(geos_path, 'Nv', mod_utils._format_geosfp_name('fpit', 'met', 'eta', d)) for d in geos_dates]
+        geos_files = [os.path.join(geos_path, 'Nv', mod_utils._format_geosfp_name(geos_product, 'met', 'eta', d)) for d in geos_dates]
+        missing_files = ', '.join(f for f in geos_files if not os.path.exists(f))
+        if missing_files:
+            if allow_missing:
+                date_range = f'{min(ace_dates)} to {max(ace_dates)}'
+                logger.warn(f'Missing at least one GEOS file for {date_range}: {missing_files}')
+                return None
+            else:
+                raise IOError(f'Missing GEOS files: {missing_files}')
         geos_data_on_std_times = []
         geos_pres = []
         for i, f in enumerate(geos_files):
@@ -804,7 +850,7 @@ def _calc_el_age_for_ace(ace_dates, ace_lon, ace_lat, ace_theta, geos_dates, geo
         geos_data_on_ace_levels['age'] = ace_age
         return geos_data_on_ace_levels
     except Exception as err:
-        msg = 'Problem occurred in ACE profile group for dates {} (GEOS file date {}).'.format(date_str, geos_dates[0]) + err.args[0]
+        msg = f'Problem occurred in ACE profile group for dates {date_str} (GEOS file date {geos_dates[0]}): {err}'
         raise err.__class__(msg)
 
 
