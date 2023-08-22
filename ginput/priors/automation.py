@@ -8,6 +8,7 @@ import sys
 import time
 
 from ..common_utils import mod_utils, writers
+from ..common_utils.ggg_logging import logger
 from ..mod_maker import mod_maker
 from . import tccon_priors
 
@@ -44,8 +45,12 @@ class MKLThreads(object):
 
     def __enter__(self):
         if self._n > 0:
-            self._saved_n = self.get_max_threads()
-            self.set_num_threads(self._n)
+            try:
+                self._saved_n = self.get_max_threads()
+                self.set_num_threads(self._n)
+            except OSError:
+                logger.warning('Could not set number of MKL threads, numpy of numpy threads will not be limited')
+                self._n = 0
         return self
 
     def __exit__(self, type, value, traceback):
@@ -55,6 +60,7 @@ class MKLThreads(object):
 
 class AutomationArgs:
     def __init__(self, **json_dict):
+        self.ginput_met_key = json_dict['ginput_met_key']
         self.start_date = datetime.strptime(json_dict['start_date'], "%Y-%m-%d")
         self.end_date = datetime.strptime(json_dict['end_date'], '%Y-%m-%d') if json_dict.get('end_date') is not None else self.start_date + timedelta(days=1)
         self.met_path = json_dict['met_path']
@@ -83,7 +89,7 @@ def _make_mod_files(all_args: AutomationArgs):
         lon=all_args.site_lons,
         lat=all_args.site_lats,
         site_abbrv=all_args.site_ids,
-        mode='fpit-eta',
+        mode=all_args.ginput_met_key,
         include_chm=True,
         muted=True
     )
@@ -153,12 +159,12 @@ def _make_map_files(all_args: AutomationArgs):
 
                 writers.write_map_from_vmr_mod(
                     vmr_file=vmrf, mod_file=modf, map_output_dir=map_dir, 
-                    fmt='nc', site_abbrev=site_abbrev
+                    fmt='nc', site_abbrev=site_abbrev, no_cfunits=True,
                 )
             else:
                 writers.write_map_from_vmr_mod(
                     vmr_file=vmrf, mod_file=modf, map_output_dir=map_dir, 
-                    fmt=map_fmt, site_abbrev=site_abbrev
+                    fmt=map_fmt, site_abbrev=site_abbrev, no_cfunits=True
                 )
             
 def _make_simulated_files(all_args: AutomationArgs, delay_time: float):
