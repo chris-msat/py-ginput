@@ -457,20 +457,63 @@ def find_datetime_substring(string, out_type=str):
         date_fmts = {8: '%Y%m%d', 10: '%Y%m%d%H', 13: '%Y%m%d_%H%M'}
         date_fmt = date_fmts[len(date_str)]
         return out_type.strptime(date_str, date_fmt)
+    
 
-
-def _hg_dir_helper(hg_dir):
-    if hg_dir is None:
-        hg_dir = os.path.dirname(__file__)
-    return os.path.abspath(hg_dir)
-
-
-def hg_commit_info(hg_dir=None):
-    hg_dir = _hg_dir_helper(hg_dir)
-    if len(hg_dir) == 0:
+def _vcs_dir_helper(vcs_dir):
+    if vcs_dir is None:
+        vcs_dir = os.path.dirname(__file__)
+    if len(vcs_dir) == 0:
         # If in the current directory, then dirname(__file__) gives an empty string, which isn't allowed as the argument
         # to cwd in check_output
-        hg_dir = '.'
+        vcs_dir = '.'
+    return os.path.abspath(vcs_dir)
+
+
+def _is_git_repo(vcs_dir=None):
+    vcs_dir = _vcs_dir_helper(vcs_dir)
+    try:
+        subprocess.check_call(['git', 'status'], cwd=vcs_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        return False
+    else:
+        return True
+
+def vcs_commit_info(vcs_dir=None):
+    """
+    Return the last commit hash on the current branch, current branch, and last commit date for a VCS repo.
+
+    This function will use Git if ``vcs_dir`` points to a valid Git repo and only fall back
+    on Mercurial if ``vcs_dir`` is not a Git repo.
+
+    :param vcs_dir: optional, the VCS directory to check. If not given, defaults to the one containing this repo.
+    :type vcs_dir: str
+
+    :return: the commit hash, branch name, and date. The date will be in the format e.g. "Mon Aug 01 18:20:15 2023 -0700",
+     i.e. "%a %b %d %H:%M:%S %Y %z" format in terms of strftime codes.
+    :rtype: str, str, str
+    """
+    if _is_git_repo(vcs_dir):
+        return _git_commit_info(vcs_dir)
+    else:
+        return _hg_commit_info(vcs_dir)
+
+
+def _git_commit_info(git_dir=None):
+    git_dir = _vcs_dir_helper(git_dir)
+    # Get the last commit in the current branch
+    parent = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'], cwd=git_dir).decode('utf8').strip()
+    # Get the current branch
+    branch = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], cwd=git_dir).decode('utf8').strip()
+    # And the date of the last commit. Git by default doesn't seem to zero pad the date,
+    # so force it to in order to match Mercurial
+    date = subprocess.check_output(['git', 'log', '-1', r'--format=%cd', r'--date=format:"%a %b %d %H:%M:%S %Y %z"'], cwd=git_dir).decode('utf8').strip()
+
+    return parent, branch, date
+
+
+def _hg_commit_info(hg_dir=None):
+    hg_dir = _vcs_dir_helper(hg_dir)
+
     # Get the last commit (-l 1) in the current branch (-f)
     summary = subprocess.check_output(['hg', 'log', '-f', '-l', '1'], cwd=hg_dir).splitlines()
     log_dict = dict()
@@ -490,8 +533,68 @@ def hg_commit_info(hg_dir=None):
     # Convert to unicode strings to avoid them getting formatted as "b'abc'" or "b'default'" in unicode strings
     return parent.decode('utf8'), branch.decode('utf8'), parent_date.decode('utf8')
 
+def vcs_is_commit_clean(vcs_dir=None, ignore_untracked=True, ignore_files=tuple()):
+    """
+    Checks if a VCS directory is clean.
 
-def hg_is_commit_clean(hg_dir=None, ignore_untracked=True, ignore_files=tuple()):
+    By default, a directory is considered clean if all tracked files have no uncommitted changes. Untracked files are
+    not considered. Setting ``ignore_untracked`` to ``False`` means that there must be no untracked files for the
+    directory to be clean. This function will use Git if ``vcs_dir`` points to a valid Git repo and only fall back
+    on Mercurial if ``vcs_dir`` is not a Git repo.
+
+    :param vcs_dir: optional, the VCS directory to check. If not given, defaults to the one containing this repo.
+    :type vcs_dir: str
+
+    :param ignore_untracked: optional, set to ``False`` to require that there be no untracked files in the directory for
+     it to be considered clean.
+    :type ignore_untracked: bool
+
+    :param ignore_files: optional, a sequence of file paths (absolute or relative to the current working directory, not the
+     repo root) to ignore for the sake of determining if the repo is clean.
+    :type ignore_files: Sequence[str]
+
+    :return: ``True`` if the directory is clean, ``False`` otherwise.
+    :rtype: bool
+    """
+    if _is_git_repo(vcs_dir):
+        return _git_is_commit_clean(vcs_dir, ignore_untracked=ignore_untracked, ignore_files=ignore_files)
+    else:
+        return _hg_is_commit_clean(vcs_dir, ignore_untracked=ignore_untracked, ignore_files=ignore_files)
+
+def _in_vcs_ignore(f: str, root: str, ignore_files):
+    """Returns True if ``f`` was in ``ignored_files``
+
+    ``f`` must be a string that is a file path relative to ``root``, which is
+    the root of the VCS repo. ``ignore_files`` then is a sequence of strings
+    giving the list of files to ignore if they have changed since the last commit.
+    Note that ``ignore_files`` will *not* be relative to ``root``, they must be 
+    absolute paths or relative to the current working directory.
+    """
+    f = os.path.join(root, f)
+    for ignore in ignore_files:
+        if os.path.exists(ignore) and os.path.samefile(f, ignore):
+            return True
+    return False
+
+def _git_is_commit_clean(git_dir=None, ignore_untracked=True, ignore_files=tuple()):
+    git_root = subprocess.check_output(['git', 'rev-parse', '--show-toplevel']).decode('utf8').strip()
+    summary = subprocess.check_output(['git', 'status', '--porcelain']).decode('utf8').strip().splitlines()
+    for line in summary:
+        stat, filename = line.split(maxsplit=2)
+        if stat == '??' and ignore_untracked:
+            continue
+        elif stat == '!!':
+            # ignored file according to the git status manpage?
+            continue
+        elif _in_vcs_ignore(filename, git_root, ignore_files):
+            continue
+        else:
+            return False
+        
+    return True
+
+
+def _hg_is_commit_clean(hg_dir=None, ignore_untracked=True, ignore_files=tuple()):
     """
     Checks if a mercurial directory is clean.
 
@@ -509,16 +612,10 @@ def hg_is_commit_clean(hg_dir=None, ignore_untracked=True, ignore_files=tuple())
     :return: ``True`` if the directory is clean, ``False`` otherwise.
     :rtype: bool
     """
-    hg_dir = _hg_dir_helper(hg_dir)
+    hg_dir = _vcs_dir_helper(hg_dir)
     hg_root = subprocess.check_output(['hg', 'root'], cwd=hg_dir).strip()
     summary = subprocess.check_output(['hg', 'status'], cwd=hg_dir).splitlines()
 
-    def in_ignore(f):
-        f = os.path.join(hg_root, f)
-        for ignore in ignore_files:
-            if os.path.exists(ignore) and os.path.samefile(f, ignore):
-                return True
-        return False
 
     # Since subprocess returns a bytes object (at least on Linux) rather than an encoded string object, all the strings
     # below must be bytes, not unicode strings
@@ -526,7 +623,7 @@ def hg_is_commit_clean(hg_dir=None, ignore_untracked=True, ignore_files=tuple())
         status, hg_file = [p.strip() for p in line.split(b' ', 1)]
         if ignore_untracked and status == b'?':
             pass
-        elif in_ignore(hg_file):
+        elif _in_vcs_ignore(hg_file, hg_root, ignore_files):
             pass
         else:
             return False

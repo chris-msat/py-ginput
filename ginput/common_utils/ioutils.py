@@ -153,22 +153,23 @@ def make_creation_info(filename, creation_note=None):
     """
     now = dt.datetime.now()
     try:
-        commit_hash, branch, _ = mod_utils.hg_commit_info()
-        clean_or_dirty = 'clean' if mod_utils.hg_is_commit_clean(ignore_files=[filename]) else 'dirty'
+        git_or_hg = 'git' if mod_utils._is_git_repo() else 'mercurial'
+        commit_hash, branch, _ = mod_utils.vcs_commit_info()
+        clean_or_dirty = 'clean' if mod_utils.vcs_is_commit_clean(ignore_files=[filename]) else 'dirty'
     except (CalledProcessError, FileNotFoundError):  # if hg is not installed, get a FileNotFoundError instead of CalledProcessError
         if creation_note is not None:
-            description = 'Created by {note} on {date} (could not acquire Mercurial commit information)'
+            description = 'Created by {note} on {date} (could not acquire {vcs} commit information)'
         else:
-            description = 'Created on {date} (could not acquire Mercurial commit information)'
-        description = description.format(note=creation_note, date=now)
+            description = 'Created on {date} (could not acquire {vcs} commit information)'
+        description = description.format(note=creation_note, date=now, vcs=git_or_hg)
     else:
         if creation_note is not None:
-            description = 'Created by {note} on {date} (mercurial commit {commit} on branch {branch}, {cleanstate})'
+            description = 'Created by {note} on {date} ({vcs} commit {commit} on branch {branch}, {cleanstate})'
         else:
-            description = 'Created with commit {commit} on branch {branch} ({cleanstate}) on {date}'
+            description = 'Created with {vcs} commit {commit} on branch {branch} ({cleanstate}) on {date}'
 
         description = description.format(note=creation_note, date=now, commit=commit_hash, branch=branch,
-                                         cleanstate=clean_or_dirty)
+                                         cleanstate=clean_or_dirty, vcs=git_or_hg)
     return description
 
 

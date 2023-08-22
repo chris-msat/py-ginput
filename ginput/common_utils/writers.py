@@ -241,7 +241,7 @@ def _write_ncdf_map_file(mapdat, obs_lat, obs_date, file_lat, file_lon, obs_site
         wobj.source = 'ginput version {}'.format(__version__)
         wobj.title = 'GGG2020 TCCON prior profiles'
 
-        creation_note = 'ginput (commit {})'.format(mod_utils.hg_commit_info()[0])
+        creation_note = 'ginput (commit {})'.format(mod_utils.vcs_commit_info()[0])
         ioutils.add_creation_info(wobj, creation_note, creation_att_name='history')
 
         # ggg-specific attributes
