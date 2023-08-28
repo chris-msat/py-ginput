@@ -9,10 +9,15 @@ import pandas as pd
 import xarray as xr
 
 from ...common_utils import mod_utils, readers
+from ...common_utils.ggg_logging import logger
 from . import backend_utils as butils
 from .backend_utils import find_matching_val_profile, get_matching_val_profiles
 
 _mydir = os.path.abspath(os.path.dirname(__file__))
+
+
+class MissingGeosForMatchError(Exception):
+    pass
 
 
 def _match_input_size(err_msg, *inputs):
@@ -195,7 +200,7 @@ def get_matching_ace_profiles(lon, lat, date, ace_dir, specie, alt, ace_var=None
                                      ace_profiles, ace_prof_error, interp_to_alt=interp_to_alt)
 
 
-def standard_ace_geos_co_match(save_file, ace_co_file, geos_chm_dir, geos_met_dir):
+def standard_ace_geos_co_match(save_file, ace_co_file, geos_chm_dir, geos_met_dir, geos_product='fpit', allow_missing_geos=False):
     """
     Wrapper around :func:`match_ace_vars_to_geos` that builds the typical CO matched file.
 
@@ -208,8 +213,16 @@ def standard_ace_geos_co_match(save_file, ace_co_file, geos_chm_dir, geos_met_di
     :param geos_chm_dir: the path to the GEOS-FPIT chemistry files, which contains an "Nv" subdirectory
     :type geos_chm_dir: str
 
-    :param geos_met_dir: the path to the GEOS-FPIT meteorology files, which contains "Np" and "Nx" subdirectories
+    :param geos_met_dir: the path to the GEOS-FPIT meteorology files, which contains "Nv" and "Nx" subdirectories
     :type geos_met_dir: str
+
+    :param geos_product: which GEOS product we are reading, e.g. "fpit" or "it". (This will be the first argument
+     to :func:`ginput.common_utils.mod_utils._format_geosfp_name`.)
+    :type geos_product: str
+
+    :param allow_missing_geos: whether to allow missing GEOS files (which will resume in their profiles being filled
+     with NaNs in the output) or to raise an error for any missing file.
+    :type allow_missing_geos: bool
     
     :return: none, writes a netCDF file with the matched variables in it. All names will be lower case, ACE variables
      will have "ace_" prepended and GEOS variables will have "geos_" prepended.
@@ -222,11 +235,12 @@ def standard_ace_geos_co_match(save_file, ace_co_file, geos_chm_dir, geos_met_di
     
     match_ace_vars_to_geos(save_file=save_file, ace_file=ace_co_file, ace_vars=ace_vars, geos_chm_dir=geos_chm_dir,
                            geos_met_dir=geos_met_dir, chm_3d_vars=chm_3d_vars, met_3d_vars=met_3d_vars,
-                           met_2d_vars=met_2d_vars, log_log_interp_vars=log_log_vars)
+                           met_2d_vars=met_2d_vars, log_log_interp_vars=log_log_vars, geos_product=geos_product,
+                           allow_missing_geos_files=allow_missing_geos)
 
 
-def match_ace_vars_to_geos(save_file, ace_file, ace_vars, geos_chm_dir=None, geos_met_dir=None,
-                           chm_3d_vars=tuple(), met_3d_vars=tuple(), met_2d_vars=tuple(), log_log_interp_vars=tuple()):
+def match_ace_vars_to_geos(save_file, ace_file, ace_vars, geos_chm_dir=None, geos_met_dir=None, geos_product='fpit',
+                           allow_missing_geos_files=False, chm_3d_vars=tuple(), met_3d_vars=tuple(), met_2d_vars=tuple(), log_log_interp_vars=tuple()):
     """
     Match GEOS data to ACE profiles, linearly interpolating in lat/lon
 
@@ -242,7 +256,7 @@ def match_ace_vars_to_geos(save_file, ace_file, ace_vars, geos_chm_dir=None, geo
     :param geos_chm_dir: the path to the GEOS-FPIT chemistry files, which contains an "Nv" subdirectory
     :type geos_chm_dir: str
 
-    :param geos_met_dir: the path to the GEOS-FPIT meteorology files, which contains "Np" and "Nx" subdirectories
+    :param geos_met_dir: the path to the GEOS-FPIT meteorology files, which contains "Nv" and "Nx" subdirectories
     :type geos_met_dir: str
 
     :param chm_3d_vars: a list of 3D GEOS chemistry variables to match. Must match the variable name in the GEOS files.
@@ -259,6 +273,14 @@ def match_ace_vars_to_geos(save_file, ace_file, ace_vars, geos_chm_dir=None, geo
      GEOS variables to the ACE levels.
     :type log_log_interp_vars: Sequence(str)
 
+    :param geos_product: which GEOS product we are reading, e.g. "fpit" or "it". (This will be the first argument
+     to :func:`ginput.common_utils.mod_utils._format_geosfp_name`.)
+    :type geos_product: str
+
+    :param allow_missing_geos_files: whether to allow missing GEOS files (which will resume in their profiles being filled
+     with NaNs in the output) or to raise an error for any missing file.
+    :type allow_missing_geos_files: bool
+    
     :return: none, writes a netCDF file with the matched variables in it. All names will be lower case, ACE variables
      will have "ace_" prepended and GEOS variables will have "geos_" prepended.
     """
@@ -282,10 +304,10 @@ def match_ace_vars_to_geos(save_file, ace_file, ace_vars, geos_chm_dir=None, geo
             geos_attrs_dict[vname] = attrs
 
     def find_geos_file(geos_dir, kind, levels, time):
-        geos_file_local = mod_utils._format_geosfp_name('fpit', kind, levels, time, add_subdir=True)
+        geos_file_local = mod_utils._format_geosfp_name(geos_product, kind, levels, time, add_subdir=True)
         geos_file_local = os.path.join(geos_dir, geos_file_local)
         if not os.path.isfile(geos_file_local):
-            raise IOError('Cannot find required GEOS-FPIT file: {}'.format(geos_file_local))
+            raise MissingGeosForMatchError('Cannot find required GEOS-FPIT file: {}'.format(geos_file_local))
         return geos_file_local
 
     def match_geos_var_to_ace(geos_file_local, geos_var, lon, lat, ace_pres_vec):
@@ -386,21 +408,32 @@ def match_ace_vars_to_geos(save_file, ace_file, ace_vars, geos_chm_dir=None, geo
         geos_data['geos_{}'.format(v.lower())] = np.full([nprof], np.nan)
 
     pbar = mod_utils.ProgressBar(nprof, style='counter')
+    nmissing = 0
+    ntotal = ace_data_dict['ace_pressure'].shape[0]
     for i, pres_vector in enumerate(ace_data_dict['ace_pressure']):
         pbar.print_bar(i)
         prof_lon = pres_vector.longitude.item()
         prof_lat = pres_vector.latitude.item()
         geos_time = pd.Timestamp(pres_vector.time.item()).round('3H')
 
-        get_geos_data(geos_dir=geos_met_dir, geos_kind='met', geos_levels='surf', geos_vars=met_2d_vars,
-                      geos_data_dict=geos_data, geos_attrs_dict=geos_attrs, geos_time=geos_time, lon=prof_lon, lat=prof_lat,
-                      ace_pres_vec=pres_vector, prof_idx=i, dir_var_name='geos_met_dir', vars_name='met_2d_vars')
-        get_geos_data(geos_dir=geos_met_dir, geos_kind='met', geos_levels='eta', geos_vars=met_3d_vars,
-                      geos_data_dict=geos_data, geos_attrs_dict=geos_attrs, geos_time=geos_time, lon=prof_lon, lat=prof_lat,
-                      ace_pres_vec=pres_vector, prof_idx=i, dir_var_name='geos_met_dir', vars_name='met_3d_vars')
-        get_geos_data(geos_dir=geos_chm_dir, geos_kind='chm', geos_levels='eta', geos_vars=chm_3d_vars,
-                      geos_data_dict=geos_data, geos_attrs_dict=geos_attrs, geos_time=geos_time, lon=prof_lon, lat=prof_lat,
-                      ace_pres_vec=pres_vector, prof_idx=i, dir_var_name='geos_chm_dir', vars_name='met_3d_vars')
+        try:
+            get_geos_data(geos_dir=geos_met_dir, geos_kind='met', geos_levels='surf', geos_vars=met_2d_vars,
+                          geos_data_dict=geos_data, geos_attrs_dict=geos_attrs, geos_time=geos_time, lon=prof_lon, lat=prof_lat,
+                          ace_pres_vec=pres_vector, prof_idx=i, dir_var_name='geos_met_dir', vars_name='met_2d_vars')
+            get_geos_data(geos_dir=geos_met_dir, geos_kind='met', geos_levels='eta', geos_vars=met_3d_vars,
+                          geos_data_dict=geos_data, geos_attrs_dict=geos_attrs, geos_time=geos_time, lon=prof_lon, lat=prof_lat,
+                          ace_pres_vec=pres_vector, prof_idx=i, dir_var_name='geos_met_dir', vars_name='met_3d_vars')
+            get_geos_data(geos_dir=geos_chm_dir, geos_kind='chm', geos_levels='eta', geos_vars=chm_3d_vars,
+                          geos_data_dict=geos_data, geos_attrs_dict=geos_attrs, geos_time=geos_time, lon=prof_lon, lat=prof_lat,
+                          ace_pres_vec=pres_vector, prof_idx=i, dir_var_name='geos_chm_dir', vars_name='met_3d_vars')
+        except MissingGeosForMatchError:
+            if allow_missing_geos_files:
+                nmissing += 1
+            else:
+                raise
+
+    if nmissing > 0:
+        logger.warn(f'{nmissing}/{ntotal} times were missing geos-{geos_product} data')
 
     pbar.finish()
 
