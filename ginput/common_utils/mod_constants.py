@@ -1,4 +1,11 @@
+from enum import Enum
 import os
+
+class COSource(Enum):
+    FPIT = 'fpit'
+    FP = 'fp'
+    IT = 'it'
+    UNKNOWN = 'UNKNOWN'
 
 avogadro = 6.022141e23  # molec./mol
 mass_dry_air = 28.964e-3  # kg/mol

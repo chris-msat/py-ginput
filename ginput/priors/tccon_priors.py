@@ -1857,7 +1857,7 @@ class CORecord(TraceGasRecord):
     _gas_seas_cyc_coeff = 0.2
 
     @classmethod
-    def compute_co_scale(cls, prof_pres, prof_theta, trop_pres, trop_theta):
+    def compute_co_scale(cls, prof_pres, prof_theta, trop_pres, trop_theta, co_source: const.COSource):
         """
         Compute a level-dependent scaling factor for the GEOS CO profile
 
@@ -1894,9 +1894,20 @@ class CORecord(TraceGasRecord):
             """
             return a * np.exp(-(pt - pt0)/b) + c
 
-        # A robust fit of GEOS CO vs. ATOM CO through the origin produces a slope of 0.807. While this does seem to
-        # vary somewhat with latitude and season, we want to keep things simple for now.
-        atom_scale_fac = 1.23
+        # A robust fit of GEOS FP-IT CO vs. ATOM CO through the origin produces a slope of 0.807. While this does seem to
+        # vary somewhat with latitude and season, we want to keep things simple for now. I never checked FP (opposed to FP-IT),
+        # so I'm just using the same scale factor. That's probably wrong, but FP isn't really a supported met product for us.
+        # GEOS IT vs. HIPPO was not exactly 1, but it was close enough that I didn't feel the need to scale. (Also the GEOS FP-IT
+        # vs. HIPPO comparison was similar enough to the comparison with ATom that I felt that using HIPPO was a reasonable
+        # comparison.)
+        if co_source in {const.COSource.FPIT, const.COSource.FP}:
+            logger.debug('Using GEOS FP/FP-IT CO scaling')
+            atom_scale_fac = 1.23
+        elif co_source == const.COSource.IT:
+            logger.debug('Using GEOS IT CO scaling')
+            atom_scale_fac = 1.0
+        else:
+            raise ValueError(f'Unknown CO source: {co_source}')
 
         # The relationship vs. ACE is more complicated, with GEOS becoming more negatively biased as we move above the
         # tropopause, even below the altitude where mesospheric CO becomes important. This seems to asymptote about
@@ -1916,7 +1927,7 @@ class CORecord(TraceGasRecord):
 
         return scale
 
-    def add_trop_prior(self, prof_gas, obs_date, obs_lat, mod_data, **kwargs):
+    def add_trop_prior(self, prof_gas, obs_date, obs_lat, mod_data, co_source: const.COSource, **kwargs):
         """
         Add tropospheric CO prior.
 
@@ -1946,7 +1957,8 @@ class CORecord(TraceGasRecord):
         # Comparison with ATom and ACE-FTS showed a general low bias in the GEOS CO. We scale the CO by a
         # level-dependent factor to bring it in line with those observations.
         prof_gas[:] = co * self.compute_co_scale(prof_pres=pres, prof_theta=theta,
-                                                 trop_pres=trop_pres, trop_theta=trop_theta)
+                                                 trop_pres=trop_pres, trop_theta=trop_theta,
+                                                 co_source=co_source)
 
         # these are computed only for inclusion in the ancillary data since they go in the .vmr header
         trop_eff_lat, midtrop_theta = get_trop_eq_lat(theta, pres, obs_lat, obs_date)
@@ -2399,7 +2411,7 @@ def adjust_zgrid(z_grid, z_trop, z_obs):
 #########################
 
 def add_trop_prior_standard(prof_gas, obs_date, obs_lat, gas_record, mod_data, ref_lat=45.0, use_theta_eqlat=True,
-                            profs_latency=None, prof_aoa=None, prof_world_flag=None, prof_gas_date=None, use_adjusted_zgrid=True):
+                            profs_latency=None, prof_aoa=None, prof_world_flag=None, prof_gas_date=None, use_adjusted_zgrid=True, co_source=None):
     """
     Add troposphere concentration to the prior profile using the standard approach.
 
@@ -2443,6 +2455,9 @@ def add_trop_prior_standard(prof_gas, obs_date, obs_lat, gas_record, mod_data, r
     :param prof_gas_date: nlev-element vector that stores the date in the MLO/SMO record that the gas was taken from.
      Since most levels will have a window of dates, this is the middle of those windows. The dates are stored as a
      datetime object.
+
+    :param co_source: unused, needed for consistency with other add_trop_prior functions, which can accept but ignore
+     this input (which is required for CO priors)
 
     :return: the updated CO2 profile and a dictionary of the ancillary profiles.
     """
@@ -2789,6 +2804,7 @@ def generate_single_tccon_prior(mod_file_data, utc_offset, concentration_record,
     file_date = mod_file_data['file']['datetime']
     file_lat = mod_file_data['file']['lat']
     file_lon = mod_file_data['file']['lon']
+    co_source = mod_file_data['constants']['co_source']
     # Make the UTC date a datetime object that is rounded to a date (hour/minute/etc = 0)
     obs_utc_date = dt.datetime.combine((file_date - utc_offset).date(), dt.time())
 
@@ -2815,7 +2831,7 @@ def generate_single_tccon_prior(mod_file_data, utc_offset, concentration_record,
     _, ancillary_trop = concentration_record.add_trop_prior(gas_prof, obs_utc_date, obs_lat, mod_file_data,
                                                             use_theta_eqlat=use_eqlat_trop, use_adjusted_zgrid=use_adjusted_zgrid,
                                                             profs_latency=latency_profs, prof_world_flag=stratum_flag, 
-                                                            prof_gas_date=gas_date_prof)
+                                                            prof_gas_date=gas_date_prof, co_source=co_source)
     aoa_prof_trop = ancillary_trop['age_of_air'] if 'age_of_air' in ancillary_trop else np.full_like(gas_prof, np.nan)
     trop_ref_lat = ancillary_trop['ref_lat'] if 'ref_lat' in ancillary_trop else np.nan
     trop_eqlat = ancillary_trop['trop_lat'] if 'trop_lat' in ancillary_trop else np.nan
@@ -2874,7 +2890,8 @@ def generate_single_tccon_prior(mod_file_data, utc_offset, concentration_record,
                      'prof_ref_lat': trop_ref_lat,
                      'surface_alt': mod_file_data['scalar']['Height'],
                      'tropopause_alt': z_trop_met,
-                     'strat_used_eqlat': use_eqlat_strat}
+                     'strat_used_eqlat': use_eqlat_strat,
+                     'co_source': co_source}
 
     return map_dict, units_dict, map_constants
 
@@ -3148,7 +3165,8 @@ def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='x
                 vmr_name = os.path.join(this_vmr_dir, vmr_name)
             extra_header_info = {
                 'EFF_LAT_TROP': map_constants['trop_eqlat'],
-                'MIDTROP_THETA': '{:.2f}'.format(map_constants['midtrop_theta'])
+                'MIDTROP_THETA': '{:.2f}'.format(map_constants['midtrop_theta']),
+                'CO_SOURCE': map_constants['co_source'].value
             }
             extra_header_info.update(special_header_info)
             writers.write_vmr_file(vmr_name, tropopause_alt=map_constants['tropopause_alt'],
@@ -3168,7 +3186,7 @@ def _add_common_cl_args(parser):
                                                      'organized into subdirectories by <product>/<site>/vertical, e.g. '
                                                      'fpit/pa/vertical. If an explicit mod_dir is given, this argument '
                                                      'is not used.')
-    parser.add_argument('--product', default='fpit', choices=('fp', 'fpit'),
+    parser.add_argument('--product', default='fpit', choices=('fp', 'fpit', 'it'),
                         help='Which GEOS product was used. Only affects the subdirectory looked for with --mod-root-dir'
                              ' and created when saving without --flat-outdir.')
     parser.add_argument('-b', '--base-vmr-file', dest='std_vmr_file',
