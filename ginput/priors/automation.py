@@ -3,7 +3,9 @@ import ctypes
 from datetime import datetime, timedelta
 from glob import glob
 import json
+from pathlib import Path
 import os
+import re
 import sys
 import time
 
@@ -79,7 +81,7 @@ class AutomationArgs:
         self.n_threads = json_dict.get('n_threads', 4)
 
 
-def _make_mod_files(all_args: AutomationArgs):
+def _make_mod_files(all_args: AutomationArgs, force_file_name_fpit: bool = True):
     mod_maker.driver(
         date_range=[all_args.start_date, all_args.end_date],
         met_path=all_args.met_path,
@@ -94,8 +96,20 @@ def _make_mod_files(all_args: AutomationArgs):
         muted=True
     )
 
+    if force_file_name_fpit:
+        logger.info("Renaming any IT files to start with FPIT to work with gsetup")
+        subdir = mod_utils.mode_to_product(all_args.ginput_met_key)
+        for mod_file in mod_utils.iter_mod_files(os.path.join(all_args.save_path, subdir)):
+            mod_file = Path(mod_file)
+            new_name = re.sub('^IT', 'FPIT', mod_file.name)
+            if new_name != mod_file.name:
+                new_file = mod_file.parent / new_name
+                logger.debug(f'Renaming {mod_file} to {new_file}')
+                mod_file.rename(new_file)
+
 def _make_vmr_files(all_args: AutomationArgs):
-    mod_files = [t for t in mod_utils.iter_mod_files(os.path.join(all_args.save_path, 'fpit'))]
+    subdir = mod_utils.mode_to_product(all_args.ginput_met_key)
+    mod_files = [t for t in mod_utils.iter_mod_files(os.path.join(all_args.save_path, subdir))]
     # Cannot use the abbreviations defined in the job arguments anymore - there will be at least 8 files per
     # site, so if multiple sites were requested, we'll have n abbreviations and 8*n*ndays files. The prior
     # functions expect either one abbreviation to use for all files or the same number of abbreviations and
@@ -106,6 +120,7 @@ def _make_vmr_files(all_args: AutomationArgs):
         mod_data=mod_files,
         utc_offsets=timedelta(0),
         save_dir=all_args.save_path,
+        product=subdir,
         use_existing_luts=True,
         site_abbrevs=mod_sites,
         flat_outdir=False,
@@ -136,7 +151,8 @@ def _make_map_files(all_args: AutomationArgs):
     elif map_fmt != 'txtandnc':
         raise ValueError('"{}" is not an allowed value for map_fmt.'.format(map_fmt))
 
-    sites = sorted(glob(os.path.join(job_dir, 'fpit', '??')))
+    subdir = mod_utils.mode_to_product(all_args.ginput_met_key)
+    sites = sorted(glob(os.path.join(job_dir, subdir, '??')))
     for site_dir in sites:
         site_abbrev = os.path.basename(site_dir.rstrip(os.sep))
         mod_files = glob(os.path.join(site_dir, 'vertical', '*.mod'))
@@ -170,13 +186,14 @@ def _make_map_files(all_args: AutomationArgs):
 def _make_simulated_files(all_args: AutomationArgs, delay_time: float):
     time.sleep(delay_time)
     curr_time = all_args.start_date
+    subdir = mod_utils.mode_to_product(all_args.ginput_met_key)
     site_ids, site_lats, site_lons, _ = mod_utils.check_site_lat_lon_alt(
         all_args.site_ids, all_args.site_lats, all_args.site_lons, all_args.site_alts
     )
     while curr_time < all_args.end_date:
         for (site_id, lat, lon) in zip(site_ids, site_lats, site_lons):
             # .mod files
-            mod_dir = os.path.join(all_args.save_path, 'fpit', site_id, 'vertical')
+            mod_dir = os.path.join(all_args.save_path, subdir, site_id, 'vertical')
             if not os.path.exists(mod_dir):
                 os.makedirs(mod_dir)
             mod_file_name = mod_utils.mod_file_name_for_priors(curr_time, lat, lon)
@@ -184,7 +201,7 @@ def _make_simulated_files(all_args: AutomationArgs, delay_time: float):
                 f.write(f'Simulated .mod file for {curr_time}')
 
             # .vmr files
-            vmr_dir = mod_utils.vmr_output_subdir(all_args.save_path, site_id)
+            vmr_dir = mod_utils.vmr_output_subdir(all_args.save_path, site_id, product=subdir)
             if not os.path.exists(vmr_dir):
                 os.makedirs(vmr_dir)
             vmr_file_name = mod_utils.vmr_file_name(curr_time, lon, lat)
@@ -192,7 +209,7 @@ def _make_simulated_files(all_args: AutomationArgs, delay_time: float):
                 f.write(f'Simulated .vmr file for {curr_time}')
 
             if all_args.map_file_format != 'none':
-                map_dir = os.path.join(all_args.save_path, 'fpit', site_id, 'maps-vertical')
+                map_dir = os.path.join(all_args.save_path, subdir, site_id, 'maps-vertical')
                 if not os.path.exists(map_dir):
                     os.makedirs(map_dir)
                     
