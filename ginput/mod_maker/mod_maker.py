@@ -2429,11 +2429,4 @@ def driver(date_range, met_path, chem_path=None, save_path=None, keep_latlon_pre
 if __name__ == "__main__": # this is only executed when the code is used directly (e.g. not executed when imported from another python code)
 
     arguments = parse_args()
-    
-    if arguments['mode']: # the fp / fpit mode works with concatenated files
-
-        mod_maker(**arguments)
-
-    else: # using fp-it 3-hourly files
-        ### New code that can generate slant paths and uses GEOS5-FP-IT 3-hourly files
-        driver(**arguments)
+    driver(**arguments)
