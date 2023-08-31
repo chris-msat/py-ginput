@@ -9,6 +9,8 @@ import pandas as pd
 
 from . import mod_utils
 from .mod_utils import ModelError
+from .mod_constants import COSource
+from .ggg_logging import logger
 
 
 def read_out_file(out_file, as_dataframes=False, replace_fills=False):
@@ -114,6 +116,9 @@ def read_mod_file(mod_file, as_dataframes=False):
     # variables start on.
     scalar_vars = pd.read_csv(mod_file, sep='\s+', header=2, nrows=1)
 
+    # Get the CO source from the header. If absent, use a deafult
+    constant_vars['co_source'] = _read_mod_file_co_source(mod_file)
+
     # Now read the profile vars.
     profile_vars = pd.read_csv(mod_file, sep='\s+', header=n_header_lines-1)
 
@@ -147,6 +152,24 @@ def read_mod_file(mod_file, as_dataframes=False):
         out_dict['profile'] = {k: v.values for k, v in profile_vars.items()}
 
     return out_dict
+
+
+def _read_mod_file_co_source(mod_file: str) -> COSource:
+    nhead = mod_utils.get_num_header_lines(mod_file)
+    with open(mod_file) as f:
+        for idx, line in enumerate(f):
+            if idx == nhead:
+                # This is the default; .mod files before v1.2.0 did not include a CO
+                # source in the header because it was always from GEOS FP-IT. Also 
+                # prior to v1.2.0, the header only had 7 lines (by default), so if
+                # there's >7 lines, that probably means we messed up.
+                if nhead > 7:
+                    logger.warning((f'In .mod file {mod_file}, did not find a "CO source" line in the header, but the header has more than 7 lines. '
+                                     'Unless this is a custom .mod file, this means I may have missed the CO source line.'))
+                return COSource.FPIT
+            elif line.startswith('CO source'):
+                source = line.split(':', maxsplit=2)[1].strip()
+                return COSource(source)
 
 
 def read_mod_file_units(mod_file):
