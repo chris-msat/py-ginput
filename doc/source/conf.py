@@ -14,7 +14,7 @@ release = '1.1.6'
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = ['sphinx_rtd_theme', 'myst_parser', 'sphinx.ext.napoleon']
+extensions = ['sphinx_rtd_theme', 'myst_parser', 'sphinx.ext.napoleon', 'sphinx.ext.inheritance_diagram']
 
 templates_path = ['_templates']
 exclude_patterns = []

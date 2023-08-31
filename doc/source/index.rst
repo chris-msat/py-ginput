@@ -23,8 +23,9 @@ Welcome to ginput's documentation!
    :maxdepth: 2
    :caption: ginput code overview:
 
+   code_design/priors.md
    code_design/sat_interface.md
-
+   code_design/mod_maker.md
 
 .. toctree::
    :maxdepth: 2

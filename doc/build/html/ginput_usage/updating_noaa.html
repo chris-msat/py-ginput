@@ -1,24 +1,26 @@
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" >
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Updating NOAA input data &mdash; ginput 1.1.6 documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" />
   <!--[if lt IE 9]>
     <script src="../_static/js/html5shiv.min.js"></script>
   <![endif]-->
   
-        <script src="../_static/jquery.js"></script>
-        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="../_static/doctools.js"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Satellite priors interface" href="../code_design/sat_interface.html" />
+    <link rel="next" title="Core priors code" href="../code_design/priors.html" />
     <link rel="prev" title="Making .map and .map.nc files" href="making_map_files.html" /> 
 </head>
 
@@ -27,15 +29,11 @@
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
-
-          
-          
-          <a href="../index.html" class="icon icon-home">
-            ginput
+            <a href="../index.html" class="icon icon-home"> ginput
           </a>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="text" name="q" placeholder="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
   </form>
@@ -65,6 +63,7 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">ginput code overview:</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="../code_design/priors.html">Core priors code</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../code_design/sat_interface.html">Satellite priors interface</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">ginput API documentation:</span></p>
@@ -87,8 +86,8 @@
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Updating NOAA input data</li>
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>Updating NOAA input data</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/ginput_usage/updating_noaa.md.txt" rel="nofollow"> View page source</a>
       </li>
@@ -105,7 +104,7 @@
 <section id="using-more-recent-flask-data">
 <span id="usage-noaa-more-recent"></span><h2>Using more recent flask data<a class="headerlink" href="#using-more-recent-flask-data" title="Permalink to this heading"></a></h2>
 <p>The repo includes NOAA flask data from 2018 and earlier in the <code class="file docutils literal notranslate"><span class="pre">ginput/data</span></code> directory, so that it can run with the user only responsible for obtaining the GEOS met files used for input. When <code class="docutils literal notranslate"><span class="pre">ginput</span></code> needs CO2, N2O, or CH4 beyond the end of 2018, it will extrapolate them. However, as usual, extrapolation provides poorer results that using the most recent data possible.</p>
-<p><code class="docutils literal notranslate"><span class="pre">ginput</span></code> natively reads the monthly average flask files available from <a class="reference external" href="https://gml.noaa.gov/dv/data/index.php?frequency=Monthly%2BAverages&amp;amp;type=Flask">NOAA GML</a>. To download more recent files from that link, select the gas(es) of interest in the “Parameter” column (carbon dioxide, nitrous oxide, or methane), then in the “Site” column select “MLO” (Mauna Loa) and “SMO” (American Samoa). For each site, this should provide exactly one file for download in the table at the bottom of the page. Save both the MLO and SMO files to your system.</p>
+<p><code class="docutils literal notranslate"><span class="pre">ginput</span></code> natively reads the monthly average flask files available from <a class="reference external" href="https://gml.noaa.gov/dv/data/index.php?frequency=Monthly%2BAverages&amp;type=Flask">NOAA GML</a>. To download more recent files from that link, select the gas(es) of interest in the “Parameter” column (carbon dioxide, nitrous oxide, or methane), then in the “Site” column select “MLO” (Mauna Loa) and “SMO” (American Samoa). For each site, this should provide exactly one file for download in the table at the bottom of the page. Save both the MLO and SMO files to your system.</p>
 <section id="generating-vmr-files">
 <h3>Generating .vmr files<a class="headerlink" href="#generating-vmr-files" title="Permalink to this heading"></a></h3>
 <p>In ginput v1.1.7, it is only possible to pass alternative NOAA files via the command line for the satellite subcommands (<code class="docutils literal notranslate"><span class="pre">oco</span></code>, <code class="docutils literal notranslate"><span class="pre">gosat</span></code>, <code class="docutils literal notranslate"><span class="pre">geocarb</span></code>). Because of the need to potentially pass multiple gases’ files for regular <code class="file docutils literal notranslate"><span class="pre">.vmr</span></code> files, supporting this for the <code class="docutils literal notranslate"><span class="pre">vmr</span></code> and <code class="docutils literal notranslate"><span class="pre">rlvmr</span></code> subcommands requires additional development, but is planned for a future ginput version.</p>
@@ -214,7 +213,7 @@
 <section id="workflow-option-1-always-use-latest-hourly-data">
 <h3>Workflow option 1: always use latest hourly data<a class="headerlink" href="#workflow-option-1-always-use-latest-hourly-data" title="Permalink to this heading"></a></h3>
 <p>This option is the easiest if it is not crucial that you be able to get exactly the same priors should you need to go back and regenerate priors for a previous date (see the <a class="reference internal" href="#rapid-update-aside"><span class="std std-ref">note above</span></a>). In this case, it is simplest to always use the flask data as your input monthly averages and the latest hourly data for the time period covered by it. Let’s walk through an example for CO2 to make this clear.</p>
-<p>As I am writing this it is November 2022, so let’s assume that you obtained the latest hourly data from NOAA that extends through October 2022. The CO2 hourly data only goes back to 2010 (as far as I know), so we will need to use the NOAA flask data to extend further back in time. You would download the lastest MLO and SMO monthly average flask data from <a class="reference external" href="https://gml.noaa.gov/dv/data/index.php?frequency=Monthly%2BAverages&amp;amp;type=Flask">here</a> (as of November 2022). Let’s assume that you’ve done that, and so for MLO you have the flask file <code class="file docutils literal notranslate"><span class="pre">co2_mlo_surface-flask_1_ccgg_month.txt</span></code> and an hourly in situ file which you named <code class="docutils literal notranslate"><span class="pre">mlo_insitu_hourly_2022-10.txt</span></code>.</p>
+<p>As I am writing this it is November 2022, so let’s assume that you obtained the latest hourly data from NOAA that extends through October 2022. The CO2 hourly data only goes back to 2010 (as far as I know), so we will need to use the NOAA flask data to extend further back in time. You would download the lastest MLO and SMO monthly average flask data from <a class="reference external" href="https://gml.noaa.gov/dv/data/index.php?frequency=Monthly%2BAverages&amp;type=Flask">here</a> (as of November 2022). Let’s assume that you’ve done that, and so for MLO you have the flask file <code class="file docutils literal notranslate"><span class="pre">co2_mlo_surface-flask_1_ccgg_month.txt</span></code> and an hourly in situ file which you named <code class="docutils literal notranslate"><span class="pre">mlo_insitu_hourly_2022-10.txt</span></code>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Even if you don’t plan to generate priors for any time before 2010, it’s still important to have the input NOAA data go as far back in time as possible. Parts of the <code class="docutils literal notranslate"><span class="pre">ginput</span></code> algorithm rely on averaging in much older air (to account for mixing in the stratosphere), so the further back in time your input data goes, the less <code class="docutils literal notranslate"><span class="pre">ginput</span></code> has to extrapolate and the more accurate your results will be.</p>
@@ -240,7 +239,7 @@
 </section>
 <section id="workflow-option-2-update-previous-monthly-file">
 <h3>Workflow option 2: update previous monthly file<a class="headerlink" href="#workflow-option-2-update-previous-monthly-file" title="Permalink to this heading"></a></h3>
-<p>This option is a little bit more complicated than Option 1, but allows you complete control over whether already-created monthly averages can be replaced. As in Option 1, you will still need to generate an initial monthly average file from flask data. As in the Option 1 example, let’s assume that it is November 2022 and you have the latest hourly data from NOAA that extends through October 2022. Again, the CO2 hourly data only goes back to 2010, so we first obtain the CO2 flask data for MLO from <a class="reference external" href="https://gml.noaa.gov/dv/data/index.php?frequency=Monthly%2BAverages&amp;amp;type=Flask">here</a> (as of November 2022). Again, let’s assume that you’ve done that, and so for MLO you have the flask file <code class="file docutils literal notranslate"><span class="pre">co2_mlo_surface-flask_1_ccgg_month.txt</span></code> and an hourly in situ file which you named <code class="docutils literal notranslate"><span class="pre">mlo_insitu_hourly_2022-10.txt</span></code>.</p>
+<p>This option is a little bit more complicated than Option 1, but allows you complete control over whether already-created monthly averages can be replaced. As in Option 1, you will still need to generate an initial monthly average file from flask data. As in the Option 1 example, let’s assume that it is November 2022 and you have the latest hourly data from NOAA that extends through October 2022. Again, the CO2 hourly data only goes back to 2010, so we first obtain the CO2 flask data for MLO from <a class="reference external" href="https://gml.noaa.gov/dv/data/index.php?frequency=Monthly%2BAverages&amp;type=Flask">here</a> (as of November 2022). Again, let’s assume that you’ve done that, and so for MLO you have the flask file <code class="file docutils literal notranslate"><span class="pre">co2_mlo_surface-flask_1_ccgg_month.txt</span></code> and an hourly in situ file which you named <code class="docutils literal notranslate"><span class="pre">mlo_insitu_hourly_2022-10.txt</span></code>.</p>
 <p>As in Option 1, we’ll generate our initial monthly average file by editing <code class="file docutils literal notranslate"><span class="pre">co2_mlo_surface-flask_1_ccgg_month.txt</span></code> to remove all lines with data from January 2010 or later and then calling:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ ./run_ginput.py update_hourly \
     mlo \
@@ -281,7 +280,7 @@
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="making_map_files.html" class="btn btn-neutral float-left" title="Making .map and .map.nc files" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../code_design/sat_interface.html" class="btn btn-neutral float-right" title="Satellite priors interface" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../code_design/priors.html" class="btn btn-neutral float-right" title="Core priors code" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

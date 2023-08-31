@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Core priors code &mdash; ginput 1.1.6 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Satellite priors interface" href="sat_interface.html" />
+    <link rel="prev" title="Updating NOAA input data" href="../ginput_usage/updating_noaa.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> ginput
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Using ginput:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/command_line_int.html">Ginput command line interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/downloading_met.html">Downloading met files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/making_mod_files.html">Making model files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/making_vmr_files.html">Making VMR files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/making_map_files.html">Making .map and .map.nc files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/updating_noaa.html">Updating NOAA input data</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">ginput code overview:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Core priors code</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#top-level-entry-points">Top level entry points</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#gas-specific-design">Gas-specific design</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#algorithm-summary">Algorithm summary</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#stratospheric-look-up-tables">Stratospheric look up tables</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#implementing-a-new-gas">Implementing a new gas</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="sat_interface.html">Satellite priors interface</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">ginput API documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api/tccon_priors.html">tccon_priors module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api/mlo_smo_prep.html">mlo_smo_prep module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api/acos_interface.html">acos_interface module</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">ginput</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>Core priors code</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/code_design/priors.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="core-priors-code">
+<h1>Core priors code<a class="headerlink" href="#core-priors-code" title="Permalink to this heading"></a></h1>
+<p>Generation of trace gas <em>a priori</em> profiles is done in the <a class="reference internal" href="../api/tccon_priors.html#module-ginput.priors.tccon_priors" title="ginput.priors.tccon_priors"><code class="xref py py-mod docutils literal notranslate"><span class="pre">tccon_priors</span></code></a> module.
+The overall structure of this module is that each primary trace gas (CO2, N2O, CH4, HF, CO) has a class dedicated to generating it.
+Many other secondary gases needed for TCCON retrievals are generated using the <code class="xref py py-class docutils literal notranslate"><span class="pre">MidlatTraceGasRecord</span></code> class.
+Normally you will not instantiate these classes directly, but instead use one of the <a class="reference internal" href="#priors-top-level-entry-points"><span class="std std-ref">entry functions</span></a>.</p>
+<p>For the primary gases, the troposphere and stratospheric pars of the profiles are calculated separately and stitched together.
+The secondary gases use a much simpler algorithm (modeled on the GGG2014 approach) that derives profiles from a simple climatology.
+For a detailed description and evaluation of the algorithm for the primary gases, see <a class="reference external" href="https://doi.org/10.5194/amt-16-1121-2023">this AMT paper</a>.</p>
+<section id="top-level-entry-points">
+<span id="priors-top-level-entry-points"></span><h2>Top level entry points<a class="headerlink" href="#top-level-entry-points" title="Permalink to this heading"></a></h2>
+<p>There are five functions in the <a class="reference internal" href="../api/tccon_priors.html#module-ginput.priors.tccon_priors" title="ginput.priors.tccon_priors"><code class="xref py py-mod docutils literal notranslate"><span class="pre">tccon_priors</span></code></a> module that can drive the generation of trace gas profiles:</p>
+<ol class="arabic simple">
+<li><p><a class="reference internal" href="../api/tccon_priors.html#ginput.priors.tccon_priors.generate_single_tccon_prior" title="ginput.priors.tccon_priors.generate_single_tccon_prior"><code class="xref py py-func docutils literal notranslate"><span class="pre">generate_single_tccon_prior()</span></code></a> - this function will produce a profile for one gas at one time.
+It is the lowest-level of the entry point functions. It is useful if you just need to generate a handful of gases’ profiles and
+want to slot them into a larger data structure.</p></li>
+<li><p><a class="reference internal" href="../api/tccon_priors.html#ginput.priors.tccon_priors.generate_tccon_priors_driver" title="ginput.priors.tccon_priors.generate_tccon_priors_driver"><code class="xref py py-func docutils literal notranslate"><span class="pre">generate_tccon_priors_driver()</span></code></a> - this function will produce a list of dataframes. Each dataframe
+has multiple gases on an altitude grid for one input met profile/location. This can also write out the profiles to a <code class="docutils literal notranslate"><span class="pre">.vmr</span></code> file.
+(This is a tabular text file, see <code class="docutils literal notranslate"><span class="pre">ginput/testing/test_input_data/vmr_files/fpit</span></code> for examples.) This is a useful function if you
+need to generate profiles for a large number of gases.</p></li>
+<li><p><a class="reference internal" href="../api/tccon_priors.html#ginput.priors.tccon_priors.generate_full_tccon_vmr_file" title="ginput.priors.tccon_priors.generate_full_tccon_vmr_file"><code class="xref py py-func docutils literal notranslate"><span class="pre">generate_full_tccon_vmr_file()</span></code></a> - this function will generate <code class="docutils literal notranslate"><span class="pre">.vmr</span></code> files with the expected
+gases for a standard GGG2020 TCCON retrieval. This is useful if you need to automate the generation of TCCON input files.</p></li>
+<li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">cl_driver()</span></code> - this function is what is called by running <code class="docutils literal notranslate"><span class="pre">run_ginput.py</span> <span class="pre">vmr</span></code> from a command
+line. It is useful if you need to mimic command line calls from inside a Python program.</p></li>
+<li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">runlog_cl_driver()</span></code> - this function is what is called by running <code class="docutils literal notranslate"><span class="pre">run_ginput.py</span> <span class="pre">rlvmr</span></code> from a
+command line. Like <code class="docutils literal notranslate"><span class="pre">cl_driver</span></code>, it is useful if you need to mimic a command line call from within Python.</p></li>
+</ol>
+<p>Generally, if you want to interface the priors generation with a larger program, you will probably use <a class="reference internal" href="../api/tccon_priors.html#ginput.priors.tccon_priors.generate_single_tccon_prior" title="ginput.priors.tccon_priors.generate_single_tccon_prior"><code class="xref py py-func docutils literal notranslate"><span class="pre">generate_single_tccon_prior()</span></code></a>
+if you want to generate a specific set of gases and pack the output into a larger data structure.
+For example, the <a class="reference internal" href="sat_interface.html#sat-interface"><span class="std std-ref">satellite interface</span></a> uses it to generate CO2 (and in one case, CH4 and CO) profiles and
+pack them into arrays of profiles with one array per granule (approx. 24k profiles).</p>
+<p>All of these functions require data from a meteorology reanalysis to be input.
+In normal TCCON use, this data is first written out to <code class="docutils literal notranslate"><span class="pre">.mod</span></code> files (see <code class="docutils literal notranslate"><span class="pre">ginput/testing/test_input_data/mod_files/fpit</span></code> for examples), and paths
+to such files provided as the <code class="docutils literal notranslate"><span class="pre">mod_data</span></code> input to the driver functions.
+Alternatively, you can pass a dictionary representing the same data instead of a path.
+To see an example of such a dictionary, load one of the example <code class="docutils literal notranslate"><span class="pre">.mod</span></code> files from <code class="docutils literal notranslate"><span class="pre">ginput/testing/test_input_data/mod_files/fpit</span></code> with <code class="xref py py-func docutils literal notranslate"><span class="pre">read_mod_file()</span></code>.
+Not all columns from the <code class="docutils literal notranslate"><span class="pre">.mod</span></code> file will be needed for every gas, but the following values are usually needed:</p>
+<ul class="simple">
+<li><p>In “file”: “datetime”, “lat”, and “lon”</p></li>
+<li><p>In “constants”:, “obs_lat”</p></li>
+<li><p>In “profile”: “Height”, “Temperature”, “Pressure”, “PT” (potential temperature), “EqL” (equivalent latitude)</p></li>
+</ul>
+<p>Additional columns may be required depending on the gas generated.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Of the driver functions, only <a class="reference internal" href="../api/tccon_priors.html#ginput.priors.tccon_priors.generate_single_tccon_prior" title="ginput.priors.tccon_priors.generate_single_tccon_prior"><code class="xref py py-func docutils literal notranslate"><span class="pre">generate_single_tccon_prior()</span></code></a> has been seriously tested to take dictionaries, rather than paths, for <code class="docutils literal notranslate"><span class="pre">mod_data</span></code>.
+This is because we expect that is the function you would use if integrating <code class="docutils literal notranslate"><span class="pre">ginput</span></code> into a larger program, so it is the one that needs to take data through memory rather than
+reading from disk.</p>
+</div>
+<div class="versionchanged">
+<p><span class="versionmodified changed">Changed in version 1.2.0: </span>If using <code class="docutils literal notranslate"><span class="pre">ginput</span></code> to obtain CO profiles, one of the values in the “constants” key of the <code class="docutils literal notranslate"><span class="pre">mod_data</span></code> input to <a class="reference internal" href="../api/tccon_priors.html#ginput.priors.tccon_priors.generate_single_tccon_prior" title="ginput.priors.tccon_priors.generate_single_tccon_prior"><code class="xref py py-func docutils literal notranslate"><span class="pre">ginput.priors.tccon_priors.generate_single_tccon_prior()</span></code></a> must be “co_source”,
+which points to an instance of <code class="xref py py-class docutils literal notranslate"><span class="pre">COSource</span></code> or an equivalent string.</p>
+<p>This is because CO is a bit unusual; since local emissions are very important to accurately model the profile shape, <code class="docutils literal notranslate"><span class="pre">ginput</span></code> needs this to be input from a chemical transport model.
+The default for TCCON is to use the CO from GEOS FP-IT or IT.
+However, these have some limitations: we found GEOS FP-IT to be too low in the troposphere and both products miss the increasing CO VMR with altitude in the stratosphere (as observed by ACE-FTS).
+These limitations are corrected by scaling in the <code class="xref py py-class docutils literal notranslate"><span class="pre">CORecord</span></code>, but the two models require different scaling, hence the original source must be communicated.</p>
+</div>
+</section>
+<section id="gas-specific-design">
+<h2>Gas-specific design<a class="headerlink" href="#gas-specific-design" title="Permalink to this heading"></a></h2>
+<p>To allow flexibility in how each gas’s profile are calculated with different classes, which are provided to one of the <a class="reference internal" href="#priors-top-level-entry-points"><span class="std std-ref">driver functions</span></a>.
+All gas classes should inherit from <code class="xref py py-class docutils literal notranslate"><span class="pre">TraceGasRecord</span></code>, which defines the basic interface.
+Several gas-specific classes (<code class="xref py py-class docutils literal notranslate"><span class="pre">CORecord</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">O3Record</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">H2ORecord</span></code>,
+<code class="xref py py-class docutils literal notranslate"><span class="pre">HDORecord</span></code>) inherit directly from <code class="xref py py-class docutils literal notranslate"><span class="pre">TraceGasRecord</span></code>.
+These are the gases which are read directly (or with only small adjustments) from the input met/other reanalysis profiles (i.e. the <code class="docutils literal notranslate"><span class="pre">mod_data</span></code> input to <a class="reference internal" href="../api/tccon_priors.html#ginput.priors.tccon_priors.generate_single_tccon_prior" title="ginput.priors.tccon_priors.generate_single_tccon_prior"><code class="xref py py-func docutils literal notranslate"><span class="pre">generate_single_tccon_prior()</span></code></a>).</p>
+<p>The next major class of interest is <code class="xref py py-class docutils literal notranslate"><span class="pre">MidlatTraceGasRecord</span></code>.
+This class mimics how GGG2014 calculated priors before the introduction of <code class="docutils literal notranslate"><span class="pre">ginput</span></code>.
+Specifically, it takes a <code class="docutils literal notranslate"><span class="pre">.vmr</span></code> file of climatological mean trace gas profiles and applies long term trends, seasonal cycles, and tropopause altitude adjustments to them to approximate temporal and spatial variations.
+This <code class="docutils literal notranslate"><span class="pre">.vmr</span></code> file is not included with <code class="docutils literal notranslate"><span class="pre">ginput</span></code>, but is available with <a class="reference external" href="https://data.caltech.edu/records/e5ntw-xa621">GGG itself</a> (specifically, this is the <code class="docutils literal notranslate"><span class="pre">vmrs/gnd/summer_35N.vmr</span></code> file in the GGG2020 repo).</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>We decided to keep this <code class="docutils literal notranslate"><span class="pre">summer_35N.vmr</span></code> file in GGG, rather than <code class="docutils literal notranslate"><span class="pre">ginput</span></code>, because many of the gases computed with this class are needed for TCCON retrievals (as interfering gases in the TCCON spectral windows) but
+which <code class="docutils literal notranslate"><span class="pre">ginput</span></code> hasn’t been optimized to produce good profile of.
+Therefore, if you need these gases, we assume you’re performing TCCON retrievals, have that file anyway, and need to use the right version for your version of GGG.
+If you’re using <code class="docutils literal notranslate"><span class="pre">ginput</span></code> for other retrievals, we assume you’re doing so because you want to use one or more of the gases we put the most effort into improving.</p>
+</div>
+<p>Finally, there is the <a class="reference internal" href="../api/tccon_priors.html#ginput.priors.tccon_priors.MloSmoTraceGasRecord" title="ginput.priors.tccon_priors.MloSmoTraceGasRecord"><code class="xref py py-class docutils literal notranslate"><span class="pre">MloSmoTraceGasRecord</span></code></a> class, which is the intermediate parent class of the <a class="reference internal" href="../api/tccon_priors.html#ginput.priors.tccon_priors.CO2TropicsRecord" title="ginput.priors.tccon_priors.CO2TropicsRecord"><code class="xref py py-class docutils literal notranslate"><span class="pre">CO2TropicsRecord</span></code></a>,
+<a class="reference internal" href="../api/tccon_priors.html#ginput.priors.tccon_priors.N2OTropicsRecord" title="ginput.priors.tccon_priors.N2OTropicsRecord"><code class="xref py py-class docutils literal notranslate"><span class="pre">N2OTropicsRecord</span></code></a>, <a class="reference internal" href="../api/tccon_priors.html#ginput.priors.tccon_priors.CH4TropicsRecord" title="ginput.priors.tccon_priors.CH4TropicsRecord"><code class="xref py py-class docutils literal notranslate"><span class="pre">CH4TropicsRecord</span></code></a>, and <a class="reference internal" href="../api/tccon_priors.html#ginput.priors.tccon_priors.HFTropicsRecord" title="ginput.priors.tccon_priors.HFTropicsRecord"><code class="xref py py-class docutils literal notranslate"><span class="pre">HFTropicsRecord</span></code></a> classes.
+These latter four classes implement the core <a class="reference external" href="https://doi.org/10.5194/amt-16-1121-2023">ginput algorithms</a> for each of their respective gases.
+Since all four ultimately use a similar approach that bases the prior profiles on NOAA observation at Mauna Loa/Mauna Kea and American Samoa, the <a class="reference internal" href="../api/tccon_priors.html#ginput.priors.tccon_priors.MloSmoTraceGasRecord" title="ginput.priors.tccon_priors.MloSmoTraceGasRecord"><code class="xref py py-class docutils literal notranslate"><span class="pre">MloSmoTraceGasRecord</span></code></a>
+class holds the common logic among those four gases.</p>
+<section id="algorithm-summary">
+<h3>Algorithm summary<a class="headerlink" href="#algorithm-summary" title="Permalink to this heading"></a></h3>
+<p>The algorithm implemented in <code class="xref py py-class docutils literal notranslate"><span class="pre">TraceGasRecord</span></code> and its descendants generally works in three steps:</p>
+<ol class="arabic simple">
+<li><p><strong>Calculate the tropospheric part of the profile (the <code class="docutils literal notranslate"><span class="pre">add_trop_prior</span></code> method).</strong> In the <code class="docutils literal notranslate"><span class="pre">MloSmoTraceGasRecord</span></code> descendants, this involves getting the long term trend from NOAA data, adjusting for advection
+time by latitude, and applying a latitude-dependent seasonal cycle.</p></li>
+<li><p><strong>Calculate the stratospheric part of the profile (the <code class="docutils literal notranslate"><span class="pre">add_strat_prior</span></code> method).</strong> In the <code class="docutils literal notranslate"><span class="pre">MloSmoTraceGasRecord</span></code> descendants, this involves using potential temperature and equivalent latitude to determine
+the age of air relative to the entry of tropospheric air into the stratosphere via the tropics, and using that to calculate mole fractions for levels with potential temperature &gt; 380 K (termed the “stratospheric
+overworld”) from the tropospheric tropical trend plus stratospheric chemistry. Then levels above the tropopause but below 380 K potential temperature are filled in by interpolation.</p></li>
+<li><p><strong>Calculate any extra column amounts to include (the <code class="docutils literal notranslate"><span class="pre">add_extra_column</span></code> method).</strong> This is intended to account for substantial partial columns of the target gas outside the profile altitude grid.
+At present, this is used for CO to account for the large DMFs found in the mesosphere by adding an extra amount to the profile’s top level CO DMF that will produce an equivalent partial column
+of CO to that above the profile top when multiplied by the number density of air and GGG’s effective path length for that level.</p></li>
+</ol>
+</section>
+<section id="stratospheric-look-up-tables">
+<span id="prior-strat-luts"></span><h3>Stratospheric look up tables<a class="headerlink" href="#stratospheric-look-up-tables" title="Permalink to this heading"></a></h3>
+<p>All the <a class="reference internal" href="../api/tccon_priors.html#ginput.priors.tccon_priors.MloSmoTraceGasRecord" title="ginput.priors.tccon_priors.MloSmoTraceGasRecord"><code class="xref py py-class docutils literal notranslate"><span class="pre">MloSmoTraceGasRecord</span></code></a> classes need a look-up table of stratospheric gas concentrations as a function of date, age of air, and (in some cases) potential temperature.
+Calculating these tables is somewhat time-consuming, so <code class="docutils literal notranslate"><span class="pre">ginput</span></code> will by default compute them and write the tables out as netCDF files to its <code class="docutils literal notranslate"><span class="pre">ginput/data</span></code> subdirectory.
+These tables can then be loaded on successive runs to skip the step to compute them.
+<code class="docutils literal notranslate"><span class="pre">ginput</span></code> will automatically trigger regeneration under certain conditions, which are checked in the <code class="docutils literal notranslate"><span class="pre">_have_strat_array_deps_changed</span></code> and <code class="docutils literal notranslate"><span class="pre">_check_strat_dates</span></code> methods of <a class="reference internal" href="../api/tccon_priors.html#ginput.priors.tccon_priors.MloSmoTraceGasRecord" title="ginput.priors.tccon_priors.MloSmoTraceGasRecord"><code class="xref py py-class docutils literal notranslate"><span class="pre">MloSmoTraceGasRecord</span></code></a>.
+It is possible to override the checks defined in <code class="docutils literal notranslate"><span class="pre">_have_strat_array_deps_changed</span></code> and force the class to always use or always recalculate the table with the <code class="docutils literal notranslate"><span class="pre">recalculate_strat_lut</span></code> argument to the class’s <code class="docutils literal notranslate"><span class="pre">__init__</span></code> method,
+but the check in <code class="docutils literal notranslate"><span class="pre">_check_strat_dates</span></code> cannot be bypassed.</p>
+</section>
+</section>
+<section id="implementing-a-new-gas">
+<h2>Implementing a new gas<a class="headerlink" href="#implementing-a-new-gas" title="Permalink to this heading"></a></h2>
+<p>To implement a new gas or a new approach for a gas currently covered by the climatological <code class="xref py py-class docutils literal notranslate"><span class="pre">MidlatTraceGasRecord</span></code>:</p>
+<ol class="arabic simple">
+<li><p>Create a new class that is a child of <code class="xref py py-class docutils literal notranslate"><span class="pre">TraceGasRecord</span></code> or one of its existing subclasses (e.g. <a class="reference internal" href="../api/tccon_priors.html#ginput.priors.tccon_priors.MloSmoTraceGasRecord" title="ginput.priors.tccon_priors.MloSmoTraceGasRecord"><code class="xref py py-class docutils literal notranslate"><span class="pre">MloSmoTraceGasRecord</span></code></a>)</p></li>
+<li><p>Implement the <code class="docutils literal notranslate"><span class="pre">add_trop_prior</span></code>, <code class="docutils literal notranslate"><span class="pre">add_strat_prior</span></code>, and <code class="docutils literal notranslate"><span class="pre">add_extra_column</span></code> methods (if inheriting from <code class="xref py py-class docutils literal notranslate"><span class="pre">TraceGasRecord</span></code> or another class that doesn’t already implement them)
+or any abstract methods remaining on the class inherited from. Note that <code class="docutils literal notranslate"><span class="pre">prof_gas</span></code> is the profile being created, and it must be modified in-place.</p></li>
+<li><p>Add this new class to the <code class="docutils literal notranslate"><span class="pre">gas_record</span></code> variable in <a class="reference internal" href="../api/tccon_priors.html#module-ginput.priors.tccon_priors" title="ginput.priors.tccon_priors"><code class="xref py py-mod docutils literal notranslate"><span class="pre">tccon_priors</span></code></a>.</p></li>
+</ol>
+<p>If you are inheriting from <a class="reference internal" href="../api/tccon_priors.html#ginput.priors.tccon_priors.MloSmoTraceGasRecord" title="ginput.priors.tccon_priors.MloSmoTraceGasRecord"><code class="xref py py-class docutils literal notranslate"><span class="pre">MloSmoTraceGasRecord</span></code></a>, you do not need to implement the <code class="docutils literal notranslate"><span class="pre">add_trop_prior</span></code>, <code class="docutils literal notranslate"><span class="pre">add_strat_prior</span></code>, or <code class="docutils literal notranslate"><span class="pre">add_extra_column</span></code> methods.
+These are already implemented by <a class="reference internal" href="../api/tccon_priors.html#ginput.priors.tccon_priors.MloSmoTraceGasRecord" title="ginput.priors.tccon_priors.MloSmoTraceGasRecord"><code class="xref py py-class docutils literal notranslate"><span class="pre">MloSmoTraceGasRecord</span></code></a> itself.
+However, you will need to implement the supporting functions and class attributes.
+The <a class="reference internal" href="../api/tccon_priors.html#ginput.priors.tccon_priors.MloSmoTraceGasRecord" title="ginput.priors.tccon_priors.MloSmoTraceGasRecord"><code class="xref py py-class docutils literal notranslate"><span class="pre">MloSmoTraceGasRecord</span></code></a> is a good example of this.
+Some of the attributes/functions to pay attention to:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">_gas_name</span></code> (class attribute): name of the gas in the <code class="docutils literal notranslate"><span class="pre">.vmr</span></code> file. It’s important this matches the climatological file, so that (a) <code class="docutils literal notranslate"><span class="pre">ginput</span></code> knows which columns in the climatological file
+to replace with its own calculation and (b) GGG reads in the correct profile from the <code class="docutils literal notranslate"><span class="pre">.vmr</span></code> files <code class="docutils literal notranslate"><span class="pre">ginput</span></code> outputs. The convention is to use lower case, e.g. “co2”.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_gas_unit</span></code> (class attribute): what mixing ratio unit the class will output - usually this should match the units in the NOAA MLO/SMO files or other source read in as the basis for the gas profiles.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_gas_seas_cyc_coeff</span></code> (class attribute): <span class="math notranslate nohighlight">\(c_\mathrm{gas}\)</span> in Eq. (4d) and (5d) of <a class="reference external" href="https://doi.org/10.5194/amt-16-1121-2023">Laughner et al. (2023)</a>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">gas_trop_lifetime_yrs</span></code> (class attribute): the typical tropospheric lifetime of this gas. This is used to adjust latitudinal gradients, per Sect. 2.2 of <a class="reference external" href="https://doi.org/10.5194/amt-16-1121-2023">Laughner et al. 2023</a>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_nyears_for_extrap_avg</span></code> (class attribute): how many years in the NOAA MLO/SMO data to fit in order to extrapolate the NOAA data forward or backward in time.
+See Fig. 1 and Table 1 of <a class="reference external" href="https://doi.org/10.5194/amt-16-1121-2023">Laughner et al. 2023</a>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_max_trend_poly_deg</span></code> (class attribute): controls the functional form of the extrapolation function from the last bullet point. The implementation of the different functions is in
+<code class="xref py py-class docutils literal notranslate"><span class="pre">_fit_gas_trend</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">get_frac_remaining_by_age</span></code> (class method): this is what calculates the stratosphere DMF look-up tables described <a class="reference internal" href="#prior-strat-luts"><span class="std std-ref">above</span></a>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">lat_bias_correction</span></code> (instance method): this allows you to apply a latitudinal correction to the tropospheric profile; see Eq. (1) and Table 3 of <a class="reference external" href="https://doi.org/10.5194/amt-16-1121-2023">Laughner et al. 2023</a>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">list_strat_dependent_files</span></code> (instance method): this must return a dictionary where the values are paths to external files that the stratosphere look-up tables depend on and the keys are valid netCDF4 attribute names.
+<code class="docutils literal notranslate"><span class="pre">ginput</span></code> will calculate SHA1 checksums for each file listed in the dictionary and write it into the stratospheric LUT file. This is how <code class="docutils literal notranslate"><span class="pre">ginput</span></code> determines if inputs that the LUT files depend on have changed.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../ginput_usage/updating_noaa.html" class="btn btn-neutral float-left" title="Updating NOAA input data" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="sat_interface.html" class="btn btn-neutral float-right" title="Satellite priors interface" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Joshua Laughner and Sebastien Roche.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

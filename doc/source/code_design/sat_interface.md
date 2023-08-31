@@ -1,3 +1,4 @@
+(sat-interface)=
 # Satellite priors interface
 
 ## Overview

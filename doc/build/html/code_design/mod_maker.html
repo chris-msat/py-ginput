@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mod maker &mdash; ginput 1.1.6 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="tccon_priors module" href="../api/tccon_priors.html" />
+    <link rel="prev" title="Satellite priors interface" href="sat_interface.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> ginput
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Using ginput:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/command_line_int.html">Ginput command line interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/downloading_met.html">Downloading met files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/making_mod_files.html">Making model files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/making_vmr_files.html">Making VMR files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/making_map_files.html">Making .map and .map.nc files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/updating_noaa.html">Updating NOAA input data</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">ginput code overview:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="priors.html">Core priors code</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sat_interface.html">Satellite priors interface</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Mod maker</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#equivalent-latitude-calculation">Equivalent latitude calculation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#tccon-site-locations">TCCON site locations</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">ginput API documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api/tccon_priors.html">tccon_priors module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api/mlo_smo_prep.html">mlo_smo_prep module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api/acos_interface.html">acos_interface module</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">ginput</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>Mod maker</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/code_design/mod_maker.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="mod-maker">
+<h1>Mod maker<a class="headerlink" href="#mod-maker" title="Permalink to this heading"></a></h1>
+<p>The <code class="xref py py-mod docutils literal notranslate"><span class="pre">mod_maker</span></code> module is specialized to interpolate GEOS FP, FP-IT, or GEOS IT data to specific locations and write out met variables into <code class="docutils literal notranslate"><span class="pre">.mod</span></code> (model) files.
+This code is <em>not</em> intended for use other than as a self-contained script.
+Users needing to generate <code class="docutils literal notranslate"><span class="pre">.mod</span></code> files are recommended to use the command line interface through <code class="docutils literal notranslate"><span class="pre">run_ginput.py</span></code>.
+Users needing a solution to interpolate met data for their own purpose are encouraged to build it themselves.</p>
+<p>Plans exist for more general model sampling in <code class="docutils literal notranslate"><span class="pre">ginput</span></code> v2.0.</p>
+<section id="equivalent-latitude-calculation">
+<h2>Equivalent latitude calculation<a class="headerlink" href="#equivalent-latitude-calculation" title="Permalink to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">ginput</span></code> requires equivalent latitude (EqL) for the CO2, N2O, CH4, and HF priors.
+Few met reanlysis products provide this, so <code class="xref py py-mod docutils literal notranslate"><span class="pre">mod_maker</span></code> has the capability to calculate it, given potential temperature (PT) and potential vorticity (PV).
+Calculating EqL requires global PT and PV fields, as EqL is a sort of measure of what quantile of PV for a given PT a particular location is.
+<code class="xref py py-mod docutils literal notranslate"><span class="pre">mod_maker</span></code> handles this by constructing a PT by PV grid, and determining the EqL for each point in that grid.
+It then constructs a 2D interpolator to output EqL given values of PT and PV for a new location.
+Constructing the interpolators is the most costly step; this is why it is only done once per time step even when multiple locations are needed (and why passing multiple locations at once on the
+command line is recommended over separate calls for each location).</p>
+</section>
+<section id="tccon-site-locations">
+<h2>TCCON site locations<a class="headerlink" href="#tccon-site-locations" title="Permalink to this heading"></a></h2>
+<p>Standard TCCON site locations are defined in <code class="xref py py-mod docutils literal notranslate"><span class="pre">tccon_sites</span></code>.
+These can be used by <code class="xref py py-mod docutils literal notranslate"><span class="pre">mod_maker</span></code> to generate profiles for a given site with only the site ID, rather than needing the lat/lon on the command line.
+This module will be deprecated soon, in favor of a JSON describing current site locations available from a central server.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="sat_interface.html" class="btn btn-neutral float-left" title="Satellite priors interface" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../api/tccon_priors.html" class="btn btn-neutral float-right" title="tccon_priors module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Joshua Laughner and Sebastien Roche.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -241,7 +241,7 @@ class TraceGasRecord(object):
 
 class MloSmoTraceGasRecord(TraceGasRecord):
     """
-    This class stores the Mauna Loa/Samoa average CO2 record and provides methods to sample it.
+    This class stores the Mauna Loa/Samoa average DMF record and provides methods to derive a full prior profile from it.
 
     Initialization arguments:
 
@@ -2804,7 +2804,8 @@ def generate_single_tccon_prior(mod_file_data, utc_offset, concentration_record,
     file_date = mod_file_data['file']['datetime']
     file_lat = mod_file_data['file']['lat']
     file_lon = mod_file_data['file']['lon']
-    co_source = mod_file_data['constants']['co_source']
+    co_source = mod_file_data['constants'].get('co_source', const.COSource.UNKNOWN.value)
+
     # Make the UTC date a datetime object that is rounded to a date (hour/minute/etc = 0)
     obs_utc_date = dt.datetime.combine((file_date - utc_offset).date(), dt.time())
 
@@ -3060,8 +3061,10 @@ def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='x
     :param special_header_info: A dictionary giving extra lines to write in the header of the .vmr file. The pairs
      will be written as "key: value" in the header. 
 
-    :param prior_kwargs:
-    :return:
+    :param prior_kwargs: additional keyword arguments passed on to `generate_single_tccon_priors`.
+
+    :return: a list of dataframes containing the trace gas profiles for each requested profile.
+    :rtype: Sequence[pandas.DataFrame]
     """
     num_profiles = max(np.size(inpt) for inpt in [mod_data, utc_offsets, site_abbrevs])
     if site_abbrevs == 'all':
@@ -3122,8 +3125,9 @@ def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='x
     # Loop over the requested profiles, creating a prior for each gas requested. Check that the other variables are all
     # the same for each gas, then combine them to make a single .map file or dict for each profile
     ancillary_variables = ('Height', 'Temp', 'Pressure', 'PT', 'EqL')
-    vmr_gases = dict()
+    output_dfs = []
     for iprofile in range(num_profiles):
+        vmr_gases = dict()
         var_order = list(ancillary_variables)
         for ispecie, specie_record in enumerate(species):
             gas_name = specie_record.gas_name
@@ -3148,10 +3152,13 @@ def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='x
             # Record the profiles for the .vmr files, converted to dry mole fraction
             vmr_gases[gas_name] = specie_profile[gas_name] * get_scale_factor(specie_units[gas_name])
 
-        # Write the combined .map file for all the requested species
+        # Write the combined .vmr file for all the requested species
         site_lat = map_constants['site_lat']
         site_lon = map_constants['site_lon']
         site_date = map_constants['datetime']
+
+        this_df = pd.DataFrame(vmr_gases, index=profile_dict['Height'])
+        output_dfs.append(this_df)
 
         if write_vmrs:
             vmr_name = mod_utils.vmr_file_name(obs_date=site_date, lon=site_lon, lat=site_lat,
@@ -3174,6 +3181,8 @@ def generate_tccon_priors_driver(mod_data, utc_offsets, species, site_abbrevs='x
                                    profile_alt=profile_dict['Height'], profile_gases=vmr_gases,
                                    gas_name_order=gas_name_order,
                                    extra_header_info=extra_header_info)
+            
+    return output_dfs
 
 
 def _add_common_cl_args(parser):
