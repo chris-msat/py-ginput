@@ -1537,7 +1537,9 @@ def interp_geos_data_to_sites(DATA, lat, lon, site_dict, varlist=None, muted=Fal
             else:
                 interp_data[var] = np.zeros([nlev, nsite])
                 for ilev, level_data in enumerate(DATA[var]):
-                    interp_data[var][ilev] = lat_lon_interp(level_data, lat, lon, new_lats, new_lons, ids_list)
+                    # JLL 2023-008-29: for whatever reason, numpy 1.24.4 doesn't like assigning a list of arrays
+                    # to an array element, but it is okay converting that list to an equivalent 2D array and assigning that.
+                    interp_data[var][ilev] = np.asarray(lat_lon_interp(level_data, lat, lon, new_lats, new_lons, ids_list))
 
     # setup masks
     for var in varlist:
@@ -2412,7 +2414,7 @@ def driver(date_range, met_path, chem_path=None, save_path=None, keep_latlon_pre
             raise NotImplementedError('No equivalent latitude function defined for mode == "{}"'.format(mode))
 
         chem_vars = ('CO',) if include_chm else tuple()
-        product = mode.replace('-eta', '')
+        product = mod_utils.mode_to_product(mode)
         func_dict = eqlat_fxn(GEOS_path=met_path, start_date=start_date, end_date=end_date, muted=muted)
 
         for this_abbrv, this_lat, this_lon, this_alt in zip(site_abbrv, lat, lon, alt):

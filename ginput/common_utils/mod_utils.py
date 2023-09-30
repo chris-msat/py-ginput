@@ -1435,6 +1435,10 @@ def datetime_from_geos_filename(geos_filename):
 def is_geos_on_native_grid(geos_filename):
     with ncdf.Dataset(geos_filename, 'r') as nch:
         return nch['lev'].size == 72
+    
+
+def mode_to_product(mode):
+    return mode.replace('-eta', '')
 
 
 def mod_interpolation_legacy(z_grid, z_met, t_met, val_met, interp_mode=1, met_alt_geopotential=True):
