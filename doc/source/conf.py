@@ -7,7 +7,7 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'ginput'
-copyright = '2022, Joshua Laughner and Sebastien Roche'
+copyright = '2022, California Institute of Technology'
 author = 'Joshua Laughner and Sebastien Roche'
 release = '1.1.6'
 
