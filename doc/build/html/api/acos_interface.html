@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>acos_interface module &mdash; ginput 1.1.6 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="mlo_smo_prep module" href="mlo_smo_prep.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> ginput
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Using ginput:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/command_line_int.html">Ginput command line interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/downloading_met.html">Downloading met files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/making_mod_files.html">Making model files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/making_vmr_files.html">Making VMR files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/making_map_files.html">Making .map and .map.nc files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/updating_noaa.html">Updating NOAA input data</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">ginput code overview:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../code_design/priors.html">Core priors code</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../code_design/sat_interface.html">Satellite priors interface</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">ginput API documentation:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="tccon_priors.html">tccon_priors module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mlo_smo_prep.html">mlo_smo_prep module</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">acos_interface module</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">ginput</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>acos_interface module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/acos_interface.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-ginput.priors.acos_interface">
+<span id="acos-interface-module"></span><h1>acos_interface module<a class="headerlink" href="#module-ginput.priors.acos_interface" title="Permalink to this heading"></a></h1>
+<p>This module serves as the interface between the OCO/GOSAT code and the TCCON prior generator.</p>
+<p>Usual GGG users will not need to concern themselves with this file. GGG developers will want to ensure that this module
+is still able to generate equivalent latitudes and CO2 priors from the TCCON prior and mod_maker code.</p>
+<p>If you wish to call this code from within other python code, the function <a class="reference internal" href="#ginput.priors.acos_interface.acos_interface_main" title="ginput.priors.acos_interface.acos_interface_main"><code class="xref py py-func docutils literal notranslate"><span class="pre">acos_interface_main()</span></code></a> is the entry
+point. A command line interface is also provided</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="ginput.priors.acos_interface.acos_interface_main">
+<span class="sig-prename descclassname"><span class="pre">ginput.priors.acos_interface.</span></span><span class="sig-name descname"><span class="pre">acos_interface_main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">instrument</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">met_resampled_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">geos_files</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mlo_co2_file=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">smo_co2_file=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_trop_eqlat=False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_strat_lut=False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">truncate_mlo_smo_by=0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nprocs=0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interp_pickle_dir='.'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">error_handler=&lt;ginput.priors.acos_interface.ErrorHandler</span> <span class="pre">object&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ginput.priors.acos_interface.acos_interface_main" title="Permalink to this definition"></a></dt>
+<dd><p>The primary interface to create CO2 priors for the ACOS algorithm</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>met_resampled_file</strong> (<em>str</em>) – the path to the HDF5 file containing the met data resampled to the satellite footprints</p></li>
+<li><p><strong>geos_files</strong> (<em>list</em><em>(</em><em>str</em><em>)</em>) – the list of GEOS FP or FP-IT pressure level met files that bracket the satellite observations.
+That is, if the first satellite observation in <code class="docutils literal notranslate"><span class="pre">met_resampled_file</span></code> is on 2019-05-22 02:30:00Z and the last is
+at 2019-05-22 03:30:00Z, then the GEOS files for 0, 3, and 6 UTC for 2019-05-22 must be listed.</p></li>
+<li><p><strong>output_file</strong> (<em>str</em>) – the path to where the priors (and related data) should be written as an HDF5 file.</p></li>
+<li><p><strong>mlo_co2_file</strong> (<em>str</em><em> or </em><em>None</em>) – optional, the path to the Mauna Loa monthly CO2 flask data file. If not given (None), the
+default file included in the repository is used.</p></li>
+<li><p><strong>smo_co2_file</strong> (<em>str</em>) – optional, the path to the American Samoa monthly CO2 flask data file. If not given (None), the
+default file included in the repository is used.</p></li>
+<li><p><strong>cache_strat_lut</strong> (<em>bool</em>) – optional, set to <code class="docutils literal notranslate"><span class="pre">True</span></code> to enable the CO2 record instance to cache its stratospheric
+concentration lookup table to avoid having to recalculate it each time. When <code class="docutils literal notranslate"><span class="pre">True</span></code>, the CO2 record class will
+determine if the LUT needs updated based on the state of the dependencies. When <code class="docutils literal notranslate"><span class="pre">False</span></code> (default), the LUT will
+always be calculated from the MLO/SMO record and the age spectra and will never be saved.</p></li>
+<li><p><strong>truncate_mlo_smo_by</strong> – optional, number of months before the latest date in the <code class="docutils literal notranslate"><span class="pre">met_resampled_file</span></code> to
+truncate the MLO/SMO data to (and extrapolate beyond). The default is 2, e.g. if the latest date in the met file
+is in Aug 2021, the MLO/SMO data will only be used up to June 2021 - but they <em>must</em> include data up to that
+month, or an error is raised.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>None, writes results to the HDF5 <code class="docutils literal notranslate"><span class="pre">output_file</span></code>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ginput.priors.acos_interface.compute_sounding_equivalent_latitudes">
+<span class="sig-prename descclassname"><span class="pre">ginput.priors.acos_interface.</span></span><span class="sig-name descname"><span class="pre">compute_sounding_equivalent_latitudes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sounding_pv</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sounding_theta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sounding_datenums</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sounding_qflags</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">geos_files</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nprocs=0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prior_flags=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eqlat_pickle_dir='.'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">error_handler=&lt;ginput.priors.acos_interface.ErrorHandler</span> <span class="pre">object&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ginput.priors.acos_interface.compute_sounding_equivalent_latitudes" title="Permalink to this definition"></a></dt>
+<dd><p>Compute equivalent latitudes for a collection of OCO soundings</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sounding_pv</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">numpy.ndarray</span></code>) – potential vorticity in units of PVU (1e-6 K * m2 * kg^-1 * s^-1). Must be an array with
+dimensions (profiles, levels). That is, if the data read from the resampled met files have dimensions (soundings,
+footprints, levels), these must be reshaped so that the first two dimensions get collapsed into one.</p></li>
+<li><p><strong>sounding_theta</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">numpy.ndarray</span></code>) – potential temperature in units of K. Same shape as <code class="docutils literal notranslate"><span class="pre">sounding_pv</span></code> required.</p></li>
+<li><p><strong>sounding_datenums</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">numpy.ndarray</span></code>) – date and time of each profile as a date number (a numpy <code class="xref py py-class docutils literal notranslate"><span class="pre">datetime64</span></code> value
+converted to a float type, see <code class="xref py py-func docutils literal notranslate"><span class="pre">datetime2datenum()</span></code> in this module). Must be a vector with length equal to the
+first dimension of <code class="docutils literal notranslate"><span class="pre">sounding_pv</span></code>.</p></li>
+<li><p><strong>geos_files</strong> (<em>list</em><em>(</em><em>str</em><em>)</em>) – a list of the GEOS 3D met files that bracket the times of all the soundings. Need not be absolute
+paths, but must be paths that resolve correctly from the current working directory.</p></li>
+<li><p><strong>nprocs</strong> (<em>int</em>) – number of processors to use to compute the equivalent latitudes. 0 will run in serial mode, anything
+greater will use parallel mode.</p></li>
+<li><p><strong>prior_flags</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">numpy.ndarray</span></code>) – an integer array used to store numeric codes indicating why a particular prior failed to
+generate.</p></li>
+<li><p><strong>error_handler</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">ErrorHandler</span></code>) – an ErrorHandler instance that determines how errors during the eq. lat. computation are caught
+and handled.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>an array of equivalent latitudes with dimensions (profiles, levels)</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><code class="xref py py-class docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ginput.priors.acos_interface.init_prior_h5">
+<span class="sig-prename descclassname"><span class="pre">ginput.priors.acos_interface.</span></span><span class="sig-name descname"><span class="pre">init_prior_h5</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">geos_files</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resampler_file</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ginput.priors.acos_interface.init_prior_h5" title="Permalink to this definition"></a></dt>
+<dd><p>Initialize the output .h5 file. If it already exists, it will be overwritten.</p>
+<p>Initialize the output .h5 file. If it already exists, it will be overwritten.
+:type output_file: str</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>geos_files</strong> (<em>Sequence</em><em>[</em><em>str</em><em>]</em>) – a list/tuple of GEOS-FP(IT) files from which the equivalent
+latitude was computed.</p></li>
+<li><p><strong>resampler_file</strong> (<em>str</em>) – the path to the resampled met file that the regular met
+variables were read from.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>none, writes to disk</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ginput.priors.acos_interface.read_resampled_met">
+<span class="sig-prename descclassname"><span class="pre">ginput.priors.acos_interface.</span></span><span class="sig-name descname"><span class="pre">read_resampled_met</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">met_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">var_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">error_handler=&lt;ginput.priors.acos_interface.ErrorHandler</span> <span class="pre">object&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ginput.priors.acos_interface.read_resampled_met" title="Permalink to this definition"></a></dt>
+<dd><p>Read the required data from the HDF5 file containing the resampled met data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>met_file</strong> (<em>str</em>) – the path to the met file</p></li>
+<li><p><strong>var_dict</strong> (<em>dict</em>) – a dictionary mapping the output variables to the datasets in the HDF5 file. Keys must be the
+output variables (listed below) and the values must be two-element lists, the first element gives the group name
+and the second the dataset name within that group to read.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><p>a dictionary with variables both read directly from the met file and derived from those values. Keys are:</p>
+<ul class="simple">
+<li><p>”pv” - potential vorticity in PVU</p></li>
+<li><p>”theta” - potential temperature in K</p></li>
+<li><p>”temperature” - temperature profiles in K</p></li>
+<li><p>”pressure” - pressure profiles in hPa</p></li>
+<li><p>”date_strings” - the sounding date/time as a string</p></li>
+<li><p>”dates” - the sounding date/time as a Python <code class="xref py py-class docutils literal notranslate"><span class="pre">datetime.datetime</span></code> object</p></li>
+<li><p>”datenums” - the sounding date/time as a floating point number (see <code class="xref py py-func docutils literal notranslate"><span class="pre">datetime2datenum()</span></code>)</p></li>
+<li><p>”altitude” - the altitude profiles in km</p></li>
+<li><p>”latitude” - the sounding latitudes in degrees (south is negative)</p></li>
+<li><p>”longitude” - the sounding longitudes in degrees (west is negative)</p></li>
+<li><p>”trop_pressure” - the blended tropopause pressure in hPa</p></li>
+<li><p>”trop_temperature” - the blended tropopause temperature in K</p></li>
+<li><p>”surf_alt” - the surface altitude, derived from surface geopotential, in km</p></li>
+<li><p>”quality_flags” - the sounding quality flag. Equal to 0 for good soundings.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ginput.priors.acos_interface.write_prior_h5">
+<span class="sig-prename descclassname"><span class="pre">ginput.priors.acos_interface.</span></span><span class="sig-name descname"><span class="pre">write_prior_h5</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">profile_variables</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">units</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prior_group</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'priors'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ginput.priors.acos_interface.write_prior_h5" title="Permalink to this definition"></a></dt>
+<dd><p>Write the priors to an HDF5 file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>output_file</strong> (<em>str</em>) – the path to the output file.</p></li>
+<li><p><strong>profile_variables</strong> (<em>dict</em>) – a dictionary containing the variables to write. The keys will be used as the variable
+names.</p></li>
+<li><p><strong>units</strong> (<em>dict</em><em>(</em><em>str</em><em>)</em>) – a dictionary defining the units each variable is in. Must have the same keys as <code class="docutils literal notranslate"><span class="pre">profile_variables</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>none, writes to file on disk.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="mlo_smo_prep.html" class="btn btn-neutral float-left" title="mlo_smo_prep module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Joshua Laughner and Sebastien Roche.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

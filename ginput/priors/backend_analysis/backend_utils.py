@@ -65,9 +65,9 @@ def read_ace_date(ace_nc_handle, out_type=dt.datetime):
     :return: a numpy array of dates, as type ``out_type``.
     :rtype: :class:`numpy.ndarray`
     """
-    ace_years = ace_nc_handle.variables['year'][:].filled(np.nan)
-    ace_months = ace_nc_handle.variables['month'][:].filled(np.nan)
-    ace_days = ace_nc_handle.variables['day'][:].filled(np.nan)
+    ace_years = ace_nc_handle.variables['year'][:].filled(np.nan).astype(int)
+    ace_months = ace_nc_handle.variables['month'][:].filled(np.nan).astype(int)
+    ace_days = ace_nc_handle.variables['day'][:].filled(np.nan).astype(int)
 
     ace_hours = ace_nc_handle.variables['hour'][:].filled(np.nan)
     ace_hours = ace_hours.astype(np.float64)  # timedelta demands a 64-bit float, can't be 32-bit

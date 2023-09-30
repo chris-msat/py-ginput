@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Satellite priors interface &mdash; ginput 1.1.6 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="tccon_priors module" href="../api/tccon_priors.html" />
+    <link rel="prev" title="Core priors code" href="priors.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> ginput
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Using ginput:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/command_line_int.html">Ginput command line interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/downloading_met.html">Downloading met files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/making_mod_files.html">Making model files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/making_vmr_files.html">Making VMR files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/making_map_files.html">Making .map and .map.nc files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ginput_usage/updating_noaa.html">Updating NOAA input data</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">ginput code overview:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="priors.html">Core priors code</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Satellite priors interface</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#loading-met-data">Loading met data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#calculating-equivalent-latitudes">Calculating equivalent latitudes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#calculating-trace-gas-profiles">Calculating trace gas profiles</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#saving-trace-gas-profiles">Saving trace gas profiles</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#special-considerations-for-reproducibility">Special considerations for reproducibility</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#error-handling">Error handling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#acos-assumptions">ACOS assumptions</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">ginput API documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api/tccon_priors.html">tccon_priors module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api/mlo_smo_prep.html">mlo_smo_prep module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api/acos_interface.html">acos_interface module</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">ginput</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>Satellite priors interface</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/code_design/sat_interface.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="satellite-priors-interface">
+<span id="sat-interface"></span><h1>Satellite priors interface<a class="headerlink" href="#satellite-priors-interface" title="Permalink to this heading"></a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Permalink to this heading"></a></h2>
+<p>The <a class="reference internal" href="../api/acos_interface.html#module-ginput.priors.acos_interface" title="ginput.priors.acos_interface"><code class="xref py py-mod docutils literal notranslate"><span class="pre">acos_interface</span></code></a> module handles generating priors for satellite retrievals.
+Currently, it supports OCO-2/3, GOSAT, and GeoCARB.
+Satellite priors use a different driver than the standard TCCON priors, because TCCON priors are generally needed for only a few locations but for all times of day, whereas satellites need priors for a large number of locations but each at only a single time.
+Therefore, some data can be loaded once and reused for generating the satellite priors at different locations more efficiently than it can for all the different times of day needed for TCCON.</p>
+<p>The entry point to the <a class="reference internal" href="../api/acos_interface.html#module-ginput.priors.acos_interface" title="ginput.priors.acos_interface"><code class="xref py py-mod docutils literal notranslate"><span class="pre">acos_interface</span></code></a> module is the <code class="docutils literal notranslate"><span class="pre">acos_interface_main</span></code> function.
+The general steps it takes are:</p>
+<ol class="arabic simple">
+<li><p>Load met data from a source file containing met data resampled at the desired locations and map the variables to ones recognized by the rest of <code class="docutils literal notranslate"><span class="pre">ginput</span></code>.</p></li>
+<li><p>Generate equivalent latitude (EqL) interpolators that cover the time range represented in the met file</p></li>
+<li><p>Use those interpolators to calculate EqL profiles for each satellite sounding</p></li>
+<li><p>Calculate trace gas profiles for each sounding using the EqL plus met profiles</p></li>
+<li><p>Save the trace gas profiles plus some ancillary data to an HDF5 file</p></li>
+</ol>
+<p>If a satellite provided EqL profiles in its met files, then steps 2 and 3 could be skipped.
+However, EqL can be a bit tricky to calculate and is not included in many meteorology reanalysis products, so we provide the capability to calculate it in <code class="docutils literal notranslate"><span class="pre">ginput</span></code>.</p>
+</section>
+<section id="loading-met-data">
+<h2>Loading met data<a class="headerlink" href="#loading-met-data" title="Permalink to this heading"></a></h2>
+<p>How met data is stored tends to vary a lot from satellite to satellite, so each satellite supported by <code class="docutils literal notranslate"><span class="pre">ginput</span></code> has its own <code class="docutils literal notranslate"><span class="pre">read_*_resampled_met</span></code> function, and which one is used depends on which satellite instrument is requested via the <code class="docutils literal notranslate"><span class="pre">instrument</span></code> argument to the main function. These <code class="docutils literal notranslate"><span class="pre">read_*_resampled_met</span></code> function can use a helper function, <code class="docutils literal notranslate"><span class="pre">read_resampled_met</span></code>, which knows how to read variables from HDF5 files and map them to variables <code class="docutils literal notranslate"><span class="pre">ginput</span></code> recognizes, given a dictionary mapping HDF5 paths to <code class="docutils literal notranslate"><span class="pre">ginput</span></code> variables. The required <code class="docutils literal notranslate"><span class="pre">ginput</span></code> variables are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">pv</span></code>: profile of Ertel’s potential vorticity, in units of <strong>TODO: provide GEOS units</strong></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">temperature</span></code>: profile of temperature, in Kelvin</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">pressure</span></code>: profile of pressure, in hPa (converted from Pa by <code class="docutils literal notranslate"><span class="pre">read_resampled_met</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">date_strings</span></code>: the date/time of the sounding in UTC or GPS time (for <code class="docutils literal notranslate"><span class="pre">ginput</span></code>, the sub-minute difference between them is unlikely to have a big impact).</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">read_resampled_met</span></code> assumes that the datetime strings have the format “yyyy-mm-ddTHH:MM:SS.dddZ”, e.g. 2018-01-02T12:30:45.300Z for 12:30:45.300 UTC on 2 Jan 2018. If your met file stores datetimes in another format, then either <code class="docutils literal notranslate"><span class="pre">read_resampled_met</span></code> will need to be updated to support that, or you will need to create a custom version of <code class="docutils literal notranslate"><span class="pre">read_resampled_met</span></code> for your instrument.</p>
+</div>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">altitude</span></code>: height profile in kilometers above sea level (converted from meters by <code class="docutils literal notranslate"><span class="pre">read_resampled_met</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">latitude</span></code>: latitude of the sounding, with south represented as negative</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">longitude</span></code>: longitude of the sounding, with west represented as negative</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">trop_pressure</span></code>: pressure at the tropopause, in hPa (converted from Pa by <code class="docutils literal notranslate"><span class="pre">read_resampled_met</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">trop_temperature</span></code>: temperature at the tropopause, in Kelvin</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">surf_gph</span></code>: despite the name, this is surface altitude in meters (converted from meters by <code class="docutils literal notranslate"><span class="pre">read_resampled_met</span></code>)</p></li>
+<li><p>Optionally, <code class="docutils literal notranslate"><span class="pre">co</span></code> if you require CO profiles. This must point to profiles of CO dry mole fraction, in units of mol/mol.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">read_resampled_met</span></code> returns a dictionary with values for all of the above variables, plus several which it calculates:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">theta</span></code>: potential temperature profiles in Kelvin</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dates</span></code>: Python <code class="xref py py-class docutils literal notranslate"><span class="pre">datetime</span></code> instances corresponding to the date strings</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">datenums</span></code>: the number of seconds since midnight UTC 1 Jan 1970 corresponding to the date strings</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">surf_alt</span></code>: this is a special case that replaces <code class="docutils literal notranslate"><span class="pre">surf_gph</span></code> in the output dictionary. It is the surface altitude in kilometers.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">read_resampled_met</span></code> returns the met arrays in their native shape in the HDF5 file, however the rest of the interface expects the variables first two dimensions to represent different soundings (i.e. along and across track, the exact definition does not matter, as it just iterates over both to compute the profiles). 2D variables such as <code class="docutils literal notranslate"><span class="pre">surf_alt</span></code> need only those two, 3D profile variables must have the levels as the third dimension. Additionally, the levels must be ordered space-to-surface.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If you need to implement a new reader for met data in a different format than a typical ACOS-like met file, you may do best to implement a <code class="docutils literal notranslate"><span class="pre">read_*_resampled_met</span></code> function that loads this data directly, rather than trying to make <code class="docutils literal notranslate"><span class="pre">read_resampled_met</span></code> handle your specific format. In this case, take careful note of the expected units of each quantity in the returned dictionary.</p>
+</div>
+</section>
+<section id="calculating-equivalent-latitudes">
+<h2>Calculating equivalent latitudes<a class="headerlink" href="#calculating-equivalent-latitudes" title="Permalink to this heading"></a></h2>
+<p>Calculating equivalent latitude (EqL) requires testing how the potential vorticity (PV) and potential temperature (PT) of a given profile compare to those quantities over the remainder of the globe. This is accomplished in <code class="docutils literal notranslate"><span class="pre">ginput</span></code> by constructing a 2D interpolator of EqL vs. PV and PT from GEOS met files passed in to the main driver function. Each profile’s PV and PT are then used to find the EqL from the interpolators for the two GEOS files that bound that profile in time. The final EqL is then an average of those two profiles, weighted by the temporal proximity of the sounding to those GEOS files. That is, a sounding at 13:00 UTC would be bounded by the 12:00 and 15:00 GEOS files, and the EqL from the 12:00 file would be weighted twice as strongly as the EqL from the 15:00 file.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Constructing the interpolators is actually somewhat time consuming. Since it takes the same amount of time to construct one interpolator whether it is used to get EqL for one profile or thousands of profiles, the satellite interface is built to construct the interpolators once and use them for all profiles.</p>
+</div>
+<p>EqL can be calculated in serial or parallel, depending on the value of the <code class="docutils literal notranslate"><span class="pre">nprocs</span></code> parameter. In <code class="docutils literal notranslate"><span class="pre">compute_sounding_equivalent_latitudes</span></code>, it dispatches to <code class="docutils literal notranslate"><span class="pre">_eqlat_serial</span></code> or <code class="docutils literal notranslate"><span class="pre">_eqlat_parallel</span></code>, which both iterate over all the soundings and call <code class="docutils literal notranslate"><span class="pre">_eqlat_helper</span></code> on each one. The main difference is whether the iteration occurs via a simple <code class="docutils literal notranslate"><span class="pre">for</span></code> loop or a <code class="xref py py-mod docutils literal notranslate"><span class="pre">multiprocessing</span></code> construct. (The original reason for having separate function was to test the parallel version against the serial one, to ensure the EqL profiles were mapped to soundings correctly. In production, use of the parallelization is highly encouraged.)</p>
+<p>There is one aspect of running in parallel to note: <code class="xref py py-mod docutils literal notranslate"><span class="pre">multiprocessing</span></code> uses pickles to send data between processes. For Python versions up to at least 3.6, the maximum size of pickles was limited to the number of bytes that could be recorded in a 32-bit integer. Because of how the interpolators are constructed, if the range of PV or PT became very large, the interpolators would exceed this size limit and could not be passed between processes. This limitation was addressed between Python 3.7 and 3.10.</p>
+<p>As a workaround, if <code class="docutils literal notranslate"><span class="pre">ginput</span></code> detects that it is running on Python 3.9 or earlier (since Python 3.10 is the version we used in testing where we know this issue is fixed), it will automatically write the interpolators out to pickle files on disk, pass the paths to the child processes, and reload the pickles from disk in the child processes. It takes care to ensure that the pickle file names are unique to each instance of <code class="docutils literal notranslate"><span class="pre">ginput</span></code> running and to clean up the files when done or if a fatal error occurs. This logic is handled by <code class="xref py py-class docutils literal notranslate"><span class="pre">_eqlat_pickle_manager</span></code>.</p>
+</section>
+<section id="calculating-trace-gas-profiles">
+<h2>Calculating trace gas profiles<a class="headerlink" href="#calculating-trace-gas-profiles" title="Permalink to this heading"></a></h2>
+<p>Calculating the trace gas profiles is in many ways similar to calculating EqL. Similarly to the EqL interpolators, the trace gas profiles require instances of <code class="xref py py-class docutils literal notranslate"><span class="pre">TraceGasRecord</span></code> subclasses which can be time consuming to instantiate. To address this, the needed instance is instantiated once in the main function, then it calls either <code class="docutils literal notranslate"><span class="pre">_prior_serial</span></code> or <code class="docutils literal notranslate"><span class="pre">_prior_parallel</span></code>, which handle iteration akin to how <code class="docutils literal notranslate"><span class="pre">_eqlat_serial</span></code> and <code class="docutils literal notranslate"><span class="pre">_eqlat_parallel</span></code> do for EqL. Both of these functions call <code class="docutils literal notranslate"><span class="pre">_prior_helper</span></code>, which itself calls out to <a class="reference internal" href="../api/tccon_priors.html#ginput.priors.tccon_priors.generate_single_tccon_prior" title="ginput.priors.tccon_priors.generate_single_tccon_prior"><code class="xref py py-func docutils literal notranslate"><span class="pre">generate_single_tccon_prior()</span></code></a> to create the trace gas profile derived from the met data for one sounding. If multiple gases are required, the main function loops over them, instantiating the needed <code class="xref py py-class docutils literal notranslate"><span class="pre">TraceGasRecord</span></code> for each gas and creating the array of profiles.</p>
+</section>
+<section id="saving-trace-gas-profiles">
+<h2>Saving trace gas profiles<a class="headerlink" href="#saving-trace-gas-profiles" title="Permalink to this heading"></a></h2>
+<p>The trace gas profiles are written to HDF5 files. These files are created in two steps. First, <a class="reference internal" href="../api/acos_interface.html#ginput.priors.acos_interface.init_prior_h5" title="ginput.priors.acos_interface.init_prior_h5"><code class="xref py py-func docutils literal notranslate"><span class="pre">init_prior_h5()</span></code></a> creates the output file and assigns certain global attributes. Then, for each gas, {py.func}<code class="docutils literal notranslate"><span class="pre">~ginput.priors.acos_interface.write_prior_h5</span></code> is called to create and write to the output variables. When multiple gases are required by the <code class="docutils literal notranslate"><span class="pre">instrument</span></code>, each one is written to a group that include the gas’s name. When only a single gas is needed, it is just written out to a group called “priors”.</p>
+<p>Additionally, for gases that ingest a timeseries of NOAA data as their basis, that timeseries (extended as needed by <code class="docutils literal notranslate"><span class="pre">ginput</span></code>) is written out to a separate group. As with the prior profiles, the group name contains the gas name if the <code class="docutils literal notranslate"><span class="pre">instrument</span></code> required &gt;1 gas.</p>
+</section>
+<section id="special-considerations-for-reproducibility">
+<h2>Special considerations for reproducibility<a class="headerlink" href="#special-considerations-for-reproducibility" title="Permalink to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">ginput</span></code> uses NOAA surface data from Mauna Loa/Mauna Kea and American Samoa as the basis (directly or indirectly) for CO2, N2O, CH4, and HF priors. <code class="docutils literal notranslate"><span class="pre">ginput</span></code> comes with an old set of monthly average flask data for CO2, N2O, and CH4 (HF does not have its own NOAA data; it is derived from CH4) that end in 2018. It is capable of extrapolating these timeseries into the future; however, it has to assume that there will be no unusual events that would disrupt the trend inferred from the last 5 or 10 years. Such events include El Nino years, which introduce step changes in at least the CO2 trend.</p>
+<p>To avoid unecessary extrapolation, some users receive more frequent updates to the NOAA data and use that as the input, rather than the out of date data contained with <code class="docutils literal notranslate"><span class="pre">ginput</span></code>. The “Updating NOAA input data” section of this documentation describes how to handle that update, as well as some of the concerns about changes between early, not fully quality controlled data, and the proper, fully QC’d data. Our concern here is how that updating process could impact the ability to regenerate identical priors before and after an input data update.</p>
+<p>The issue stems from <code class="docutils literal notranslate"><span class="pre">ginput</span></code>’s need for data in the future from the date for which it is generating priors for. This is because it handles deseasonalization with a rolling average, plus is assumes that the change in gas mixing ratios in the northern hemispheres precedes the corresponding change measured at the tropical NOAA sites.  Combined, those changes mean <code class="docutils literal notranslate"><span class="pre">ginput</span></code> could need data as much as a year in the future: priors for 1 June 2018 may need data from May even June 2019.</p>
+<p>Consider what this means if you want to generate priors for 1 June 2018 in June 2018. The latest NOAA data you could possibly have is for May 2017, so <code class="docutils literal notranslate"><span class="pre">ginput</span></code> would need to extrapolate for 12 months. That works fine, however, now consider what happens if you need to regenerate those same priors in December 2018. Depending on how frequently you update the NOAA data, you could have up to November 2018, meaning that for those 1 June 2018 priors, <code class="docutils literal notranslate"><span class="pre">ginput</span></code> now only needs to extrapolate 6 months, as now June through November 2018 have proper data. That proper data will almost certainly be different from what <code class="docutils literal notranslate"><span class="pre">ginput</span></code> extrapolated.</p>
+<p>To allow users to ensure consistent priors no matter when they are generated, the satellite interface provides the <code class="docutils literal notranslate"><span class="pre">truncate_mlo_smo_by</span></code> input. This allows users to specify a month relative to the maximum date in the met file. If the NOAA data does not cover at least up to that month, an error is raised. Otherwise, only data up to and including that month is actually used; months after that are always extrapolated even if they have data in the NOAA files.</p>
+<p>To give a concrete example, consider the 1 June 2018 priors again. If we run in June with <code class="docutils literal notranslate"><span class="pre">truncate_mlo_smo_by</span></code> set to 2, then the end month for the NOAA data will be set to April 2018. Assuming we have that month, <code class="docutils literal notranslate"><span class="pre">ginput</span></code> will run and extrapolate the NOAA data for every month starting from May 2018. If we then run the 1 June 2018 priors in December 2018 (stilll with <code class="docutils literal notranslate"><span class="pre">truncate_mlo_smo_by</span></code> set to 2), then again because the maximum date <em>in the met file</em> should be June 2018, the NOAA data will be truncated after April 2018, even though we have 6 additional months of data now.</p>
+</section>
+<section id="error-handling">
+<h2>Error handling<a class="headerlink" href="#error-handling" title="Permalink to this heading"></a></h2>
+<p>Error handling is done with the <code class="xref py py-class docutils literal notranslate"><span class="pre">ErrorHandler</span></code> class. This helps to catch errors that should not crash the entire program, but instead just put fill values for that sounding’s prior profiles. Any such cases are wrapped in a <code class="docutils literal notranslate"><span class="pre">try-except</span></code> block, and handled errors are passed to the <code class="docutils literal notranslate"><span class="pre">ErrorHandler.handle_err</span></code> method along with the indices of the current sounding, the error code, and an array of status flags (one per sounding). The <code class="docutils literal notranslate"><span class="pre">ErrorHandler</span></code> looks up the numeric error code corresponding to the string error code given and writes that code to the flag array.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If you give the <code class="docutils literal notranslate"><span class="pre">ErrorHandler</span></code> an invalid string error code, it will cause a total crash, so don’t mistype! The allowed error codes are the keys of the <code class="docutils literal notranslate"><span class="pre">_err_codes</span></code> attribute of the <code class="docutils literal notranslate"><span class="pre">ErrorHandler</span></code> class.</p>
+</div>
+</section>
+<section id="acos-assumptions">
+<h2>ACOS assumptions<a class="headerlink" href="#acos-assumptions" title="Permalink to this heading"></a></h2>
+<p>The satellite interface was built to support satellites that used ACOS-like retrievals, including OCO -2 and -3, GOSAT ACOS, and GeoCard. Several assumptions about ACOS data formats are currently embedded into this interface:</p>
+<ul class="simple">
+<li><p><strong>Fill values:</strong> The interface assumes floating point values less than <code class="docutils literal notranslate"><span class="pre">-9e5</span></code>, integer values of -999999, and string values of “N/A” represent fills.</p></li>
+<li><p><strong>Fill values in time fields:</strong> Any datetime before 1993 is considered a fill value or indicative of a bad sounding; this stems from the definition of TAI93 time used in many satellite products. Since that starts at 1993, if a negative fill value ended up in a TAI93 time field, it produces a time before 1993.</p></li>
+<li><p><strong>Time strings:</strong> As mentioned in the met section, time strings are assumed to be of the form “yyyy-mm-ddTHH:MM:SS.dddZ”</p></li>
+<li><p><strong>Met file structure:</strong> If using <code class="docutils literal notranslate"><span class="pre">read_resampled_met</span></code> to help handle reading in met data, note that it can currently only handle HDF5 files which are organized within top level groups. That is, you might have a group “Meteorology” which contains the temperature, pressure, etc. and another group “SoundingGeometry” which has the latitude, longitude, etc, but these groups cannot have subgroups, nor can the variables be directly in the root of the HDF5 file. If your met file does not follow this organization, either <code class="docutils literal notranslate"><span class="pre">read_resampled_met</span></code> will need to be modified or you will need to write a custom top-level reader to call from the main driver.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="priors.html" class="btn btn-neutral float-left" title="Core priors code" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../api/tccon_priors.html" class="btn btn-neutral float-right" title="tccon_priors module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Joshua Laughner and Sebastien Roche.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

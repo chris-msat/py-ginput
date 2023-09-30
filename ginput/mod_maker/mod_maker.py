@@ -102,7 +102,7 @@ import warnings
 
 from ..common_utils import mod_utils, run_utils
 from ..common_utils.mod_utils import gravity, check_site_lat_lon_alt
-from ..common_utils.mod_constants import ratio_molec_mass as rmm, p_ussa, t_ussa, z_ussa, mass_dry_air
+from ..common_utils.mod_constants import ratio_molec_mass as rmm, p_ussa, t_ussa, z_ussa, mass_dry_air, COSource
 from ..common_utils.ggg_logging import logger
 from .slantify import * # code to make slant paths
 from .tccon_sites import site_dict, tccon_site_info, tccon_site_info_for_date
@@ -114,7 +114,7 @@ from .tccon_sites import site_dict, tccon_site_info, tccon_site_info_for_date
 
 _old_modmaker_modes = ('ncep','merradap42','merradap72','merraglob','fpglob','fpitglob')
 _new_fixedp_modes = ('fpit', 'fp')
-_new_native_modes = ('fpit-eta', 'fp-eta')
+_new_native_modes = ('fpit-eta', 'fp-eta', 'it-eta')
 _new_modmaker_modes = _new_fixedp_modes + _new_native_modes
 _default_mode = 'fpit-eta'
 
@@ -211,7 +211,7 @@ def build_mod_fmt_strings(var_order):
     return header_names, header_units, var_name_mapping, data_fmt
 
 
-def write_mod(mod_path, version, site_lat, data=0, surf_data=0, func=None, muted=False, slant=False, chem_vars=False):
+def write_mod(mod_path, version, site_lat, data=0, surf_data=0, func=None, muted=False, slant=False, chem_vars=False, co_source=None):
     """
     Creates a GGG-format .mod file
     INPUTS:
@@ -333,7 +333,8 @@ def write_mod(mod_path, version, site_lat, data=0, surf_data=0, func=None, muted
         mod_content = []
 
         # number of header rows, number of data columns
-        mod_content.append('7  {}\n'.format(len(prof_var_order)))
+        nheader = 8 if chem_vars else 7  # must include a "CO source" line if writing chemistry variables
+        mod_content.append('{}  {}\n'.format(nheader, len(prof_var_order)))
         # constants
         mod_content.append(constants_fmt.format(*mod_constants))
         # surface variables
@@ -341,6 +342,12 @@ def write_mod(mod_path, version, site_lat, data=0, surf_data=0, func=None, muted
         mod_content.append(surface_fmt.format(*[surf_data[key] for key in surf_var_order]))
         # version info
         mod_content.append(version+'\n')
+        if chem_vars and co_source is not None:
+            co_source_str = co_source if isinstance(co_source, str) else co_source.value
+            mod_content.append('CO source: {}\n'.format(co_source_str))
+        elif chem_vars:
+            logger.warning('No CO source specified, but chem variables were written. The CO source will be written as "UNKNOWN"')
+            mod_content.append('CO source: {}\n'.format(COSource.UNKNOWN.value))
         # profile data headers
         mod_content.append(header_units)
         mod_content.append(header_names)
@@ -1702,6 +1709,15 @@ def mod_maker_new(start_date=None, end_date=None, func_dict=None, GEOS_path=None
         # Assume that the chemistry files are in the same folder as the met files
         chem_path = GEOS_path
 
+    if 'CO' in chem_variables:
+        try:
+            co_source = COSource(product)
+        except ValueError:
+            logger.warning(f'Product "{product}" does not have a corresponding CO source defined; setting CO source to "{COSource.UNKNOWN.value}"')
+            co_source = COSource.UNKNOWN
+    else:
+        co_source = None
+
     if save_path is None:
         GGGPATH = os.environ['GGGPATH']
         if GGGPATH is None:
@@ -2032,7 +2048,7 @@ def mod_maker_new(start_date=None, end_date=None, func_dict=None, GEOS_path=None
             mod_file_path = os.path.join(vertical_mod_path,mod_name)
             vertical_mod_dict = write_mod(mod_file_path,version,site_lat,data=INTERP_DATA[site]['prof']
                                           ,surf_data=INTERP_DATA[site]['surf'],func=func_dict[UTC_date],
-                                          muted=muted,slant=slant,chem_vars=do_load_chem)
+                                          muted=muted,slant=slant,chem_vars=do_load_chem,co_source=co_source)
 
             if slant:
                 # write slant mod_file
@@ -2413,11 +2429,4 @@ def driver(date_range, met_path, chem_path=None, save_path=None, keep_latlon_pre
 if __name__ == "__main__": # this is only executed when the code is used directly (e.g. not executed when imported from another python code)
 
     arguments = parse_args()
-    
-    if arguments['mode']: # the fp / fpit mode works with concatenated files
-
-        mod_maker(**arguments)
-
-    else: # using fp-it 3-hourly files
-        ### New code that can generate slant paths and uses GEOS5-FP-IT 3-hourly files
-        driver(**arguments)
+    driver(**arguments)

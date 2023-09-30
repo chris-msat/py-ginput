@@ -1,5 +1,20 @@
 # Ginput Version History
 
+## 1.2.0
+
+This release fully handles generating priors from GEOS IT met and chemistry data.
+
+This is a minor version bump for two reasons:
+
+1. The `.mod` file format has changed slightly; there is a new header row that indicates
+   which GEOS product the CO in the `.mod` file came from. This is important because the
+   GEOS IT CO fields require no scaling in the troposphere, whereas the GEOS FP-IT CO fields
+   do, therefore `ginput` must know which GEOS product provided the CO values in the `.mod`
+   file (which is never scaled) when generating the `.vmr` file (which is scaled as needed).
+2. There is a new feature, the `automation` module and subcommand in `run_ginput.py`. This is
+   not something users will generally need to use; it is solely intended as an interface point
+   between the Rust version of the Caltech automatic priors generator and the Python ginput.
+
 ## v1.1.8
 
 Another minor update to address issues arising from running with GEOS IT.
