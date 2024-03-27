@@ -1,6 +1,7 @@
 import os
 import argparse
 import urllib.request
+import urllib.error
 
 
 def get_noaa_flask_data(
@@ -43,11 +44,15 @@ def get_noaa_flask_data(
         for gas in gas_list:
             file_url = URL_FMT.format(gas=gas, site=site)
             local_filename = os.path.join(out_dir, FILE_FMT.format(gas=gas, site=site_map[site]))
-            urllib.request.urlretrieve(
-                file_url,
-                filename=local_filename,
-            )
-            print(f"{file_url} downloaded to {local_filename}")
+            try:
+                urllib.request.urlretrieve(
+                    file_url,
+                    filename=local_filename,
+                )
+            except urllib.error.HTTPError as e:
+                print(f"Could not download {file_url}: {e.__str__()}")
+            else:
+                print(f"{file_url} downloaded to {local_filename}")
 
 
 def parse_args(parser=None):
