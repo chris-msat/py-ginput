@@ -7,6 +7,7 @@ def get_noaa_flask_data(
     out_dir: str,
     site_list: list[str] = ["mlo", "smo"],
     gas_list: list[str] = ["co2", "ch4", "co", "n2o"],
+    update: bool = False,
 ) -> None:
     """
     Download monthly flask data from NOAA GML for gases listed in gas_list and sites listed in site_list
@@ -18,7 +19,12 @@ def get_noaa_flask_data(
     :param site_list: list of NOAA GML site identifiers (e.g. mlo for mauna loa, smo for samoa)
 
     :param gas_list: list of gases for which data will be downloaded
+
+    :param update: if True, will save the file under ginput data directory, overwriting existing NOAA files there
     """
+    if update:
+        out_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+
     site_list = [i.lower() for i in site_list]
     gas_list = [i.lower() for i in gas_list]
 
@@ -44,24 +50,48 @@ def get_noaa_flask_data(
             print(f"{file_url} downloaded to {local_filename}")
 
 
-def main():
-    parser = argparse.ArgumentParser()
+def parse_args(parser=None):
+    description = "Download NOAA surface flask data"
+    if parser is None:
+        parser = argparse.ArgumentParser(description=description)
+        am_i_main = True
+    else:
+        parser.description = description
+        am_i_main = False
+
     parser.add_argument(
-        "-o", "--out-dir", help="full path to the directory where files will be downloaded"
+        "-o",
+        "--out-dir",
+        help="full path to the directory where files will be downloaded",
+    )
+    parser.add_argument(
+        "-s",
+        "--site-list",
+        nargs="+",
+        help="NOAA site abbreviations e.g. smo for samoa",
+        default=["smo", "mlo"],
+    )
+    parser.add_argument(
+        "-g",
+        "--gas-list",
+        nargs="+",
+        help="Gas names",
+        default=["co2", "ch4", "co", "n2o"],
     )
     parser.add_argument(
         "-u",
         "--update",
         action="store_true",
-        help="if given, set --out-dir to the ginput data directory",
+        help="if given, set --out-dir to the ginput data directory, will overwrite NOAA files already there",
     )
-    args = parser.parse_args()
 
-    if args.update:
-        args.out_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-
-    get_noaa_flask_data(args.out_dir)
+    if am_i_main:
+        args = vars(parser.parse_args())
+        return args
+    else:
+        parser.set_defaults(driver_fxn=get_noaa_flask_data)
 
 
 if __name__ == "__main__":
-    main()
+    arguments = parse_args()
+    get_noaa_flask_data(**arguments)
