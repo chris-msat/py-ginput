@@ -3,7 +3,7 @@ import argparse
 import urllib.request
 
 
-def get_NOAA_flask_data(
+def get_noaa_flask_data(
     out_dir: str,
     site_list: list[str] = ["mlo", "smo"],
     gas_list: list[str] = ["co2", "ch4", "co", "n2o"],
@@ -60,7 +60,7 @@ def main():
     if args.update:
         args.out_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 
-    get_NOAA_flask_data(args.out_dir)
+    get_noaa_flask_data(args.out_dir)
 
 
 if __name__ == "__main__":
