@@ -7,8 +7,9 @@ from warnings import warn
 # happens - the problem seems to be an issue interacting with the C library.
 try:
     from cfunits import Units
-except (AssertionError, AttributeError):
-    warn('Could not import cfunits due to an assertion or attribute error. Will not be able to enforce CF units conventions.')
+# except (AssertionError, AttributeError, FileNotFoundError):
+except Exception:
+    warn('Could not import cfunits due to an error. Will not be able to enforce CF units conventions.')
     cfunits_imported = False
 else:
     cfunits_imported = True
